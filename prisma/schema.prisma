@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  }
+
+model StorageLocation {
+  id        Int      @id @default(autoincrement())
+  name      String
+  capacity  Int?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lots      Lot[]
+}
+
+model Vendor {
+  id        Int      @id @default(autoincrement())
+  name      String
+  website   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model Manufacturer {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines     CigarLine[]
+}
+
+model CigarLine {
+  id             Int      @id @default(autoincrement())
+  name           String
+  manufacturerId Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id])
+  vitolas      Vitola[]
+}
+
+model Vitola {
+  id          Int      @id @default(autoincrement())
+  name        String
+  size        String?
+  strength    String?
+  lineId      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  line CigarLine @relation(fields: [lineId], references: [id])
+  lots Lot[]
+}
+
+model PurchaseOrder {
+  id          Int      @id @default(autoincrement())
+  vendorId    Int?
+  orderDate   DateTime
+  orderNumber String?
+  shipping    Decimal  @default(0)
+  tax         Decimal  @default(0)
+  discount    Decimal  @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  lots   Lot[]
+}
+
+model Lot {
+  id                 Int      @id @default(autoincrement())
+  vitolaId            Int
+  storageLocationId   Int?
+  purchaseOrderId     Int?
+
+  quantityPurchased   Int
+  quantityRemaining   Int
+
+  msrpPerCigar        Decimal?
+  actualCostPerCigar  Decimal?
+  allocatedCostPerCigar Decimal?
+
+  purchaseDate        DateTime?
+  boxCode             String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  vitola          Vitola @relation(fields: [vitolaId], references: [id])
+  storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id])
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  events InventoryEvent[]
+}
+
+model InventoryEvent {
+  id        Int      @id @default(autoincrement())
+  lotId     Int
+  eventType String
+  quantity  Int
+  eventDate DateTime
+  notes     String?
+
+  costPerCigarAtEvent Decimal?
+  msrpPerCigarAtEvent Decimal?
+
+  createdAt DateTime @default(now())
+
+  lot Lot @relation(fields: [lotId], references: [id])
+}
