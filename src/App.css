@@ -1,0 +1,59 @@
+.app {
+  min-height: 100vh;
+  background: #17120f;
+  color: #f8f3ed;
+  padding: 48px;
+  font-family: Arial, sans-serif;
+}
+
+.hero {
+  max-width: 900px;
+  margin-bottom: 40px;
+}
+
+.eyebrow {
+  color: #c99b63;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+h1 {
+  font-size: 56px;
+  margin: 12px 0;
+}
+
+.subtitle {
+  font-size: 20px;
+  color: #d7c8ba;
+  line-height: 1.5;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 20px;
+  max-width: 1000px;
+}
+
+.card {
+  background: #241b16;
+  border: 1px solid #3b2b22;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.card p {
+  color: #b9a89a;
+  margin: 0 0 12px;
+}
+
+.card h2 {
+  font-size: 34px;
+  margin: 0;
+}
+h1,
+h2 {
+  color: #ffffff;
+}
