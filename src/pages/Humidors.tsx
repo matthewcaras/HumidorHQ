@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { createHumidor, getHumidors, type Humidor } from '../services/api'
+import {
+  archiveHumidor,
+  createHumidor,
+  getHumidors,
+  updateHumidor,
+  type Humidor,
+} from '../services/api'
 
 function Humidors() {
   const [humidors, setHumidors] = useState<Humidor[]>([])
@@ -10,6 +16,7 @@ function Humidors() {
   const [capacity, setCapacity] = useState('')
   const [hasShelves, setHasShelves] = useState(false)
   const [shelfCount, setShelfCount] = useState('')
+  const [editingHumidor, setEditingHumidor] = useState<Humidor | null>(null)
 
   async function loadHumidors() {
     try {
@@ -26,40 +33,90 @@ function Humidors() {
     loadHumidors()
   }, [])
 
-  async function handleCreateHumidor(event: React.FormEvent) {
-    event.preventDefault()
+async function handleSaveHumidor(event: React.FormEvent) {
+  event.preventDefault()
 
-    if (!name.trim()) {
-      setError('Humidor name is required.')
-      return
-    }
+  if (!name.trim()) {
+    setError('Humidor name is required.')
+    return
+  }
 
-    try {
-  console.log({
-    name: name.trim(),
-    capacity,
-    hasShelves,
-    shelfCount,
-  })
+  try {
+    if (editingHumidor) {
+      const updatedHumidor = await updateHumidor(editingHumidor.id, {
+        name: name.trim(),
+        capacity,
+        hasShelves,
+        shelfCount,
+      })
 
-  const createdHumidor = await createHumidor({
-    name: name.trim(),
-    capacity,
-    hasShelves,
-    shelfCount,
-  })
+      setHumidors((current) =>
+        current.map((humidor) =>
+          humidor.id === updatedHumidor.id ? updatedHumidor : humidor,
+        ),
+      )
+    } else {
+      const createdHumidor = await createHumidor({
+        name: name.trim(),
+        capacity,
+        hasShelves,
+        shelfCount,
+      })
 
       setHumidors((current) => [...current, createdHumidor])
-      setName('')
-      setCapacity('')
-      setHasShelves(false)
-      setShelfCount('')
-      setIsModalOpen(false)
-      setError('')
-    } catch {
-      setError('Unable to create humidor.')
     }
+
+    setName('')
+    setCapacity('')
+    setHasShelves(false)
+    setShelfCount('')
+    setEditingHumidor(null)
+    setIsModalOpen(false)
+    setError('')
+  } catch {
+    setError('Unable to save humidor.')
   }
+}
+
+function openAddModal() {
+  setEditingHumidor(null)
+  setName('')
+  setCapacity('')
+  setHasShelves(false)
+  setShelfCount('')
+  setError('')
+  setIsModalOpen(true)
+}
+
+  function openEditModal(humidor: Humidor) {
+  setEditingHumidor(humidor)
+  setName(humidor.name)
+  setCapacity(humidor.capacity ? String(humidor.capacity) : '')
+  setHasShelves(humidor.hasShelves)
+  setShelfCount(humidor.shelfCount ? String(humidor.shelfCount) : '')
+  setIsModalOpen(true)
+}
+
+async function handleArchiveHumidor(humidor: Humidor) {
+  const confirmed = window.confirm(`Archive ${humidor.name}?`)
+
+  if (!confirmed) {
+    return
+  }
+
+  try {
+    await archiveHumidor(humidor.id)
+
+    setHumidors((current) =>
+      current.filter((item) => item.id !== humidor.id),
+    )
+
+    setEditingHumidor(null)
+    setIsModalOpen(false)
+  } catch {
+    setError('Unable to archive humidor.')
+  }
+}
 
   return (
     <>
@@ -71,18 +128,18 @@ function Humidors() {
             Manage your storage locations, capacity, shelves, and occupancy.
           </p>
         </div>
-        <button className="primary-button" onClick={() => setIsModalOpen(true)}>
-          + Add Humidor
+        <button className="primary-button" onClick={openAddModal}>
+         + Add Humidor
         </button>
       </header>
 
       <section className="summary-grid">
         <div className="card">
-          <p>Active Humidors</p>
+          <p>Humidors</p>
           <strong>{humidors.length}</strong>
         </div>
         <div className="card">
-          <p>Total Capacity</p>
+          <p>Capacity</p>
           <strong>
             {humidors.reduce((total, humidor) => total + (humidor.capacity ?? 0), 0)}
           </strong>
@@ -116,9 +173,11 @@ function Humidors() {
               <tr>
                 <th>Name</th>
                 <th>Capacity</th>
+                <th>Shelves</th>
                 <th>Current Count</th>
                 <th>Occupancy</th>
                 <th>Oldest Lot</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -126,9 +185,19 @@ function Humidors() {
                 <tr key={humidor.id}>
                   <td>{humidor.name}</td>
                   <td>{humidor.capacity ?? 'Not set'}</td>
+                  <td>
+                      {humidor.hasShelves
+                        ? humidor.shelfCount ?? 0
+                        : '—'}
+                  </td>
                   <td>0</td>
                   <td>0%</td>
                   <td>—</td>
+                  <td>
+                    <button className="table-action" onClick={() => openEditModal(humidor)}>
+                    Edit
+                    </button>
+                     </td>
                 </tr>
               ))}
             </tbody>
@@ -140,13 +209,13 @@ function Humidors() {
         <div className="modal-backdrop">
           <div className="modal">
             <div className="modal-header">
-              <h3>Add Humidor</h3>
+              <h3>{editingHumidor ? 'Edit Humidor' : 'Add Humidor'} </h3>
               <button className="icon-button" onClick={() => setIsModalOpen(false)}>
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleCreateHumidor} className="form">
+            <form onSubmit={handleSaveHumidor} className="form">
               <label>
                 Name *
                 <input
@@ -187,18 +256,31 @@ function Humidors() {
                 </label>
               )}
 
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="primary-button">
-                  Save Humidor
-                </button>
-              </div>
+              {editingHumidor && (
+  <div className="archive-section">
+    <button
+      type="button"
+      className="archive-link"
+      onClick={() => handleArchiveHumidor(editingHumidor)}
+    >
+      Archive
+    </button>
+  </div>
+)}
+
+<div className="form-actions">
+  <button
+    type="button"
+    className="secondary-button"
+    onClick={() => setIsModalOpen(false)}
+  >
+    Cancel
+  </button>
+
+  <button type="submit" className="primary-button">
+    {editingHumidor ? 'Save Changes' : 'Save Humidor'}
+  </button>
+</div>
             </form>
           </div>
         </div>

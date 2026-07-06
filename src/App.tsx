@@ -8,7 +8,7 @@ const navItems = [
   'Humidors',
   'Catalog',
   'Vendors',
-  'Smoking Log',
+  'Consumption',
   'Reports',
   'Settings',
 ]

@@ -19,7 +19,8 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/humidors', async (_req, res) => {
   const humidors = await prisma.storageLocation.findMany({
-    orderBy: { name: 'asc' },
+    where: { isActive: true },
+    orderBy: { displayOrder: 'asc' },
   })
 
   res.json(humidors)
@@ -38,6 +39,36 @@ const { name, capacity, hasShelves, shelfCount } = req.body
   })
 
   res.status(201).json(humidor)
+})
+
+app.put('/api/humidors/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const { name, capacity, hasShelves, shelfCount } = req.body
+
+  const humidor = await prisma.storageLocation.update({
+    where: { id },
+    data: {
+      name,
+      capacity: capacity ? Number(capacity) : null,
+      hasShelves: Boolean(hasShelves),
+      shelfCount: hasShelves && shelfCount ? Number(shelfCount) : null,
+    },
+  })
+
+  res.json(humidor)
+})
+
+app.patch('/api/humidors/:id/archive', async (req, res) => {
+  const id = Number(req.params.id)
+
+  const humidor = await prisma.storageLocation.update({
+    where: { id },
+    data: {
+      isActive: false,
+    },
+  })
+
+  res.json(humidor)
 })
 
 const PORT = 3001
