@@ -1,59 +1,263 @@
-.app {
-  min-height: 100vh;
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
   background: #17120f;
   color: #f8f3ed;
-  padding: 48px;
   font-family: Arial, sans-serif;
 }
 
-.hero {
-  max-width: 900px;
-  margin-bottom: 40px;
+button {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+}
+
+.sidebar {
+  width: 280px;
+  background: #120e0c;
+  border-right: 1px solid #3b2b22;
+  padding: 28px 20px;
+}
+
+.brand {
+  margin-bottom: 36px;
+}
+
+.brand h1 {
+  font-size: 28px;
+  margin: 0;
+  color: #ffffff;
+}
+
+.brand p {
+  margin: 8px 0 0;
+  color: #c99b63;
+  font-size: 14px;
+}
+
+.nav {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-item {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #d7c8ba;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  background: #2a201a;
+  color: #ffffff;
+}
+
+.main-content {
+  flex: 1;
+  padding: 36px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
 }
 
 .eyebrow {
   color: #c99b63;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: bold;
+  margin: 0 0 8px;
 }
 
-h1 {
-  font-size: 56px;
-  margin: 12px 0;
+.page-header h2 {
+  font-size: 40px;
+  margin: 0;
+  color: #ffffff;
 }
 
-.subtitle {
-  font-size: 20px;
-  color: #d7c8ba;
-  line-height: 1.5;
+.primary-button {
+  background: #c99b63;
+  color: #17120f;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-weight: bold;
+  cursor: pointer;
 }
 
-.dashboard-grid {
+.summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
-  gap: 20px;
-  max-width: 1000px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .card {
   background: #241b16;
   border: 1px solid #3b2b22;
   border-radius: 16px;
-  padding: 24px;
+  padding: 20px;
 }
 
 .card p {
   color: #b9a89a;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
 }
 
-.card h2 {
-  font-size: 34px;
+.card strong {
+  color: #ffffff;
+  font-size: 28px;
+}
+
+.panel {
+  background: #241b16;
+  border: 1px solid #3b2b22;
+  border-radius: 18px;
+  padding: 24px;
+}
+
+.panel h3 {
+  color: #ffffff;
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.muted {
+  color: #b9a89a;
   margin: 0;
 }
-h1,
-h2 {
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 18px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid #3b2b22;
+  padding: 14px 10px;
+  text-align: left;
+}
+
+.data-table th {
+  color: #c99b63;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.data-table td {
+  color: #f8f3ed;
+}
+
+.error-text {
+  color: #ff9b9b;
+}
+
+.page-subtitle {
+  color: #b9a89a;
+  margin: 10px 0 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal {
+  width: min(520px, 100%);
+  background: #241b16;
+  border: 1px solid #3b2b22;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.modal-header h3 {
   color: #ffffff;
+  margin: 0;
+  font-size: 24px;
+}
+
+.icon-button {
+  border: 0;
+  background: transparent;
+  color: #d7c8ba;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.form label {
+  display: grid;
+  gap: 8px;
+  color: #d7c8ba;
+  font-weight: bold;
+}
+
+.form input {
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  color: #ffffff;
+  padding: 12px 14px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.secondary-button {
+  background: transparent;
+  color: #d7c8ba;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-weight: bold;
+  cursor: pointer;
 }
