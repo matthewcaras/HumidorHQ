@@ -123,3 +123,29 @@ model InventoryEvent {
 
   lot Lot @relation(fields: [lotId], references: [id])
 }
+
+/// Catalog records describe what a cigar is. They do not store quantity, cost basis, purchase history, or humidor location.
+model CatalogCigar {
+  id              Int      @id @default(autoincrement())
+  manufacturer    String
+  manufacturerKey String
+  series          String
+  seriesKey       String
+  vitola          String
+  vitolaKey       String
+  shape           String?
+  length          Decimal?
+  ringGauge       Int?
+  wrapper         String?
+  binder          String?
+  filler          String?
+  country         String?
+  strength        String?
+  msrp            Decimal?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([manufacturerKey, seriesKey, vitolaKey, wrapper])
+  @@index([isActive, manufacturerKey, seriesKey, vitolaKey])
+}
