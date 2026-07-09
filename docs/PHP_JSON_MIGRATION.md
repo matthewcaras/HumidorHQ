@@ -288,11 +288,10 @@ Preferred setup:
 - place `data/` outside the web root if Hostinger layout allows it
 - otherwise deny direct access with `.htaccess`
 
-Example:
+If `data/` must live inside the web root, add `data/.htaccess` with:
 
 ```apache
-RewriteEngine On
-RewriteRule ^data/ - [F,L]
+Require all denied
 ```
 
 ## Proposed API Endpoints
