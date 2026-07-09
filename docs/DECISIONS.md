@@ -47,6 +47,60 @@ The application is optimized around the owner's collecting workflow.
 
 ---
 
+## Primary User Workflow
+
+1. Dashboard
+   - Landing page.
+   - Provides collection statistics, recent activity, aging information, and items requiring attention.
+
+2. Collection
+   - The primary screen of the application.
+   - Shows cigars currently owned.
+   - Organized by Manufacturer -> Series -> Vitola.
+   - Displays current quantities, lots, age, humidor location, cost basis, MSRP value, and related collection information.
+   - Users should spend most of their time here.
+
+3. Purchases
+   - Primary data-entry workflow.
+   - New purchases create inventory.
+   - Purchase entry should always search the Catalog first.
+   - If a catalog record exists, reuse it.
+   - If not, allow creation of a new Catalog record during purchase entry.
+   - The user should rarely need to open the Catalog directly.
+
+4. Consumption
+   - Records cigars that have been smoked, gifted, or otherwise removed from inventory.
+   - Drives inventory changes through events.
+
+5. Humidors
+   - Administrative management of storage locations.
+   - Used occasionally.
+
+6. Catalog
+   - Supporting reference data.
+   - Stores immutable cigar information.
+   - Primarily maintained automatically through Purchases.
+   - Manual editing should be infrequent.
+   - Catalog exists to prevent duplicate cigar definitions and support search, imports, and reporting.
+
+7. Reports
+   - Collection analytics and historical reporting.
+
+8. Settings
+   - Application configuration.
+
+---
+
+## Navigation Philosophy
+
+Decision:
+Navigation order reflects expected frequency of use rather than alphabetical order.
+
+Reason:
+Dashboard, Collection, and Purchases are intentionally placed first because they represent the primary workflow of the application. Catalog is intentionally near the bottom because it supports the workflow rather than driving it.
+
+---
+
 ## Design Philosophy
 
 Decision:
