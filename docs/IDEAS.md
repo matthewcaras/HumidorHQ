@@ -61,3 +61,15 @@ This document is a living backlog of ideas for HumidorHQ. It is not a roadmap or
 - AI-generated tasting note summaries
 
 New ideas should be added here as they are discussed. Items may eventually move into the roadmap when prioritized.
+## Merge duplicates
+Possible Duplicate
+
+Record A: E.P. Carrillo
+Record B: EP Carrillo
+
+Choose master record:
+( ) Keep Record A
+( ) Keep Record B
+
+Then move purchase history, lots, consumption, and reports to the master record.
+Archive the duplicate.

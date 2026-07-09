@@ -346,37 +346,41 @@ export async function getCatalogCigars(
   options?: CatalogServiceOptions,
 ) {
   const prisma = getClient(options)
-  const searchKey = normalizeSearchKey(filters.search)
-  const wrapperKey = normalizeSearchKey(filters.wrapper)
-  const limit = filters.limit === undefined ? 100 : optionalIntValue(filters.limit, 'limit')
 
-  if (limit !== null && limit < 1) {
-    throw new CatalogServiceError('limit must be at least 1.', 'CATALOG_VALIDATION_ERROR', 400)
+  try {
+    const searchKey = normalizeSearchKey(filters.search)
+    const wrapperKey = normalizeSearchKey(filters.wrapper)
+    const limit = filters.limit === undefined ? 100 : optionalIntValue(filters.limit, 'limit')
+
+    if (limit !== null && limit < 1) {
+      throw new CatalogServiceError('limit must be at least 1.', 'CATALOG_VALIDATION_ERROR', 400)
+    }
+
+    return await prisma.catalogCigar.findMany({
+      where: {
+        ...(filters.includeArchived ? {} : { isActive: true }),
+        ...(filters.manufacturer
+          ? { manufacturerKey: normalizeSearchKey(filters.manufacturer) }
+          : {}),
+        ...(filters.series ? { seriesKey: normalizeSearchKey(filters.series) } : {}),
+        ...(filters.vitola ? { vitolaKey: normalizeSearchKey(filters.vitola) } : {}),
+        ...(wrapperKey ? { wrapperKey } : {}),
+        ...(searchKey
+          ? {
+              OR: [
+                { manufacturerKey: { contains: searchKey } },
+                { seriesKey: { contains: searchKey } },
+                { vitolaKey: { contains: searchKey } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ manufacturerKey: 'asc' }, { seriesKey: 'asc' }, { vitolaKey: 'asc' }],
+      take: limit ?? undefined,
+    })
+  } catch (error) {
+    mapDatabaseError(error)
   }
-
-  const catalogCigars = await prisma.catalogCigar.findMany({
-    where: {
-      ...(filters.includeArchived ? {} : { isActive: true }),
-      ...(filters.manufacturer
-        ? { manufacturerKey: normalizeSearchKey(filters.manufacturer) }
-        : {}),
-      ...(filters.series ? { seriesKey: normalizeSearchKey(filters.series) } : {}),
-      ...(filters.vitola ? { vitolaKey: normalizeSearchKey(filters.vitola) } : {}),
-      ...(wrapperKey ? { wrapperKey } : {}),
-      ...(searchKey
-        ? {
-            OR: [
-              { manufacturerKey: { contains: searchKey } },
-              { seriesKey: { contains: searchKey } },
-              { vitolaKey: { contains: searchKey } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ manufacturerKey: 'asc' }, { seriesKey: 'asc' }, { vitolaKey: 'asc' }],
-    take: limit ?? undefined,
-  })
-  return catalogCigars
 }
 
 export async function archiveCatalogCigar(id: number, options?: CatalogServiceOptions) {
