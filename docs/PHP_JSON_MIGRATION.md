@@ -35,7 +35,7 @@ This architecture fits Hostinger well if:
 
 ## Proposed Folder Layout
 
-> **Deployment Note**: This layout assumes `public/` as the web document root. In that configuration, `api/` and `data/` sit outside the web root and are not directly accessible via HTTP. If deploying with the repository root as the document root instead, ensure `data/` is protected from public access (see section 4 below).
+> **Deployment Note**: This layout assumes `public/` as the web document root. In that configuration, `api/` and `data/` sit outside the web root and are not directly accessible via HTTP. If deploying with the repository root as the document root instead, ensure `data/` is protected from public access (see "Keep public access away from `data/`" in the Important PHP Rules section).
 
 ```text
 /
