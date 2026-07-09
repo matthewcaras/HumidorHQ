@@ -137,6 +137,7 @@ model CatalogCigar {
   length          Decimal?
   ringGauge       Int?
   wrapper         String?
+  wrapperKey      String?
   binder          String?
   filler          String?
   country         String?
@@ -146,6 +147,6 @@ model CatalogCigar {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@unique([manufacturerKey, seriesKey, vitolaKey, wrapper])
-  @@index([isActive, manufacturerKey, seriesKey, vitolaKey])
+  @@unique([manufacturerKey, seriesKey, vitolaKey, wrapperKey])
+  @@index([isActive, manufacturerKey, seriesKey, vitolaKey, wrapperKey])
 }
