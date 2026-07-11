@@ -155,6 +155,53 @@ This strategy reflects actual expected usage: purchases will primarily be entere
 
 ---
 
+## Catalog Attribute Suggestions
+
+Decision:
+Catalog creation fields should increasingly suggest existing values as the Catalog grows.
+
+- Suggestions should reduce duplicate spellings and improve filtering and reporting.
+- Most fields should use editable autocomplete rather than strict dropdowns.
+- The user may select an existing value or enter a legitimate new value.
+
+Field behavior:
+
+- Manufacturer:
+  - Autocomplete from existing manufacturers.
+  - Use normalized matching so punctuation and capitalization differences do not create duplicate identities.
+
+- Series:
+  - Suggest existing series values.
+  - Filter suggestions by the selected manufacturer when possible.
+
+- Vitola:
+  - Suggest existing vitolas.
+  - Filter suggestions by selected manufacturer and series when possible.
+  - Allow entry of a new vitola.
+
+- Shape:
+  - Suggest standardized values such as Robusto, Toro, Churchill, Gordo, Perfecto, Torpedo, Lancero, and similar shapes.
+  - Allow new values when needed.
+
+- Wrapper:
+  - Autocomplete from wrapper values already used in the Catalog.
+  - Preserve canonical display capitalization and punctuation.
+
+- Strength:
+  - Use a controlled selection such as Mild, Mild-Medium, Medium, Medium-Full, and Full.
+
+- Length and Ring Gauge:
+  - Remain numeric inputs.
+  - May offer common-value suggestions but must not restrict unusual sizes.
+
+- Binder, Filler, and Country:
+  - May use editable autocomplete from existing Catalog values when those fields are exposed.
+
+Principle:
+Reuse known values whenever possible without preventing entry of legitimate new cigar attributes.
+
+---
+
 ## Primary User Workflow
 
 1. Dashboard
