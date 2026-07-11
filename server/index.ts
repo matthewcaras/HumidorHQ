@@ -23,6 +23,13 @@ import {
   VendorServiceError,
   vendorIdParam,
 } from './services/vendorService.ts'
+import {
+  createPurchase,
+  getPurchaseById,
+  getPurchases,
+  purchaseIdParam,
+  PurchaseServiceError,
+} from './services/purchaseService.ts'
 
 const app = express()
 
@@ -100,6 +107,25 @@ function handleVendorError(error: unknown, res: express.Response) {
     error: {
       code: 'VENDOR_UNEXPECTED_ERROR',
       message: 'The vendor request could not be completed.',
+    },
+  })
+}
+
+function handlePurchaseError(error: unknown, res: express.Response) {
+  if (error instanceof PurchaseServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'PURCHASE_UNEXPECTED_ERROR',
+      message: 'The purchase request could not be completed.',
     },
   })
 }
@@ -185,6 +211,36 @@ app.patch('/api/vendors/:id/archive', async (req, res) => {
     res.json({ data: vendor })
   } catch (error) {
     handleVendorError(error, res)
+  }
+})
+
+app.get('/api/purchases', async (req, res) => {
+  try {
+    const purchases = await getPurchases({
+      vendorId: typeof req.query.vendorId === 'string' ? req.query.vendorId : undefined,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    })
+    res.json({ data: purchases })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.get('/api/purchases/:id', async (req, res) => {
+  try {
+    const purchase = await getPurchaseById(purchaseIdParam(req.params.id))
+    res.json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.post('/api/purchases', async (req, res) => {
+  try {
+    const purchase = await createPurchase(req.body)
+    res.status(201).json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
   }
 })
 
