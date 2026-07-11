@@ -486,6 +486,261 @@ button:disabled {
   display: none;
 }
 
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.purchase-form {
+  display: grid;
+  gap: 18px;
+}
+
+.purchase-form-section {
+  display: grid;
+  gap: 18px;
+}
+
+.section-heading h3 {
+  margin-bottom: 6px;
+}
+
+.purchase-form-grid,
+.purchase-money-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.purchase-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.purchase-money-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.purchase-form label,
+.purchase-line-row label {
+  display: grid;
+  gap: 8px;
+  color: #d7c8ba;
+  font-weight: bold;
+  min-width: 0;
+}
+
+.purchase-form label > span:not(.field-label-row) {
+  color: #b9a89a;
+  font-size: 13px;
+  font-weight: normal;
+  line-height: 1.35;
+}
+
+.field-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.info-popover-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.info-button {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #c99b63;
+  border-radius: 50%;
+  background: #2a201a;
+  color: #f1c982;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0;
+}
+
+.info-button:focus-visible {
+  outline: 2px solid #f1c982;
+  outline-offset: 2px;
+}
+
+.order-discount-help-popover {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 32px));
+  border: 1px solid #d7a85a;
+  border-radius: 10px;
+  background: #1a120e;
+  color: #ffffff !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 1 !important;
+  filter: none !important;
+  line-height: 1.35;
+  padding: 10px 12px;
+  text-shadow: none !important;
+  white-space: normal;
+}
+
+.order-discount-help-popover,
+.order-discount-help-popover * {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  font-weight: 600;
+  text-shadow: none !important;
+}
+
+.purchase-form input,
+.purchase-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  color: #ffffff;
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.purchase-form textarea {
+  resize: vertical;
+}
+
+.purchase-form-notes {
+  grid-column: span 3;
+}
+
+.order-discount-field {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
+.vendor-autocomplete {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.autocomplete-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+}
+
+.autocomplete-results .muted {
+  padding: 8px;
+}
+
+.autocomplete-option,
+.create-inline-button {
+  width: 100%;
+  border: 1px solid #3b2b22;
+  border-radius: 10px;
+  background: #241b16;
+  color: #f8f3ed;
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.autocomplete-option:focus,
+.autocomplete-option:hover,
+.create-inline-button:focus,
+.create-inline-button:hover {
+  background: #2a201a;
+  color: #ffffff;
+}
+
+.selected-vendor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #1c1511;
+  padding: 12px;
+}
+
+.selected-vendor p {
+  color: #b9a89a;
+  font-size: 13px;
+  margin: 0 0 4px;
+}
+
+.selected-vendor strong {
+  color: #ffffff;
+}
+
+.vendor-field-error {
+  margin: 0;
+}
+
+.purchase-lines-heading {
+  align-items: flex-end;
+}
+
+.purchase-lines-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.purchase-line-row {
+  display: grid;
+  grid-template-columns: 72px minmax(220px, 2fr) repeat(3, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #1c1511;
+  padding: 12px;
+  min-width: 0;
+}
+
+.purchase-line-number {
+  align-self: center;
+  color: #c99b63;
+  font-weight: bold;
+}
+
+.purchase-line-cigar {
+  min-width: 0;
+}
+
+.purchase-line-remove {
+  margin-right: 0;
+}
+
+.purchase-lines-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     flex-direction: column;
@@ -529,6 +784,15 @@ button:disabled {
   .page-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .page-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-header-actions button {
+    width: 100%;
   }
 
   .page-header h2 {
@@ -678,6 +942,75 @@ button:disabled {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .purchase-form {
+    gap: 14px;
+  }
+
+  .purchase-form-grid,
+  .purchase-money-grid {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .order-discount-field {
+    overflow: visible;
+  }
+
+  .order-discount-help-popover {
+    position: static;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-shadow: none;
+  }
+
+  .vendor-autocomplete {
+    position: static;
+  }
+
+  .autocomplete-results {
+    position: static;
+    max-height: min(320px, 60vh);
+    box-shadow: none;
+  }
+
+  .autocomplete-option,
+  .create-inline-button {
+    min-height: 44px;
+  }
+
+  .selected-vendor {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .selected-vendor button {
+    width: 100%;
+  }
+
+  .purchase-form-notes {
+    grid-column: auto;
+  }
+
+  .purchase-lines-heading {
+    align-items: stretch;
+  }
+
+  .purchase-line-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .purchase-line-number {
+    align-self: auto;
+  }
+
+  .purchase-line-remove,
+  .purchase-lines-actions .secondary-button {
+    width: 100%;
   }
 }
 

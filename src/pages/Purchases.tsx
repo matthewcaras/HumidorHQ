@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
+  createVendor,
   getPurchaseById,
   getPurchases,
+  getVendors,
+  type CatalogCigar,
   type Purchase,
   type PurchaseLine,
   type PurchaseReceiptState,
+  type Vendor,
 } from '../services/api'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -15,6 +19,136 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
 })
+
+const orderDiscountHelpText =
+  'Enter the dollar discount shown on the invoice. Do not enter a percentage or a discount already reflected in individual cigar unit prices.'
+
+type PageMode = 'HISTORY' | 'ADD'
+
+type PurchaseFormLine = {
+  localId: string
+  catalogCigar: CatalogCigar | null
+  cigarSearch: string
+  quantity: string
+  unitPrice: string
+  msrpPerCigar: string
+}
+
+type PurchaseFormState = {
+  vendor: Vendor | null
+  vendorSearch: string
+  purchaseDate: string
+  invoiceNumber: string
+  shipping: string
+  exciseTax: string
+  salesTax: string
+  discount: string
+  totalPaid: string
+  notes: string
+  lines: PurchaseFormLine[]
+}
+
+type HeaderField = Exclude<keyof PurchaseFormState, 'vendor' | 'lines'>
+
+type PurchaseFormAction =
+  | { type: 'SET_HEADER_FIELD'; field: HeaderField; value: string }
+  | { type: 'SET_VENDOR'; vendor: Vendor | null; vendorSearch: string }
+  | { type: 'ADD_LINE' }
+  | { type: 'REMOVE_LINE'; localId: string }
+  | {
+      type: 'UPDATE_LINE'
+      localId: string
+      field: keyof Omit<PurchaseFormLine, 'localId' | 'catalogCigar'>
+      value: string
+    }
+  | { type: 'RESET_FORM' }
+
+function localDateString(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function makeLocalId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function blankPurchaseLine(): PurchaseFormLine {
+  return {
+    localId: makeLocalId(),
+    catalogCigar: null,
+    cigarSearch: '',
+    quantity: '',
+    unitPrice: '',
+    msrpPerCigar: '',
+  }
+}
+
+function initialPurchaseFormState(): PurchaseFormState {
+  return {
+    vendor: null,
+    vendorSearch: '',
+    purchaseDate: localDateString(),
+    invoiceNumber: '',
+    shipping: '',
+    exciseTax: '',
+    salesTax: '',
+    discount: '',
+    totalPaid: '',
+    notes: '',
+    lines: [blankPurchaseLine()],
+  }
+}
+
+function purchaseFormReducer(
+  state: PurchaseFormState,
+  action: PurchaseFormAction,
+): PurchaseFormState {
+  switch (action.type) {
+    case 'SET_HEADER_FIELD':
+      return {
+        ...state,
+        [action.field]: action.value,
+      }
+    case 'SET_VENDOR':
+      return {
+        ...state,
+        vendor: action.vendor,
+        vendorSearch: action.vendorSearch,
+      }
+    case 'ADD_LINE':
+      return {
+        ...state,
+        lines: [...state.lines, blankPurchaseLine()],
+      }
+    case 'REMOVE_LINE':
+      if (state.lines.length === 1) {
+        return state
+      }
+
+      return {
+        ...state,
+        lines: state.lines.filter((line) => line.localId !== action.localId),
+      }
+    case 'UPDATE_LINE':
+      return {
+        ...state,
+        lines: state.lines.map((line) =>
+          line.localId === action.localId ? { ...line, [action.field]: action.value } : line,
+        ),
+      }
+    case 'RESET_FORM':
+      return initialPurchaseFormState()
+    default:
+      return state
+  }
+}
 
 function money(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') {
@@ -84,7 +218,53 @@ function enRouteCigars(purchases: Purchase[]) {
   )
 }
 
+function isPurchaseDraftNonempty(state: PurchaseFormState) {
+  const headerFields = [
+    state.vendorSearch,
+    state.invoiceNumber,
+    state.shipping,
+    state.exciseTax,
+    state.salesTax,
+    state.discount,
+    state.totalPaid,
+    state.notes,
+  ]
+
+  const hasLineText = state.lines.some((line) =>
+    [
+      line.cigarSearch,
+      line.quantity,
+      line.unitPrice,
+      line.msrpPerCigar,
+    ].some((value) => value.trim().length > 0),
+  )
+
+  return (
+    state.vendor !== null ||
+    headerFields.some((value) => value.trim().length > 0) ||
+    hasLineText ||
+    state.lines.length > 1 ||
+    state.purchaseDate !== localDateString()
+  )
+}
+
 function Purchases() {
+  const [pageMode, setPageMode] = useState<PageMode>('HISTORY')
+  const [purchaseForm, dispatchPurchaseForm] = useReducer(
+    purchaseFormReducer,
+    undefined,
+    initialPurchaseFormState,
+  )
+  const [vendorResults, setVendorResults] = useState<Vendor[]>([])
+  const [isVendorSearching, setIsVendorSearching] = useState(false)
+  const [isVendorCreating, setIsVendorCreating] = useState(false)
+  const [vendorError, setVendorError] = useState('')
+  const [isVendorListOpen, setIsVendorListOpen] = useState(false)
+  const vendorSearchRequestId = useRef(0)
+  const orderDiscountInfoRef = useRef<HTMLDivElement | null>(null)
+  const [isOrderDiscountInfoPinned, setIsOrderDiscountInfoPinned] = useState(false)
+  const [isOrderDiscountInfoHovered, setIsOrderDiscountInfoHovered] = useState(false)
+  const [isOrderDiscountInfoFocused, setIsOrderDiscountInfoFocused] = useState(false)
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
   const [search, setSearch] = useState('')
@@ -110,6 +290,84 @@ function Purchases() {
   useEffect(() => {
     loadPurchases()
   }, [])
+
+  useEffect(() => {
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (
+        orderDiscountInfoRef.current &&
+        !orderDiscountInfoRef.current.contains(event.target as Node)
+      ) {
+        setIsOrderDiscountInfoPinned(false)
+        setIsOrderDiscountInfoHovered(false)
+        setIsOrderDiscountInfoFocused(false)
+      }
+    }
+
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOrderDiscountInfoPinned(false)
+        setIsOrderDiscountInfoHovered(false)
+        setIsOrderDiscountInfoFocused(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (pageMode !== 'ADD' || purchaseForm.vendor) {
+      vendorSearchRequestId.current += 1
+      setVendorResults([])
+      setIsVendorSearching(false)
+      setIsVendorListOpen(false)
+      return
+    }
+
+    const searchText = purchaseForm.vendorSearch.trim()
+
+    if (searchText.length < 2) {
+      vendorSearchRequestId.current += 1
+      setVendorResults([])
+      setIsVendorSearching(false)
+      setIsVendorListOpen(false)
+      return
+    }
+
+    const requestId = vendorSearchRequestId.current + 1
+    vendorSearchRequestId.current = requestId
+    setIsVendorSearching(true)
+    setVendorError('')
+    setIsVendorListOpen(true)
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const vendors = await getVendors(searchText)
+
+        if (vendorSearchRequestId.current === requestId) {
+          setVendorResults(vendors)
+        }
+      } catch (searchError) {
+        if (vendorSearchRequestId.current === requestId) {
+          setVendorResults([])
+          setVendorError(
+            searchError instanceof Error ? searchError.message : 'Unable to search vendors.',
+          )
+        }
+      } finally {
+        if (vendorSearchRequestId.current === requestId) {
+          setIsVendorSearching(false)
+        }
+      }
+    }, 250)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [pageMode, purchaseForm.vendor, purchaseForm.vendorSearch])
 
   async function handleSearch(event: React.FormEvent) {
     event.preventDefault()
@@ -138,6 +396,90 @@ function Purchases() {
     }
   }
 
+  function openAddPurchase() {
+    dispatchPurchaseForm({ type: 'RESET_FORM' })
+    setError('')
+    setVendorError('')
+    setVendorResults([])
+    setIsVendorListOpen(false)
+    setSelectedPurchase(null)
+    setPageMode('ADD')
+  }
+
+  function returnToHistory() {
+    if (
+      isPurchaseDraftNonempty(purchaseForm) &&
+      !window.confirm('Discard this purchase draft and return to Purchase History?')
+    ) {
+      return
+    }
+
+    dispatchPurchaseForm({ type: 'RESET_FORM' })
+    setError('')
+    setVendorError('')
+    setVendorResults([])
+    setIsVendorListOpen(false)
+    setPageMode('HISTORY')
+  }
+
+  function updateVendorSearch(value: string) {
+    setVendorError('')
+
+    if (value.trim().length === 0) {
+      setVendorResults([])
+      setIsVendorListOpen(false)
+    }
+
+    if (purchaseForm.vendor) {
+      dispatchPurchaseForm({ type: 'SET_VENDOR', vendor: null, vendorSearch: value })
+      return
+    }
+
+    dispatchPurchaseForm({
+      type: 'SET_HEADER_FIELD',
+      field: 'vendorSearch',
+      value,
+    })
+  }
+
+  function selectVendor(vendor: Vendor) {
+    vendorSearchRequestId.current += 1
+    dispatchPurchaseForm({ type: 'SET_VENDOR', vendor, vendorSearch: vendor.name })
+    setVendorResults([])
+    setIsVendorListOpen(false)
+    setVendorError('')
+  }
+
+  function clearSelectedVendor() {
+    vendorSearchRequestId.current += 1
+    dispatchPurchaseForm({ type: 'SET_VENDOR', vendor: null, vendorSearch: '' })
+    setVendorResults([])
+    setIsVendorListOpen(false)
+    setVendorError('')
+  }
+
+  async function createVendorFromSearch() {
+    const name = purchaseForm.vendorSearch.trim()
+
+    if (!name || isVendorCreating) {
+      return
+    }
+
+    setIsVendorCreating(true)
+    setVendorError('')
+
+    try {
+      const vendor = await createVendor({ name })
+      selectVendor(vendor)
+    } catch (createError) {
+      setVendorError(
+        createError instanceof Error ? createError.message : 'Unable to create vendor.',
+      )
+    } finally {
+      setIsVendorCreating(false)
+    }
+  }
+
   const summary = useMemo(
     () => ({
       totalPurchases: purchases.length,
@@ -151,6 +493,398 @@ function Purchases() {
     }),
     [purchases],
   )
+  const isOrderDiscountInfoOpen =
+    isOrderDiscountInfoPinned || isOrderDiscountInfoHovered || isOrderDiscountInfoFocused
+
+  if (pageMode === 'ADD') {
+    return (
+      <>
+        <header className="page-header purchase-form-header">
+          <div>
+            <p className="eyebrow">Purchases</p>
+            <h2>Add Purchase</h2>
+            <p className="page-subtitle">
+              Record one purchase with one or more cigar lines.
+            </p>
+          </div>
+          <div className="page-header-actions">
+            <button className="secondary-button" type="button" onClick={returnToHistory}>
+              Back to Purchases
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              disabled
+              title="Purchase saving will be enabled in a later stage."
+            >
+              Save Purchase
+            </button>
+          </div>
+        </header>
+
+        <form className="purchase-form" onSubmit={(event) => event.preventDefault()}>
+          <section className="panel purchase-form-section">
+            <div className="section-heading">
+              <h3>Purchase Header</h3>
+              <p className="muted">
+                Search for an existing vendor or create one from the entered name.
+              </p>
+            </div>
+
+            <div className="purchase-form-grid">
+              <div className="vendor-autocomplete">
+                <label htmlFor="purchase-vendor-search">
+                  Vendor Search
+                  <input
+                    aria-autocomplete="list"
+                    aria-controls="vendor-autocomplete-results"
+                    aria-expanded={isVendorListOpen}
+                    autoComplete="off"
+                    id="purchase-vendor-search"
+                    value={purchaseForm.vendorSearch}
+                    onChange={(event) => updateVendorSearch(event.target.value)}
+                    placeholder="Search vendors"
+                  />
+                </label>
+
+                {purchaseForm.vendor && (
+                  <div className="selected-vendor">
+                    <div>
+                      <p>Selected Vendor</p>
+                      <strong>{purchaseForm.vendor.name}</strong>
+                    </div>
+                    <button className="secondary-button" type="button" onClick={clearSelectedVendor}>
+                      Change
+                    </button>
+                  </div>
+                )}
+
+                {!purchaseForm.vendor && isVendorListOpen && (
+                  <div
+                    aria-label="Vendor search results"
+                    className="autocomplete-results"
+                    id="vendor-autocomplete-results"
+                    role="listbox"
+                  >
+                    {isVendorSearching && <p className="muted">Searching vendors...</p>}
+
+                    {!isVendorSearching &&
+                      purchaseForm.vendorSearch.trim().length >= 2 &&
+                      vendorResults.length === 0 && (
+                        <p className="muted">No vendors found.</p>
+                      )}
+
+                    {!isVendorSearching &&
+                      vendorResults.map((vendor) => (
+                        <button
+                          className="autocomplete-option"
+                          key={vendor.id}
+                          role="option"
+                          type="button"
+                          onClick={() => selectVendor(vendor)}
+                        >
+                          {vendor.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+
+                {!purchaseForm.vendor && purchaseForm.vendorSearch.trim().length > 0 && (
+                  <button
+                    className="create-inline-button"
+                    type="button"
+                    disabled={isVendorCreating}
+                    onClick={createVendorFromSearch}
+                  >
+                    {isVendorCreating
+                      ? 'Creating Vendor...'
+                      : `Create "${purchaseForm.vendorSearch.trim()}"`}
+                  </button>
+                )}
+
+                {vendorError && <p className="error-text vendor-field-error">{vendorError}</p>}
+              </div>
+
+              <label>
+                Purchase Date
+                <input
+                  type="date"
+                  value={purchaseForm.purchaseDate}
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'purchaseDate',
+                      value: event.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Invoice Number
+                <input
+                  value={purchaseForm.invoiceNumber}
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'invoiceNumber',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="Example: INV-1001"
+                />
+              </label>
+
+              <label className="purchase-form-notes">
+                Notes
+                <textarea
+                  value={purchaseForm.notes}
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'notes',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="Optional purchase notes"
+                  rows={3}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="panel purchase-form-section">
+            <div className="section-heading">
+              <h3>Invoice Amounts</h3>
+              <p className="muted">Accounting preview and reconciliation will be added later.</p>
+            </div>
+
+            <div className="purchase-money-grid">
+              <label>
+                Shipping
+                <input
+                  value={purchaseForm.shipping}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'shipping',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </label>
+              <label>
+                Excise Tax
+                <input
+                  value={purchaseForm.exciseTax}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'exciseTax',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </label>
+              <label>
+                Sales Tax
+                <input
+                  value={purchaseForm.salesTax}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'salesTax',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </label>
+              <label className="order-discount-field">
+                <span className="field-label-row">
+                  <span>Order Discount</span>
+                  <span
+                    className="info-popover-control"
+                    onMouseEnter={() => setIsOrderDiscountInfoHovered(true)}
+                    onMouseLeave={() => setIsOrderDiscountInfoHovered(false)}
+                    ref={orderDiscountInfoRef}
+                  >
+                    <button
+                      aria-describedby="order-discount-info-popover"
+                      aria-expanded={isOrderDiscountInfoOpen}
+                      aria-label="About Order Discount"
+                      className="info-button"
+                      type="button"
+                      onBlur={() => setIsOrderDiscountInfoFocused(false)}
+                      onClick={() => {
+                        if (isOrderDiscountInfoOpen) {
+                          setIsOrderDiscountInfoPinned(false)
+                          setIsOrderDiscountInfoHovered(false)
+                          setIsOrderDiscountInfoFocused(false)
+                          return
+                        }
+
+                        setIsOrderDiscountInfoPinned(true)
+                      }}
+                      onFocus={() => setIsOrderDiscountInfoFocused(true)}
+                      onMouseDown={(event) => event.preventDefault()}
+                    >
+                      i
+                    </button>
+                  </span>
+                </span>
+                {isOrderDiscountInfoOpen && (
+                  <span
+                    className="order-discount-help-popover"
+                    id="order-discount-info-popover"
+                    role="note"
+                  >
+                    {orderDiscountHelpText}
+                  </span>
+                )}
+                <input
+                  value={purchaseForm.discount}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'discount',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </label>
+              <label>
+                Total Paid
+                <input
+                  value={purchaseForm.totalPaid}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    dispatchPurchaseForm({
+                      type: 'SET_HEADER_FIELD',
+                      field: 'totalPaid',
+                      value: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="panel purchase-form-section">
+            <div className="panel-header-row purchase-lines-heading">
+              <div className="section-heading">
+                <h3>Purchase Lines</h3>
+                <p className="muted">
+                  Catalog cigar selection will be added in the next stage.
+                </p>
+              </div>
+            </div>
+
+            <div className="purchase-lines-grid" role="list">
+              {purchaseForm.lines.map((line, index) => (
+                <div className="purchase-line-row" role="listitem" key={line.localId}>
+                  <div className="purchase-line-number">Line {index + 1}</div>
+                  <label className="purchase-line-cigar">
+                    Cigar Search
+                    <input
+                      value={line.cigarSearch}
+                      onChange={(event) =>
+                        dispatchPurchaseForm({
+                          type: 'UPDATE_LINE',
+                          localId: line.localId,
+                          field: 'cigarSearch',
+                          value: event.target.value,
+                        })
+                      }
+                      placeholder="Search Catalog cigars soon"
+                    />
+                  </label>
+                  <label>
+                    Quantity
+                    <input
+                      value={line.quantity}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        dispatchPurchaseForm({
+                          type: 'UPDATE_LINE',
+                          localId: line.localId,
+                          field: 'quantity',
+                          value: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Unit Price
+                    <input
+                      value={line.unitPrice}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        dispatchPurchaseForm({
+                          type: 'UPDATE_LINE',
+                          localId: line.localId,
+                          field: 'unitPrice',
+                          value: event.target.value,
+                        })
+                      }
+                      placeholder="0.00"
+                    />
+                  </label>
+                  <label>
+                    MSRP Each
+                    <input
+                      value={line.msrpPerCigar}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        dispatchPurchaseForm({
+                          type: 'UPDATE_LINE',
+                          localId: line.localId,
+                          field: 'msrpPerCigar',
+                          value: event.target.value,
+                        })
+                      }
+                      placeholder="0.00"
+                    />
+                  </label>
+                  <button
+                    className="table-action danger purchase-line-remove"
+                    type="button"
+                    disabled={purchaseForm.lines.length === 1}
+                    onClick={() =>
+                      dispatchPurchaseForm({
+                        type: 'REMOVE_LINE',
+                        localId: line.localId,
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="purchase-lines-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => dispatchPurchaseForm({ type: 'ADD_LINE' })}
+              >
+                Add Line
+              </button>
+            </div>
+          </section>
+        </form>
+      </>
+    )
+  }
 
   return (
     <>
@@ -162,7 +896,7 @@ function Purchases() {
             Track vendor history, purchase costs, and line-level receiving.
           </p>
         </div>
-        <button className="primary-button" type="button" disabled title="Coming Soon">
+        <button className="primary-button" type="button" onClick={openAddPurchase}>
           + Add Purchase
         </button>
       </header>
