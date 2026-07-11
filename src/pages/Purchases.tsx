@@ -12,6 +12,16 @@ import {
   type PurchaseReceiptState,
   type Vendor,
 } from '../services/api'
+import {
+  buildPurchasePreview,
+  decimalStringToCents,
+  formatCents,
+  formatBasisPoints,
+  formatCentsForInput,
+  formatSignedCents,
+  parseMoneyCents,
+  type LinePreview,
+} from '../utils/purchaseAllocations'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -191,7 +201,7 @@ function purchaseFormReducer(
                 msrpPerCigar:
                   action.catalogCigar?.msrp === null || action.catalogCigar?.msrp === undefined
                     ? ''
-                    : String(action.catalogCigar.msrp),
+                    : normalizeMoneyInput(String(action.catalogCigar.msrp)),
               }
             : line,
         ),
@@ -275,6 +285,34 @@ function trueCostEach(line: PurchaseLine) {
     Number(line.allocatedDiscount)
 
   return currencyFormatter.format(basis / line.quantity)
+}
+
+function previewValue(cents: number | null) {
+  return cents === null ? '-' : formatCents(cents)
+}
+
+function signedPreviewValue(cents: number | null) {
+  return formatSignedCents(cents)
+}
+
+function trueCostDisplay(line: LinePreview) {
+  if (!line.trueCostPerCigar) {
+    return '-'
+  }
+
+  return formatCents(decimalStringToCents(line.trueCostPerCigar))
+}
+
+function normalizeMoneyInput(value: string) {
+  if (value.trim() === '') {
+    return value
+  }
+
+  try {
+    return formatCentsForInput(parseMoneyCents(value, 'Amount'))
+  } catch {
+    return value
+  }
 }
 
 function enRouteCigars(purchases: Purchase[]) {
@@ -710,6 +748,27 @@ function Purchases() {
     setCatalogCreateDraft((current) => ({ ...current, [field]: value }))
   }
 
+  function normalizeHeaderMoneyField(field: HeaderField, value: string) {
+    dispatchPurchaseForm({
+      type: 'SET_HEADER_FIELD',
+      field,
+      value: normalizeMoneyInput(value),
+    })
+  }
+
+  function normalizeLineMoneyField(
+    localId: string,
+    field: keyof Omit<PurchaseFormLine, 'localId' | 'catalogCigar'>,
+    value: string,
+  ) {
+    dispatchPurchaseForm({
+      type: 'UPDATE_LINE',
+      localId,
+      field,
+      value: normalizeMoneyInput(value),
+    })
+  }
+
   async function createCatalogForLine(localId: string) {
     if (isCatalogCreating) {
       return
@@ -757,6 +816,24 @@ function Purchases() {
   )
   const isOrderDiscountInfoOpen =
     isOrderDiscountInfoPinned || isOrderDiscountInfoHovered || isOrderDiscountInfoFocused
+  const purchasePreview = useMemo(
+    () =>
+      buildPurchasePreview({
+        shipping: purchaseForm.shipping,
+        exciseTax: purchaseForm.exciseTax,
+        salesTax: purchaseForm.salesTax,
+        discount: purchaseForm.discount,
+        totalPaid: purchaseForm.totalPaid,
+        lines: purchaseForm.lines.map((line, index) => ({
+          lineNumber: index + 1,
+          cigarName: line.catalogCigar ? catalogCigarName(line.catalogCigar) : undefined,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          msrpPerCigar: line.msrpPerCigar,
+        })),
+      }),
+    [purchaseForm],
+  )
 
   if (pageMode === 'ADD') {
     return (
@@ -777,7 +854,7 @@ function Purchases() {
               className="primary-button"
               type="button"
               disabled
-              title="Purchase saving will be enabled in a later stage."
+              title="Final validation and purchase submission will be enabled in the next stage."
             >
               Save Purchase
             </button>
@@ -918,54 +995,66 @@ function Purchases() {
           <section className="panel purchase-form-section">
             <div className="section-heading">
               <h3>Invoice Amounts</h3>
-              <p className="muted">Accounting preview and reconciliation will be added later.</p>
+              <p className="muted">Review calculated invoice totals before final submission.</p>
             </div>
 
             <div className="purchase-money-grid">
               <label>
                 Shipping
-                <input
-                  value={purchaseForm.shipping}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    dispatchPurchaseForm({
-                      type: 'SET_HEADER_FIELD',
-                      field: 'shipping',
-                      value: event.target.value,
-                    })
-                  }
-                  placeholder="0.00"
-                />
+                <span className="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    value={purchaseForm.shipping}
+                    inputMode="decimal"
+                    onBlur={(event) => normalizeHeaderMoneyField('shipping', event.target.value)}
+                    onChange={(event) =>
+                      dispatchPurchaseForm({
+                        type: 'SET_HEADER_FIELD',
+                        field: 'shipping',
+                        value: event.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </span>
               </label>
               <label>
                 Excise Tax
-                <input
-                  value={purchaseForm.exciseTax}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    dispatchPurchaseForm({
-                      type: 'SET_HEADER_FIELD',
-                      field: 'exciseTax',
-                      value: event.target.value,
-                    })
-                  }
-                  placeholder="0.00"
-                />
+                <span className="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    value={purchaseForm.exciseTax}
+                    inputMode="decimal"
+                    onBlur={(event) => normalizeHeaderMoneyField('exciseTax', event.target.value)}
+                    onChange={(event) =>
+                      dispatchPurchaseForm({
+                        type: 'SET_HEADER_FIELD',
+                        field: 'exciseTax',
+                        value: event.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </span>
               </label>
               <label>
                 Sales Tax
-                <input
-                  value={purchaseForm.salesTax}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    dispatchPurchaseForm({
-                      type: 'SET_HEADER_FIELD',
-                      field: 'salesTax',
-                      value: event.target.value,
-                    })
-                  }
-                  placeholder="0.00"
-                />
+                <span className="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    value={purchaseForm.salesTax}
+                    inputMode="decimal"
+                    onBlur={(event) => normalizeHeaderMoneyField('salesTax', event.target.value)}
+                    onChange={(event) =>
+                      dispatchPurchaseForm({
+                        type: 'SET_HEADER_FIELD',
+                        field: 'salesTax',
+                        value: event.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </span>
               </label>
               <label className="order-discount-field">
                 <span className="field-label-row">
@@ -1009,34 +1098,104 @@ function Purchases() {
                     {orderDiscountHelpText}
                   </span>
                 )}
-                <input
-                  value={purchaseForm.discount}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    dispatchPurchaseForm({
-                      type: 'SET_HEADER_FIELD',
-                      field: 'discount',
-                      value: event.target.value,
-                    })
-                  }
-                  placeholder="0.00"
-                />
+                <span className="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    value={purchaseForm.discount}
+                    inputMode="decimal"
+                    onBlur={(event) => normalizeHeaderMoneyField('discount', event.target.value)}
+                    onChange={(event) =>
+                      dispatchPurchaseForm({
+                        type: 'SET_HEADER_FIELD',
+                        field: 'discount',
+                        value: event.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </span>
               </label>
               <label>
                 Total Paid
-                <input
-                  value={purchaseForm.totalPaid}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    dispatchPurchaseForm({
-                      type: 'SET_HEADER_FIELD',
-                      field: 'totalPaid',
-                      value: event.target.value,
-                    })
-                  }
-                  placeholder="0.00"
-                />
+                <span className="money-input">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    value={purchaseForm.totalPaid}
+                    inputMode="decimal"
+                    onBlur={(event) => normalizeHeaderMoneyField('totalPaid', event.target.value)}
+                    onChange={(event) =>
+                      dispatchPurchaseForm({
+                        type: 'SET_HEADER_FIELD',
+                        field: 'totalPaid',
+                        value: event.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </span>
               </label>
+            </div>
+
+            <div className="accounting-summary">
+              <div className="accounting-summary-grid">
+                <div>
+                  <p>Cigar Subtotal</p>
+                  <strong>{formatCents(purchasePreview.purchaseSubtotalCents)}</strong>
+                </div>
+                <div>
+                  <p>Shipping</p>
+                  <strong>{formatCents(purchasePreview.shippingCents)}</strong>
+                </div>
+                <div>
+                  <p>Excise Tax</p>
+                  <strong>{formatCents(purchasePreview.exciseTaxCents)}</strong>
+                </div>
+                <div>
+                  <p>Sales Tax</p>
+                  <strong>{formatCents(purchasePreview.salesTaxCents)}</strong>
+                </div>
+                <div>
+                  <p>Order Discount</p>
+                  <strong>{formatCents(-purchasePreview.discountCents)}</strong>
+                </div>
+                <div>
+                  <p>Calculated Invoice Total</p>
+                  <strong>{formatCents(purchasePreview.calculatedInvoiceTotalCents)}</strong>
+                </div>
+                <div>
+                  <p>Entered Total Paid</p>
+                  <strong>{previewValue(purchasePreview.totalPaidCents)}</strong>
+                </div>
+                <div>
+                  <p>Difference</p>
+                  <strong>{signedPreviewValue(purchasePreview.differenceCents)}</strong>
+                </div>
+              </div>
+
+              <div className="reconciliation-status">
+                {purchasePreview.totalPaidCents === null && (
+                  <p className="muted">Enter Total Paid to check invoice reconciliation.</p>
+                )}
+                {purchasePreview.totalPaidCents !== null && purchasePreview.isBalanced && (
+                  <p className="balanced-text">Balanced</p>
+                )}
+                {purchasePreview.totalPaidCents !== null &&
+                  !purchasePreview.isBalanced &&
+                  purchasePreview.differenceCents !== null && (
+                    <p className="warning-text">
+                      Difference: {signedPreviewValue(purchasePreview.differenceCents)}
+                    </p>
+                  )}
+                {purchasePreview.errors.length > 0 && (
+                  <div className="preview-errors">
+                    {purchasePreview.errors.map((previewError) => (
+                      <p className="error-text" key={previewError}>
+                        {previewError}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 
@@ -1051,7 +1210,10 @@ function Purchases() {
             </div>
 
             <div className="purchase-lines-grid" role="list">
-              {purchaseForm.lines.map((line, index) => (
+              {purchaseForm.lines.map((line, index) => {
+                const linePreview = purchasePreview.lines[index]
+
+                return (
                 <div className="purchase-line-row" role="listitem" key={line.localId}>
                   <div className="purchase-line-number">Line {index + 1}</div>
                   <label className="purchase-line-cigar">
@@ -1251,53 +1413,101 @@ function Purchases() {
                       </div>
                     </div>
                   )}
-                  <label>
-                    Quantity
-                    <input
-                      value={line.quantity}
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        dispatchPurchaseForm({
-                          type: 'UPDATE_LINE',
-                          localId: line.localId,
-                          field: 'quantity',
-                          value: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Unit Price
-                    <input
-                      value={line.unitPrice}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        dispatchPurchaseForm({
-                          type: 'UPDATE_LINE',
-                          localId: line.localId,
-                          field: 'unitPrice',
-                          value: event.target.value,
-                        })
-                      }
-                      placeholder="0.00"
-                    />
-                  </label>
-                  <label>
-                    MSRP Each
-                    <input
-                      value={line.msrpPerCigar}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        dispatchPurchaseForm({
-                          type: 'UPDATE_LINE',
-                          localId: line.localId,
-                          field: 'msrpPerCigar',
-                          value: event.target.value,
-                        })
-                      }
-                      placeholder="0.00"
-                    />
-                  </label>
+                  <div className="line-entry-fields">
+                    <label>
+                      Quantity
+                      <input
+                        value={line.quantity}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          dispatchPurchaseForm({
+                            type: 'UPDATE_LINE',
+                            localId: line.localId,
+                            field: 'quantity',
+                            value: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Unit Price
+                      <span className="money-input">
+                        <span aria-hidden="true">$</span>
+                        <input
+                          value={line.unitPrice}
+                          inputMode="decimal"
+                          onBlur={(event) =>
+                            normalizeLineMoneyField(line.localId, 'unitPrice', event.target.value)
+                          }
+                          onChange={(event) =>
+                            dispatchPurchaseForm({
+                              type: 'UPDATE_LINE',
+                              localId: line.localId,
+                              field: 'unitPrice',
+                              value: event.target.value,
+                            })
+                          }
+                          placeholder="0.00"
+                        />
+                      </span>
+                    </label>
+                    <label>
+                      MSRP Each
+                      <span className="money-input">
+                        <span aria-hidden="true">$</span>
+                        <input
+                          value={line.msrpPerCigar}
+                          inputMode="decimal"
+                          onBlur={(event) =>
+                            normalizeLineMoneyField(
+                              line.localId,
+                              'msrpPerCigar',
+                              event.target.value,
+                            )
+                          }
+                          onChange={(event) =>
+                            dispatchPurchaseForm({
+                              type: 'UPDATE_LINE',
+                              localId: line.localId,
+                              field: 'msrpPerCigar',
+                              value: event.target.value,
+                            })
+                          }
+                          placeholder="0.00"
+                        />
+                      </span>
+                    </label>
+                  </div>
+                  {linePreview && (
+                    <div className="line-accounting-preview">
+                      <div>
+                        <p>Line Subtotal</p>
+                        <strong>{previewValue(linePreview.lineSubtotalCents)}</strong>
+                      </div>
+                      <div>
+                        <p>True Line Cost Basis</p>
+                        <strong>{previewValue(linePreview.trueLineCostBasisCents)}</strong>
+                      </div>
+                      <div>
+                        <p>True Cost Per Cigar</p>
+                        <strong>{trueCostDisplay(linePreview)}</strong>
+                      </div>
+                      <div>
+                        <p>MSRP Per Cigar</p>
+                        <strong>{previewValue(linePreview.msrpPerCigarCents)}</strong>
+                      </div>
+                      <div>
+                        <p>Savings Per Cigar</p>
+                        <strong>{previewValue(linePreview.savingsPerCigarCents)}</strong>
+                      </div>
+                      <div>
+                        <p>Savings Percentage</p>
+                        <strong>
+                          {formatBasisPoints(linePreview.savingsPercentageBasisPoints)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
                   <button
                     className="table-action danger purchase-line-remove"
                     type="button"
@@ -1312,7 +1522,8 @@ function Purchases() {
                     Remove
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="purchase-lines-actions">
