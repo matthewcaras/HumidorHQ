@@ -112,6 +112,49 @@ The application is optimized around the owner's collecting workflow.
 
 ---
 
+## Desktop and Mobile Workflow Strategy
+
+Decision:
+HumidorHQ is one responsive web application used on both computers and iPhones.
+
+- A separate mobile application is not required.
+- The application will eventually support installation on the iPhone Home Screen as a Progressive Web App.
+- Desktop and mobile use the same API, database, business rules, and historical records.
+
+Desktop-primary workflows:
+
+- Entering current and historical purchases.
+- Managing purchases with multiple lines.
+- Reviewing weighted cost allocations.
+- Catalog maintenance and duplicate merging.
+- Vendor administration.
+- Reports, analytics, and other detailed administrative tasks.
+
+iPhone-primary workflows:
+
+- Receiving and storing a purchase line.
+- Searching for a cigar and locating its humidor, drawer, or shelf.
+- Moving selected quantities between locations.
+- Recording cigars as smoked, gifted/shared, or damaged.
+- Browsing Collection and Humidor contents.
+- Opening Cigar Details.
+
+Interface principles:
+
+- Purchase entry may use desktop-friendly tables and multi-column forms, but it must remain usable on a phone.
+- Collection, Search, Receive and Store, Move, and Consumption workflows should be designed mobile-first.
+- Mobile actions should use large touch targets, minimal typing, and short full-screen or near-full-screen workflows.
+- Essential actions must not depend on mouse hover.
+- Desktop may use persistent sidebar navigation.
+- Mobile may eventually use compact navigation or bottom navigation.
+- Responsive presentation may use tables on desktop and cards or compact layouts on mobile.
+- Device-specific presentation must not create separate or inconsistent data workflows.
+
+Reason:
+This strategy reflects actual expected usage: purchases will primarily be entered on a computer, while receiving, moving, searching, and consuming cigars will primarily occur on an iPhone near the physical humidors.
+
+---
+
 ## Primary User Workflow
 
 1. Dashboard

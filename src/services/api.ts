@@ -26,6 +26,70 @@ shelfCount: number | null
   subLocations: StorageSubLocation[]
 }
 
+export type PurchaseReceiptState = 'EN_ROUTE' | 'PARTIALLY_RECEIVED' | 'RECEIVED'
+
+export type PurchaseVendor = {
+  id: number
+  name: string
+  nameKey: string
+  isActive: boolean
+}
+
+export type PurchaseCatalogCigar = {
+  id: number
+  manufacturer: string
+  manufacturerKey: string
+  series: string
+  seriesKey: string
+  vitola: string
+  vitolaKey: string
+  msrp: string | number | null
+  isActive: boolean
+}
+
+export type PurchaseLot = {
+  id: number
+  quantityPurchased: number
+  quantityRemaining: number
+  originalQuantity: number | null
+  currentQuantity: number | null
+  allocatedCostPerCigar: string | number | null
+  costPerCigarSnapshot: string | number | null
+  receivedDateSnapshot: string | null
+}
+
+export type PurchaseLine = {
+  id: number
+  lineNumber: number
+  quantity: number
+  unitPrice: string | number
+  lineSubtotal: string | number
+  msrpPerCigar: string | number | null
+  receivedDate: string | null
+  allocatedShipping: string | number
+  allocatedExciseTax: string | number
+  allocatedSalesTax: string | number
+  allocatedDiscount: string | number
+  catalogCigar: PurchaseCatalogCigar
+  lot: PurchaseLot | null
+}
+
+export type Purchase = {
+  id: number
+  vendorId: number | null
+  purchaseDate: string | null
+  invoiceNumber: string | null
+  shipping: string | number
+  exciseTax: string | number
+  salesTax: string | number
+  discount: string | number
+  totalPaid: string | number | null
+  notes: string | null
+  vendor: PurchaseVendor | null
+  lines: PurchaseLine[]
+  receiptState: PurchaseReceiptState
+}
+
 export type CreateHumidorInput = {
   name: string
   capacity?: string
@@ -110,4 +174,23 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
   })
 
   return parseJsonResponse<Humidor>(response, 'Failed to archive humidor')
+}
+
+export async function getPurchases(search?: string): Promise<Purchase[]> {
+  const params = new URLSearchParams()
+
+  if (search?.trim()) {
+    params.set('search', search.trim())
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/purchases${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<Purchase[]>(response, 'Failed to load purchases')
+}
+
+export async function getPurchaseById(id: number): Promise<Purchase> {
+  const response = await fetch(`${API_BASE_URL}/purchases/${id}`)
+
+  return parseJsonResponse<Purchase>(response, 'Failed to load purchase')
 }
