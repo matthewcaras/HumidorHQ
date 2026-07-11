@@ -28,14 +28,22 @@ shelfCount: number | null
 
 export type PurchaseReceiptState = 'EN_ROUTE' | 'PARTIALLY_RECEIVED' | 'RECEIVED'
 
-export type PurchaseVendor = {
+export type Vendor = {
   id: number
   name: string
   nameKey: string
+  website: string | null
+  notes: string | null
   isActive: boolean
 }
 
-export type PurchaseCatalogCigar = {
+export type CreateVendorInput = {
+  name: string
+  website?: string
+  notes?: string
+}
+
+export type CatalogCigar = {
   id: number
   manufacturer: string
   manufacturerKey: string
@@ -43,9 +51,37 @@ export type PurchaseCatalogCigar = {
   seriesKey: string
   vitola: string
   vitolaKey: string
+  shape: string | null
+  length: string | number | null
+  ringGauge: number | null
+  wrapper: string | null
+  wrapperKey: string | null
+  binder: string | null
+  filler: string | null
+  country: string | null
+  strength: string | null
   msrp: string | number | null
   isActive: boolean
 }
+
+export type CreateCatalogCigarInput = {
+  manufacturer: string
+  series: string
+  vitola: string
+  shape?: string | null
+  length?: string | number | null
+  ringGauge?: string | number | null
+  wrapper?: string | null
+  binder?: string | null
+  filler?: string | null
+  country?: string | null
+  strength?: string | null
+  msrp?: string | number | null
+}
+
+export type PurchaseVendor = Vendor
+
+export type PurchaseCatalogCigar = CatalogCigar
 
 export type PurchaseLot = {
   id: number
@@ -88,6 +124,27 @@ export type Purchase = {
   vendor: PurchaseVendor | null
   lines: PurchaseLine[]
   receiptState: PurchaseReceiptState
+}
+
+export type CreatePurchaseLineInput = {
+  catalogCigarId: number
+  quantity: number
+  unitPrice: string
+  msrpPerCigar?: string
+  receivedDate?: string
+}
+
+export type CreatePurchaseInput = {
+  vendorId: number
+  purchaseDate: string
+  invoiceNumber?: string
+  shipping?: string
+  exciseTax?: string
+  salesTax?: string
+  discount?: string
+  totalPaid: string
+  notes?: string
+  lines: CreatePurchaseLineInput[]
 }
 
 export type CreateHumidorInput = {
@@ -176,6 +233,64 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
   return parseJsonResponse<Humidor>(response, 'Failed to archive humidor')
 }
 
+export async function getVendors(search?: string): Promise<Vendor[]> {
+  const params = new URLSearchParams()
+
+  if (search?.trim()) {
+    params.set('search', search.trim())
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/vendors${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<Vendor[]>(response, 'Failed to load vendors')
+}
+
+export async function createVendor(input: CreateVendorInput): Promise<Vendor> {
+  const response = await fetch(`${API_BASE_URL}/vendors`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<Vendor>(response, 'Failed to create vendor')
+}
+
+export async function getCatalogCigars(
+  options: { search?: string; limit?: number } = {},
+): Promise<CatalogCigar[]> {
+  const params = new URLSearchParams()
+
+  if (options.search?.trim()) {
+    params.set('search', options.search.trim())
+  }
+
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/catalog${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<CatalogCigar[]>(response, 'Failed to load catalog cigars')
+}
+
+export async function createCatalogCigar(
+  input: CreateCatalogCigarInput,
+): Promise<CatalogCigar> {
+  const response = await fetch(`${API_BASE_URL}/catalog`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<CatalogCigar>(response, 'Failed to create catalog cigar')
+}
+
 export async function getPurchases(search?: string): Promise<Purchase[]> {
   const params = new URLSearchParams()
 
@@ -193,4 +308,16 @@ export async function getPurchaseById(id: number): Promise<Purchase> {
   const response = await fetch(`${API_BASE_URL}/purchases/${id}`)
 
   return parseJsonResponse<Purchase>(response, 'Failed to load purchase')
+}
+
+export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase> {
+  const response = await fetch(`${API_BASE_URL}/purchases`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<Purchase>(response, 'Failed to create purchase')
 }
