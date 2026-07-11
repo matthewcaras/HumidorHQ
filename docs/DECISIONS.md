@@ -32,6 +32,24 @@ This preserves complete history and makes calculations reliable.
 
 ---
 
+## Purchase Lifecycle and Inferred Status
+
+Decision:
+HumidorHQ will not require the user to manually maintain normal purchase statuses. Operational status will be inferred from existing data.
+
+- En Route means the purchase or lot has no receivedDate.
+- Received means receivedDate exists but no initial placement has been recorded.
+- Stored means the lot has a positive current location balance.
+- "Received, Not Stored" is a valid temporary state but does not need a prominent dashboard card because cigars will normally be stored the same day they arrive.
+- Historical purchases may include both the actual purchase date and actual received date.
+- Accurate historical dates should drive aging calculations.
+- Administrative statuses such as Draft or Cancelled may be stored explicitly later if needed.
+
+Reason:
+This follows the principle of minimizing ongoing maintenance by deriving state rather than asking the user to update another field.
+
+---
+
 ## Collection Views and Location Search
 
 Decision:
