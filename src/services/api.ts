@@ -25,14 +25,37 @@ export type UpdateHumidorInput = {
   shelfCount?: string
 }
 
+type ApiResponse<T> = {
+  data: T
+}
+
+type ApiErrorResponse = {
+  error?: {
+    code?: string
+    message?: string
+  }
+}
+
+async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  let body: ApiResponse<T> & ApiErrorResponse
+
+  try {
+    body = await response.json()
+  } catch {
+    throw new Error(fallbackMessage)
+  }
+
+  if (!response.ok) {
+    throw new Error(body.error?.message ?? fallbackMessage)
+  }
+
+  return body.data
+}
+
 export async function getHumidors(): Promise<Humidor[]> {
   const response = await fetch(`${API_BASE_URL}/humidors`)
 
-  if (!response.ok) {
-    throw new Error('Failed to load humidors')
-  }
-
-  return response.json()
+  return parseJsonResponse<Humidor[]>(response, 'Failed to load humidors')
 }
 
 export async function createHumidor(input: CreateHumidorInput): Promise<Humidor> {
@@ -44,11 +67,7 @@ export async function createHumidor(input: CreateHumidorInput): Promise<Humidor>
     body: JSON.stringify(input),
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to create humidor')
-  }
-
-  return response.json()
+  return parseJsonResponse<Humidor>(response, 'Failed to create humidor')
 }
 
 export async function updateHumidor(
@@ -63,11 +82,7 @@ export async function updateHumidor(
     body: JSON.stringify(input),
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to update humidor')
-  }
-
-  return response.json()
+  return parseJsonResponse<Humidor>(response, 'Failed to update humidor')
 }
 
 export async function archiveHumidor(id: number): Promise<Humidor> {
@@ -75,9 +90,5 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
     method: 'PATCH',
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to archive humidor')
-  }
-
-  return response.json()
+  return parseJsonResponse<Humidor>(response, 'Failed to archive humidor')
 }

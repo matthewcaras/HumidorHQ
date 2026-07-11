@@ -1,7 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import { PrismaClient } from '../src/generated/prisma/client.ts'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import {
   archiveCatalogCigar,
   CatalogServiceError,
@@ -9,13 +7,16 @@ import {
   getCatalogCigars,
   updateCatalogCigar,
 } from './services/catalogService.ts'
+import {
+  archiveHumidor,
+  createHumidor,
+  getHumidors,
+  HumidorServiceError,
+  humidorIdParam,
+  updateHumidor,
+} from './services/humidorService.ts'
 
 const app = express()
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL || 'file:./prisma/humidorhq.db',
-})
-
-const prisma = new PrismaClient({ adapter })
 
 app.use(cors())
 app.use(express.json())
@@ -53,6 +54,25 @@ function handleCatalogError(error: unknown, res: express.Response) {
     error: {
       code: 'CATALOG_UNEXPECTED_ERROR',
       message: 'The catalog request could not be completed.',
+    },
+  })
+}
+
+function handleHumidorError(error: unknown, res: express.Response) {
+  if (error instanceof HumidorServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'HUMIDOR_UNEXPECTED_ERROR',
+      message: 'The humidor request could not be completed.',
     },
   })
 }
@@ -104,57 +124,39 @@ app.delete('/api/catalog/:id', async (req, res) => {
 })
 
 app.get('/api/humidors', async (_req, res) => {
-  const humidors = await prisma.storageLocation.findMany({
-    where: { isActive: true },
-    orderBy: { displayOrder: 'asc' },
-  })
-
-  res.json(humidors)
+  try {
+    const humidors = await getHumidors()
+    res.json({ data: humidors })
+  } catch (error) {
+    handleHumidorError(error, res)
+  }
 })
 
 app.post('/api/humidors', async (req, res) => {
-const { name, capacity, hasShelves, shelfCount } = req.body
-
-  const humidor = await prisma.storageLocation.create({
-  data: {
-  name,
-  capacity: capacity ? Number(capacity) : null,
-  hasShelves: Boolean(hasShelves),
-  shelfCount: hasShelves && shelfCount ? Number(shelfCount) : null,
-},
-  })
-
-  res.status(201).json(humidor)
+  try {
+    const humidor = await createHumidor(req.body)
+    res.status(201).json({ data: humidor })
+  } catch (error) {
+    handleHumidorError(error, res)
+  }
 })
 
 app.put('/api/humidors/:id', async (req, res) => {
-  const id = Number(req.params.id)
-  const { name, capacity, hasShelves, shelfCount } = req.body
-
-  const humidor = await prisma.storageLocation.update({
-    where: { id },
-    data: {
-      name,
-      capacity: capacity ? Number(capacity) : null,
-      hasShelves: Boolean(hasShelves),
-      shelfCount: hasShelves && shelfCount ? Number(shelfCount) : null,
-    },
-  })
-
-  res.json(humidor)
+  try {
+    const humidor = await updateHumidor(humidorIdParam(req.params.id), req.body)
+    res.json({ data: humidor })
+  } catch (error) {
+    handleHumidorError(error, res)
+  }
 })
 
 app.patch('/api/humidors/:id/archive', async (req, res) => {
-  const id = Number(req.params.id)
-
-  const humidor = await prisma.storageLocation.update({
-    where: { id },
-    data: {
-      isActive: false,
-    },
-  })
-
-  res.json(humidor)
+  try {
+    const humidor = await archiveHumidor(humidorIdParam(req.params.id))
+    res.json({ data: humidor })
+  } catch (error) {
+    handleHumidorError(error, res)
+  }
 })
 
 const PORT = 3001
