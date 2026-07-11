@@ -50,6 +50,33 @@ This follows the principle of minimizing ongoing maintenance by deriving state r
 
 ---
 
+## Line-Level Receiving and Storage
+
+Decision:
+Receiving and storage are tracked at the purchase-line level.
+
+- One purchase may contain multiple purchase lines that arrive on different dates.
+- receivedDate belongs to PurchaseLine rather than only to the purchase header.
+- Each PurchaseLine creates one Lot.
+- The Lot preserves the PurchaseLine received date as its received-date snapshot.
+- Each line may be received and stored independently from the other lines in the same purchase.
+- Different lines from the same purchase may be assigned to different humidors, drawers, or shelves.
+- Receiving and storing one line does not affect the en-route state of other lines.
+- A purchase's overall operational state is derived from its lines:
+  - En Route: no lines have been received.
+  - Partially Received: some but not all lines have received dates.
+  - Received: all lines have received dates.
+  - Fully Stored: all lots have positive location balances.
+- These operational states are inferred and are not manually maintained.
+- The UI should eventually allow a received date to be applied to all lines when the entire order arrives together.
+- A Receive and Store workflow should eventually set the line received date, update the lot snapshot, create the initial placement event, and create the location balance atomically.
+- This design supports split shipments without requiring a separate shipment model in Version 1.
+
+Reason:
+Line-level receiving supports split shipments while preserving the principle that operational state should be derived from facts already recorded.
+
+---
+
 ## Collection Views and Location Search
 
 Decision:
