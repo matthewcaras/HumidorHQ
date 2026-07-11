@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   createCatalogCigar,
+  createPurchase,
   createVendor,
   getCatalogCigars,
   getPurchaseById,
@@ -20,6 +21,8 @@ import {
   formatCentsForInput,
   formatSignedCents,
   parseMoneyCents,
+  parsePositiveWholeNumber,
+  type PurchasePreview,
   type LinePreview,
 } from '../utils/purchaseAllocations'
 
@@ -315,6 +318,174 @@ function normalizeMoneyInput(value: string) {
   }
 }
 
+type PurchaseSubmissionField =
+  | 'vendor'
+  | 'purchaseDate'
+  | 'invoiceNumber'
+  | 'shipping'
+  | 'exciseTax'
+  | 'salesTax'
+  | 'discount'
+  | 'totalPaid'
+
+type PurchaseLineSubmissionErrors = {
+  catalogCigar?: string
+  quantity?: string
+  unitPrice?: string
+  msrpPerCigar?: string
+  previewErrors?: string[]
+}
+
+type PurchaseSubmissionValidation = {
+  fieldErrors: Partial<Record<PurchaseSubmissionField, string>>
+  lineErrors: Record<string, PurchaseLineSubmissionErrors>
+  summaryErrors: string[]
+  reconciliationErrors: string[]
+  isValid: boolean
+}
+
+function isValidCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)]
+}
+
+function validatePurchaseSubmission(
+  state: PurchaseFormState,
+  preview: PurchasePreview,
+): PurchaseSubmissionValidation {
+  const fieldErrors: Partial<Record<PurchaseSubmissionField, string>> = {}
+  const lineErrors: Record<string, PurchaseLineSubmissionErrors> = {}
+
+  if (!state.vendor) {
+    fieldErrors.vendor = 'Select or create a vendor before saving.'
+  }
+
+  if (!isValidCalendarDate(state.purchaseDate)) {
+    fieldErrors.purchaseDate = 'Purchase date must be a valid date.'
+  }
+
+  for (const [field, label] of [
+    ['shipping', 'Shipping'],
+    ['exciseTax', 'Excise Tax'],
+    ['salesTax', 'Sales Tax'],
+    ['discount', 'Order Discount'],
+  ] as const) {
+    try {
+      parseMoneyCents(state[field], label)
+    } catch (error) {
+      fieldErrors[field] = error instanceof Error ? error.message : `${label} is invalid.`
+    }
+  }
+
+  try {
+    const totalPaidCents = parseMoneyCents(state.totalPaid, 'Total Paid', false)
+
+    if (totalPaidCents === null) {
+      fieldErrors.totalPaid = 'Total Paid is required.'
+    }
+  } catch (error) {
+    fieldErrors.totalPaid = error instanceof Error ? error.message : 'Total Paid is invalid.'
+  }
+
+  const catalogCounts = new Map<number, number>()
+  for (const line of state.lines) {
+    if (line.catalogCigar) {
+      catalogCounts.set(line.catalogCigar.id, (catalogCounts.get(line.catalogCigar.id) ?? 0) + 1)
+    }
+  }
+
+  state.lines.forEach((line, index) => {
+    const errors: PurchaseLineSubmissionErrors = {}
+    const lineNumber = index + 1
+
+    if (!line.catalogCigar) {
+      errors.catalogCigar = 'Select a catalog cigar before saving.'
+    } else if ((catalogCounts.get(line.catalogCigar.id) ?? 0) > 1) {
+      errors.catalogCigar = 'This cigar appears more than once in the purchase.'
+    }
+
+    try {
+      parsePositiveWholeNumber(line.quantity, `Line ${lineNumber} quantity`)
+    } catch (error) {
+      errors.quantity = error instanceof Error ? error.message : 'Quantity is invalid.'
+    }
+
+    try {
+      const unitPriceCents = parseMoneyCents(line.unitPrice, `Line ${lineNumber} unit price`, false)
+
+      if (unitPriceCents === null) {
+        errors.unitPrice = 'Unit Price is required.'
+      }
+    } catch (error) {
+      errors.unitPrice = error instanceof Error ? error.message : 'Unit Price is invalid.'
+    }
+
+    if (line.msrpPerCigar.trim().length > 0) {
+      try {
+        parseMoneyCents(line.msrpPerCigar, `Line ${lineNumber} MSRP`, false)
+      } catch (error) {
+        errors.msrpPerCigar = error instanceof Error ? error.message : 'MSRP Each is invalid.'
+      }
+    }
+
+    if (preview.lines[index]?.errors.length) {
+      errors.previewErrors = [...preview.lines[index].errors]
+    }
+
+    if (Object.keys(errors).length > 0) {
+      lineErrors[line.localId] = errors
+    }
+  })
+
+  const summaryErrors = uniqueStrings([
+    ...Object.values(fieldErrors).filter((value): value is string => Boolean(value)),
+    ...Object.values(lineErrors).flatMap((errors) =>
+      ['catalogCigar', 'quantity', 'unitPrice', 'msrpPerCigar']
+        .map((key) => errors[key as keyof PurchaseLineSubmissionErrors])
+        .filter((value): value is string => Boolean(value)),
+    ),
+    ...preview.errors,
+  ])
+
+  return {
+    fieldErrors,
+    lineErrors,
+    summaryErrors,
+    reconciliationErrors: preview.errors,
+    isValid:
+      summaryErrors.length === 0 &&
+      Object.keys(fieldErrors).length === 0 &&
+      Object.keys(lineErrors).length === 0,
+  }
+}
+
+function classifyServerPurchaseError(message: string) {
+  const lower = message.toLowerCase()
+
+  if (lower.includes('invoice') && (lower.includes('duplicate') || lower.includes('already exists'))) {
+    return 'invoiceNumber' as const
+  }
+
+  if (lower.includes('vendor')) {
+    return 'vendor' as const
+  }
+
+  if (lower.includes('total') || lower.includes('reconcil')) {
+    return 'totalPaid' as const
+  }
+
+  return 'summary' as const
+}
+
 function enRouteCigars(purchases: Purchase[]) {
   return purchases.reduce(
     (total, purchase) =>
@@ -386,8 +557,6 @@ function Purchases() {
   const [isCatalogCreating, setIsCatalogCreating] = useState(false)
   const orderDiscountInfoRef = useRef<HTMLDivElement | null>(null)
   const [isOrderDiscountInfoPinned, setIsOrderDiscountInfoPinned] = useState(false)
-  const [isOrderDiscountInfoHovered, setIsOrderDiscountInfoHovered] = useState(false)
-  const [isOrderDiscountInfoFocused, setIsOrderDiscountInfoFocused] = useState(false)
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
   const [search, setSearch] = useState('')
@@ -395,6 +564,11 @@ function Purchases() {
   const [isLoading, setIsLoading] = useState(true)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isSavingPurchase, setIsSavingPurchase] = useState(false)
+  const [saveAttempted, setSaveAttempted] = useState(false)
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState('')
+  const [saveErrorMessage, setSaveErrorMessage] = useState('')
+  const successMessageTimerRef = useRef<number | null>(null)
 
   async function loadPurchases(searchValue = '') {
     setIsLoading(true)
@@ -421,16 +595,12 @@ function Purchases() {
         !orderDiscountInfoRef.current.contains(event.target as Node)
       ) {
         setIsOrderDiscountInfoPinned(false)
-        setIsOrderDiscountInfoHovered(false)
-        setIsOrderDiscountInfoFocused(false)
       }
     }
 
     function handleDocumentKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setIsOrderDiscountInfoPinned(false)
-        setIsOrderDiscountInfoHovered(false)
-        setIsOrderDiscountInfoFocused(false)
         setOpenCatalogLineId(null)
         setActiveCatalogCreateLineId(null)
       }
@@ -537,10 +707,17 @@ function Purchases() {
     setVendorResults([])
     setIsVendorListOpen(false)
     setSelectedPurchase(null)
+    setSaveAttempted(false)
+    setSaveErrorMessage('')
+    setSaveSuccessMessage('')
     setPageMode('ADD')
   }
 
   function returnToHistory() {
+    if (isSavingPurchase) {
+      return
+    }
+
     if (
       isPurchaseDraftNonempty(purchaseForm) &&
       !window.confirm('Discard this purchase draft and return to Purchase History?')
@@ -553,6 +730,9 @@ function Purchases() {
     setVendorError('')
     setVendorResults([])
     setIsVendorListOpen(false)
+    setSaveAttempted(false)
+    setSaveErrorMessage('')
+    setSaveSuccessMessage('')
     setPageMode('HISTORY')
   }
 
@@ -801,6 +981,75 @@ function Purchases() {
     }
   }
 
+  async function handleSavePurchase(event?: React.FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+
+    if (isSavingPurchase) {
+      return
+    }
+
+    setSaveAttempted(true)
+    setSaveErrorMessage('')
+
+    if (!purchaseSubmissionValidation.isValid) {
+      return
+    }
+
+    setIsSavingPurchase(true)
+
+    try {
+      const normalizePayloadMoney = (value: string, fieldName: string, required = false) => {
+        const cents = parseMoneyCents(value, fieldName, false)
+
+        if (cents === null) {
+          if (required) {
+            throw new Error(`${fieldName} is required.`)
+          }
+
+          return undefined
+        }
+
+        return formatCentsForInput(cents)
+      }
+
+      const createdPurchase = await createPurchase({
+        vendorId: purchaseForm.vendor!.id,
+        purchaseDate: purchaseForm.purchaseDate,
+        invoiceNumber: purchaseForm.invoiceNumber.trim() || undefined,
+        shipping: normalizePayloadMoney(purchaseForm.shipping, 'Shipping') ?? undefined,
+        exciseTax: normalizePayloadMoney(purchaseForm.exciseTax, 'Excise Tax') ?? undefined,
+        salesTax: normalizePayloadMoney(purchaseForm.salesTax, 'Sales Tax') ?? undefined,
+        discount: normalizePayloadMoney(purchaseForm.discount, 'Order Discount') ?? undefined,
+        totalPaid: normalizePayloadMoney(purchaseForm.totalPaid, 'Total Paid', true)!,
+        notes: purchaseForm.notes.trim() || undefined,
+        lines: purchaseForm.lines.map((line) => ({
+          catalogCigarId: line.catalogCigar!.id,
+          quantity: parsePositiveWholeNumber(line.quantity, 'Quantity'),
+          unitPrice: normalizePayloadMoney(line.unitPrice, 'Unit Price', true)!,
+          msrpPerCigar:
+            line.msrpPerCigar.trim().length > 0
+              ? normalizePayloadMoney(line.msrpPerCigar, 'MSRP Each', true)
+              : undefined,
+        })),
+      })
+
+      setPurchases((current) => [createdPurchase, ...current.filter((purchase) => purchase.id !== createdPurchase.id)])
+      dispatchPurchaseForm({ type: 'RESET_FORM' })
+      setPageMode('HISTORY')
+      setSearch('')
+      setSubmittedSearch('')
+      setSelectedPurchase(null)
+      setSaveAttempted(false)
+      setSaveSuccessMessage('Purchase saved successfully.')
+      void loadPurchases('')
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : 'Unable to save purchase.'
+      setSaveErrorMessage(message)
+    } finally {
+      setIsSavingPurchase(false)
+    }
+  }
+
   const summary = useMemo(
     () => ({
       totalPurchases: purchases.length,
@@ -815,7 +1064,7 @@ function Purchases() {
     [purchases],
   )
   const isOrderDiscountInfoOpen =
-    isOrderDiscountInfoPinned || isOrderDiscountInfoHovered || isOrderDiscountInfoFocused
+    isOrderDiscountInfoPinned
   const purchasePreview = useMemo(
     () =>
       buildPurchasePreview({
@@ -834,34 +1083,104 @@ function Purchases() {
       }),
     [purchaseForm],
   )
+  const purchaseSubmissionValidation = useMemo(
+    () => validatePurchaseSubmission(purchaseForm, purchasePreview),
+    [purchaseForm, purchasePreview],
+  )
+  const purchaseSubmissionSummaryErrors = uniqueStrings([
+    ...purchaseSubmissionValidation.summaryErrors,
+    ...(saveErrorMessage ? [saveErrorMessage] : []),
+  ])
+  const saveErrorField = saveErrorMessage ? classifyServerPurchaseError(saveErrorMessage) : null
+  const visibleFieldErrors: Partial<Record<PurchaseSubmissionField, string>> = saveAttempted
+    ? purchaseSubmissionValidation.fieldErrors
+    : {}
+  const visibleLineErrors: Record<string, PurchaseLineSubmissionErrors> = saveAttempted
+    ? purchaseSubmissionValidation.lineErrors
+    : {}
+  const visibleReconciliationErrors: string[] = saveAttempted
+    ? purchaseSubmissionValidation.reconciliationErrors
+    : []
+  const canSubmitPurchase = purchaseSubmissionValidation.isValid && !isSavingPurchase
+  const savePurchaseButtonLabel = isSavingPurchase ? 'Saving...' : 'Save Purchase'
+  const savePurchaseButtonTitle = isSavingPurchase
+    ? 'Saving purchase...'
+    : purchaseSubmissionValidation.isValid
+      ? 'Save this purchase.'
+      : 'Complete the vendor, line items, and balanced invoice before saving.'
+
+  useEffect(() => {
+    if (saveErrorMessage) {
+      setSaveErrorMessage('')
+    }
+  }, [purchaseForm])
+
+  useEffect(() => {
+    if (successMessageTimerRef.current !== null) {
+      window.clearTimeout(successMessageTimerRef.current)
+      successMessageTimerRef.current = null
+    }
+
+    if (!saveSuccessMessage) {
+      return
+    }
+
+    successMessageTimerRef.current = window.setTimeout(() => {
+      setSaveSuccessMessage('')
+      successMessageTimerRef.current = null
+    }, 3000)
+
+    return () => {
+      if (successMessageTimerRef.current !== null) {
+        window.clearTimeout(successMessageTimerRef.current)
+        successMessageTimerRef.current = null
+      }
+    }
+  }, [saveSuccessMessage])
 
   if (pageMode === 'ADD') {
     return (
       <>
         <header className="page-header purchase-form-header">
-          <div>
-            <p className="eyebrow">Purchases</p>
+          <div className="page-header-copy">
             <h2>Add Purchase</h2>
             <p className="page-subtitle">
               Record one purchase with one or more cigar lines.
             </p>
           </div>
           <div className="page-header-actions">
-            <button className="secondary-button" type="button" onClick={returnToHistory}>
+            <button
+              className="secondary-button"
+              disabled={isSavingPurchase}
+              title={isSavingPurchase ? 'Wait for the current save to finish.' : undefined}
+              type="button"
+              onClick={returnToHistory}
+            >
               Back to Purchases
             </button>
             <button
               className="primary-button"
+              disabled={!canSubmitPurchase}
+              title={savePurchaseButtonTitle}
               type="button"
-              disabled
-              title="Final validation and purchase submission will be enabled in the next stage."
+              onClick={() => void handleSavePurchase()}
             >
-              Save Purchase
+              {savePurchaseButtonLabel}
             </button>
           </div>
         </header>
 
-        <form className="purchase-form" onSubmit={(event) => event.preventDefault()}>
+        <form className="purchase-form" onSubmit={handleSavePurchase}>
+          {saveAttempted && purchaseSubmissionSummaryErrors.length > 0 && (
+            <div className="purchase-form-error-summary" role="alert">
+              <p className="error-text">Please fix the following before saving:</p>
+              <ul>
+                {purchaseSubmissionSummaryErrors.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <section className="panel purchase-form-section">
             <div className="section-heading">
               <h3>Purchase Header</h3>
@@ -942,6 +1261,12 @@ function Purchases() {
                 )}
 
                 {vendorError && <p className="error-text vendor-field-error">{vendorError}</p>}
+                {visibleFieldErrors.vendor && (
+                  <p className="error-text vendor-field-error">{visibleFieldErrors.vendor}</p>
+                )}
+                {saveErrorField === 'vendor' && saveErrorMessage && (
+                  <p className="error-text vendor-field-error">{saveErrorMessage}</p>
+                )}
               </div>
 
               <label>
@@ -957,6 +1282,9 @@ function Purchases() {
                     })
                   }
                 />
+                {visibleFieldErrors.purchaseDate && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.purchaseDate}</p>
+                )}
               </label>
 
               <label>
@@ -972,6 +1300,12 @@ function Purchases() {
                   }
                   placeholder="Example: INV-1001"
                 />
+                {visibleFieldErrors.invoiceNumber && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.invoiceNumber}</p>
+                )}
+                {saveErrorField === 'invoiceNumber' && saveErrorMessage && (
+                  <p className="error-text line-field-message">{saveErrorMessage}</p>
+                )}
               </label>
 
               <label className="purchase-form-notes">
@@ -1017,6 +1351,9 @@ function Purchases() {
                     placeholder="0.00"
                   />
                 </span>
+                {visibleFieldErrors.shipping && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.shipping}</p>
+                )}
               </label>
               <label>
                 Excise Tax
@@ -1036,6 +1373,9 @@ function Purchases() {
                     placeholder="0.00"
                   />
                 </span>
+                {visibleFieldErrors.exciseTax && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.exciseTax}</p>
+                )}
               </label>
               <label>
                 Sales Tax
@@ -1055,35 +1395,24 @@ function Purchases() {
                     placeholder="0.00"
                   />
                 </span>
+                {visibleFieldErrors.salesTax && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.salesTax}</p>
+                )}
               </label>
               <label className="order-discount-field">
                 <span className="field-label-row">
                   <span>Order Discount</span>
-                  <span
-                    className="info-popover-control"
-                    onMouseEnter={() => setIsOrderDiscountInfoHovered(true)}
-                    onMouseLeave={() => setIsOrderDiscountInfoHovered(false)}
-                    ref={orderDiscountInfoRef}
-                  >
-                    <button
+              <span className="info-popover-control" ref={orderDiscountInfoRef}>
+                <button
                       aria-describedby="order-discount-info-popover"
                       aria-expanded={isOrderDiscountInfoOpen}
                       aria-label="About Order Discount"
                       className="info-button"
+                      tabIndex={-1}
                       type="button"
-                      onBlur={() => setIsOrderDiscountInfoFocused(false)}
                       onClick={() => {
-                        if (isOrderDiscountInfoOpen) {
-                          setIsOrderDiscountInfoPinned(false)
-                          setIsOrderDiscountInfoHovered(false)
-                          setIsOrderDiscountInfoFocused(false)
-                          return
-                        }
-
-                        setIsOrderDiscountInfoPinned(true)
+                        setIsOrderDiscountInfoPinned((current) => !current)
                       }}
-                      onFocus={() => setIsOrderDiscountInfoFocused(true)}
-                      onMouseDown={(event) => event.preventDefault()}
                     >
                       i
                     </button>
@@ -1114,6 +1443,9 @@ function Purchases() {
                     placeholder="0.00"
                   />
                 </span>
+                {visibleFieldErrors.discount && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.discount}</p>
+                )}
               </label>
               <label>
                 Total Paid
@@ -1133,6 +1465,12 @@ function Purchases() {
                     placeholder="0.00"
                   />
                 </span>
+                {visibleFieldErrors.totalPaid && (
+                  <p className="error-text line-field-message">{visibleFieldErrors.totalPaid}</p>
+                )}
+                {saveErrorField === 'totalPaid' && saveErrorMessage && (
+                  <p className="error-text line-field-message">{saveErrorMessage}</p>
+                )}
               </label>
             </div>
 
@@ -1186,14 +1524,17 @@ function Purchases() {
                       Difference: {signedPreviewValue(purchasePreview.differenceCents)}
                     </p>
                   )}
-                {purchasePreview.errors.length > 0 && (
+                {saveAttempted && visibleReconciliationErrors.length > 0 && (
                   <div className="preview-errors">
-                    {purchasePreview.errors.map((previewError) => (
+                    {visibleReconciliationErrors.map((previewError) => (
                       <p className="error-text" key={previewError}>
                         {previewError}
                       </p>
                     ))}
                   </div>
+                )}
+                {saveErrorField === 'totalPaid' && saveErrorMessage && (
+                  <p className="error-text">{saveErrorMessage}</p>
                 )}
               </div>
             </div>
@@ -1204,7 +1545,8 @@ function Purchases() {
               <div className="section-heading">
                 <h3>Purchase Lines</h3>
                 <p className="muted">
-                  Search the Catalog first, then create a new cigar only when no match exists.
+                  Add one line for each cigar you purchased. Catalog selection arrives in the
+                  next stage.
                 </p>
               </div>
             </div>
@@ -1228,6 +1570,11 @@ function Purchases() {
                       placeholder="Search Catalog cigars"
                     />
                   </label>
+                  {visibleLineErrors[line.localId]?.catalogCigar && (
+                    <p className="error-text line-field-message">
+                      {visibleLineErrors[line.localId]?.catalogCigar}
+                    </p>
+                  )}
                   {line.catalogCigar && (
                     <div className="selected-catalog-cigar">
                       <div>
@@ -1428,6 +1775,11 @@ function Purchases() {
                           })
                         }
                       />
+                      {visibleLineErrors[line.localId]?.quantity && (
+                        <p className="error-text line-field-message">
+                          {visibleLineErrors[line.localId]?.quantity}
+                        </p>
+                      )}
                     </label>
                     <label>
                       Unit Price
@@ -1450,6 +1802,11 @@ function Purchases() {
                           placeholder="0.00"
                         />
                       </span>
+                      {visibleLineErrors[line.localId]?.unitPrice && (
+                        <p className="error-text line-field-message">
+                          {visibleLineErrors[line.localId]?.unitPrice}
+                        </p>
+                      )}
                     </label>
                     <label>
                       MSRP Each
@@ -1476,6 +1833,11 @@ function Purchases() {
                           placeholder="0.00"
                         />
                       </span>
+                      {visibleLineErrors[line.localId]?.msrpPerCigar && (
+                        <p className="error-text line-field-message">
+                          {visibleLineErrors[line.localId]?.msrpPerCigar}
+                        </p>
+                      )}
                     </label>
                   </div>
                   {linePreview && (
@@ -1536,16 +1898,36 @@ function Purchases() {
               </button>
             </div>
           </section>
+
+          <div className="purchase-form-footer-actions">
+            <button
+              className="secondary-button"
+              disabled={isSavingPurchase}
+              title={isSavingPurchase ? 'Wait for the current save to finish.' : undefined}
+              type="button"
+              onClick={returnToHistory}
+            >
+              Back to Purchases
+            </button>
+            <button
+              className="primary-button"
+              disabled={!canSubmitPurchase}
+              title={savePurchaseButtonTitle}
+              type="button"
+              onClick={() => void handleSavePurchase()}
+            >
+              {savePurchaseButtonLabel}
+            </button>
+          </div>
         </form>
       </>
     )
   }
 
-  return (
+    return (
     <>
       <header className="page-header">
-        <div>
-          <p className="eyebrow">Purchases</p>
+        <div className="page-header-copy">
           <h2>Purchases</h2>
           <p className="page-subtitle">
             Track vendor history, purchase costs, and line-level receiving.
@@ -1555,6 +1937,12 @@ function Purchases() {
           + Add Purchase
         </button>
       </header>
+
+      {saveSuccessMessage && (
+        <p className="purchase-save-message" role="status">
+          {saveSuccessMessage}
+        </p>
+      )}
 
       <section className="summary-grid">
         <div className="card">
@@ -1628,6 +2016,7 @@ function Purchases() {
                     <th>Cigars</th>
                     <th>Total Paid</th>
                     <th>Receipt Status</th>
+                    {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1642,6 +2031,7 @@ function Purchases() {
                       <td>{money(purchase.totalPaid)}</td>
                       <td>{receiptLabel(purchase.receiptState)}</td>
                       <td>
+                        {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
                         <button
                           className="table-action"
                           type="button"
@@ -1684,6 +2074,7 @@ function Purchases() {
                     <p>Receipt Status</p>
                     <strong>{receiptLabel(purchase.receiptState)}</strong>
                   </div>
+                  {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
                   <button
                     className="primary-button purchase-card-action"
                     type="button"

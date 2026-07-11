@@ -93,6 +93,20 @@ button:disabled {
   min-width: 0;
 }
 
+.page-header-copy {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.page-header-copy .page-subtitle {
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .eyebrow {
   color: #c99b63;
   text-transform: uppercase;
@@ -493,6 +507,17 @@ button:disabled {
   gap: 12px;
 }
 
+.purchase-form-header .page-header-actions {
+  align-items: flex-end;
+}
+
+.purchase-form-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
 .purchase-form {
   display: grid;
   gap: 18px;
@@ -807,6 +832,46 @@ button:disabled {
   margin: 0;
 }
 
+.purchase-form-error-summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #6a2c2c;
+  border-radius: 12px;
+  background: #231513;
+  padding: 12px 14px;
+}
+
+.purchase-form-error-summary p {
+  margin: 0;
+}
+
+.purchase-form-error-summary ul {
+  color: #f0c5c5;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.purchase-form-error-summary li {
+  overflow-wrap: anywhere;
+}
+
+.purchase-save-message {
+  border: 1px solid #355e43;
+  border-radius: 12px;
+  background: #132016;
+  color: #9ee6b1;
+  font-weight: bold;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+}
+
+.line-field-errors {
+  display: grid;
+  gap: 6px;
+}
+
 .selected-catalog-cigar,
 .catalog-autocomplete-results,
 .catalog-create-toggle,
@@ -936,7 +1001,17 @@ button:disabled {
 }
 
 .purchase-lines-heading {
-  align-items: flex-end;
+  justify-content: center;
+}
+
+.purchase-lines-heading .section-heading {
+  max-width: 42rem;
+  text-align: center;
+}
+
+.purchase-lines-heading .section-heading .muted {
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .purchase-lines-grid {
@@ -1030,6 +1105,10 @@ button:disabled {
     flex-direction: column;
   }
 
+  .page-header-copy {
+    width: 100%;
+  }
+
   .page-header-actions {
     align-items: stretch;
     flex-direction: column;
@@ -1050,6 +1129,15 @@ button:disabled {
   }
 
   .page-header .primary-button {
+    width: 100%;
+  }
+
+  .purchase-form-footer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .purchase-form-footer-actions button {
     width: 100%;
   }
 
@@ -1239,7 +1327,7 @@ button:disabled {
   }
 
   .purchase-lines-heading {
-    align-items: stretch;
+    justify-content: center;
   }
 
   .purchase-line-row {
