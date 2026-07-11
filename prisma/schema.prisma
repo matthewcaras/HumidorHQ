@@ -41,12 +41,16 @@ model StorageLocation {
 model Vendor {
   id        Int      @id @default(autoincrement())
   name      String
+  nameKey   String   @unique
   website   String?
   notes     String?
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+
+  @@index([isActive, nameKey])
 }
 
 model Manufacturer {

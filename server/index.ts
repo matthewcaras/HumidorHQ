@@ -15,6 +15,14 @@ import {
   humidorIdParam,
   updateHumidor,
 } from './services/humidorService.ts'
+import {
+  archiveVendor,
+  createVendor,
+  getVendors,
+  updateVendor,
+  VendorServiceError,
+  vendorIdParam,
+} from './services/vendorService.ts'
 
 const app = express()
 
@@ -77,6 +85,25 @@ function handleHumidorError(error: unknown, res: express.Response) {
   })
 }
 
+function handleVendorError(error: unknown, res: express.Response) {
+  if (error instanceof VendorServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'VENDOR_UNEXPECTED_ERROR',
+      message: 'The vendor request could not be completed.',
+    },
+  })
+}
+
 app.get('/api/catalog', async (req, res) => {
   try {
     const catalogCigars = await getCatalogCigars({
@@ -120,6 +147,44 @@ app.delete('/api/catalog/:id', async (req, res) => {
     res.json({ data: catalogCigar })
   } catch (error) {
     handleCatalogError(error, res)
+  }
+})
+
+app.get('/api/vendors', async (req, res) => {
+  try {
+    const vendors = await getVendors({
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    })
+    res.json({ data: vendors })
+  } catch (error) {
+    handleVendorError(error, res)
+  }
+})
+
+app.post('/api/vendors', async (req, res) => {
+  try {
+    const vendor = await createVendor(req.body)
+    res.status(201).json({ data: vendor })
+  } catch (error) {
+    handleVendorError(error, res)
+  }
+})
+
+app.put('/api/vendors/:id', async (req, res) => {
+  try {
+    const vendor = await updateVendor(vendorIdParam(req.params.id), req.body)
+    res.json({ data: vendor })
+  } catch (error) {
+    handleVendorError(error, res)
+  }
+})
+
+app.patch('/api/vendors/:id/archive', async (req, res) => {
+  try {
+    const vendor = await archiveVendor(vendorIdParam(req.params.id))
+    res.json({ data: vendor })
+  } catch (error) {
+    handleVendorError(error, res)
   }
 })
 
