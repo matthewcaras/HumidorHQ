@@ -87,46 +87,102 @@ model Vitola {
 }
 
 model PurchaseOrder {
-  id          Int      @id @default(autoincrement())
-  vendorId    Int?
-  orderDate   DateTime
-  orderNumber String?
-  shipping    Decimal  @default(0)
-  tax         Decimal  @default(0)
-  discount    Decimal  @default(0)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  vendorId      Int?
+  orderDate     DateTime
+  orderNumber   String?
+  purchaseDate  DateTime?
+  invoiceNumber String?
+  shipping      Decimal   @default(0)
+  tax           Decimal   @default(0)
+  exciseTax     Decimal   @default(0)
+  salesTax      Decimal   @default(0)
+  discount      Decimal   @default(0)
+  totalPaid     Decimal?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  vendor Vendor?        @relation(fields: [vendorId], references: [id])
   lots   Lot[]
+  lines  PurchaseLine[]
+
+  @@unique([vendorId, invoiceNumber])
+  @@index([vendorId, purchaseDate])
+  @@index([purchaseDate])
+}
+
+/// receivedDate is line-level so one purchase can support split shipments without a separate shipment model.
+model PurchaseLine {
+  id                 Int       @id @default(autoincrement())
+  purchaseOrderId    Int
+  catalogCigarId     Int
+  lineNumber         Int
+  quantity           Int
+  unitPrice          Decimal
+  lineSubtotal       Decimal
+  msrpPerCigar       Decimal?
+  receivedDate       DateTime?
+  allocatedShipping  Decimal   @default(0)
+  allocatedExciseTax Decimal   @default(0)
+  allocatedSalesTax  Decimal   @default(0)
+  allocatedDiscount  Decimal   @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  catalogCigar  CatalogCigar  @relation(fields: [catalogCigarId], references: [id])
+  lot           Lot?
+
+  @@unique([purchaseOrderId, lineNumber])
+  @@index([purchaseOrderId])
+  @@index([catalogCigarId])
+  @@index([receivedDate])
 }
 
 model Lot {
   id                Int  @id @default(autoincrement())
-  vitolaId          Int
+  vitolaId          Int?
   storageLocationId Int?
   purchaseOrderId   Int?
+  purchaseLineId    Int? @unique
+  catalogCigarId    Int?
 
   quantityPurchased Int
   quantityRemaining Int
+  originalQuantity  Int?
+  currentQuantity   Int?
 
   msrpPerCigar          Decimal?
   actualCostPerCigar    Decimal?
   allocatedCostPerCigar Decimal?
 
-  purchaseDate DateTime?
-  boxCode      String?
-  notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  purchaseDate         DateTime?
+  vendorIdSnapshot     Int?
+  vendorNameSnapshot   String?
+  purchaseDateSnapshot DateTime?
+  receivedDateSnapshot DateTime?
+  costPerCigarSnapshot Decimal?
+  msrpPerCigarSnapshot Decimal?
+  sourceSnapshot       String?
+  boxCode              String?
+  notes                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  vitola          Vitola           @relation(fields: [vitolaId], references: [id])
+  vitola          Vitola?          @relation(fields: [vitolaId], references: [id])
   storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id])
   purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  purchaseLine    PurchaseLine?    @relation(fields: [purchaseLineId], references: [id])
+  catalogCigar    CatalogCigar?    @relation(fields: [catalogCigarId], references: [id])
 
   events           InventoryEvent[]
   locationBalances LotLocationBalance[]
+
+  @@index([catalogCigarId])
+  @@index([purchaseDateSnapshot])
+  @@index([receivedDateSnapshot])
+  @@index([vendorIdSnapshot])
 }
 
 /// StorageSubLocation represents an addressable drawer, shelf, general area, or custom section inside a humidor.
@@ -203,6 +259,9 @@ model CatalogCigar {
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  purchaseLines PurchaseLine[]
+  lots          Lot[]
 
   @@unique([manufacturerKey, seriesKey, vitolaKey, wrapperKey])
   @@index([isActive, manufacturerKey, seriesKey, vitolaKey, wrapperKey])
