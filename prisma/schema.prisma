@@ -5,21 +5,37 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  }
+}
+
+enum StorageOrganizationType {
+  GENERAL
+  DRAWERS
+  SHELVES
+  CUSTOM
+}
+
+enum StorageSubLocationKind {
+  GENERAL
+  DRAWER
+  SHELF
+  CUSTOM
+}
 
 model StorageLocation {
-  id        Int      @id @default(autoincrement())
-  name      String
-  capacity  Int?
-  notes     String?
-  isActive  Boolean  @default(true)
-  displayOrder Int @default(0)
-  hasShelves Boolean @default(false)
-shelfCount Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               Int                     @id @default(autoincrement())
+  name             String
+  capacity         Int?
+  notes            String?
+  isActive         Boolean                 @default(true)
+  displayOrder     Int                     @default(0)
+  hasShelves       Boolean                 @default(false)
+  shelfCount       Int?
+  organizationType StorageOrganizationType @default(GENERAL)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
 
-  lots      Lot[]
+  lots         Lot[]
+  subLocations StorageSubLocation[]
 }
 
 model Vendor {
@@ -39,7 +55,7 @@ model Manufacturer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines     CigarLine[]
+  lines CigarLine[]
 }
 
 model CigarLine {
@@ -54,13 +70,13 @@ model CigarLine {
 }
 
 model Vitola {
-  id          Int      @id @default(autoincrement())
-  name        String
-  size        String?
-  strength    String?
-  lineId      Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  name      String
+  size      String?
+  strength  String?
+  lineId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   line CigarLine @relation(fields: [lineId], references: [id])
   lots Lot[]
@@ -83,29 +99,66 @@ model PurchaseOrder {
 }
 
 model Lot {
-  id                 Int      @id @default(autoincrement())
-  vitolaId            Int
-  storageLocationId   Int?
-  purchaseOrderId     Int?
+  id                Int  @id @default(autoincrement())
+  vitolaId          Int
+  storageLocationId Int?
+  purchaseOrderId   Int?
 
-  quantityPurchased   Int
-  quantityRemaining   Int
+  quantityPurchased Int
+  quantityRemaining Int
 
-  msrpPerCigar        Decimal?
-  actualCostPerCigar  Decimal?
+  msrpPerCigar          Decimal?
+  actualCostPerCigar    Decimal?
   allocatedCostPerCigar Decimal?
 
-  purchaseDate        DateTime?
-  boxCode             String?
-  notes               String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  purchaseDate DateTime?
+  boxCode      String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  vitola          Vitola @relation(fields: [vitolaId], references: [id])
+  vitola          Vitola           @relation(fields: [vitolaId], references: [id])
   storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id])
-  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
 
-  events InventoryEvent[]
+  events           InventoryEvent[]
+  locationBalances LotLocationBalance[]
+}
+
+/// StorageSubLocation represents an addressable drawer, shelf, general area, or custom section inside a humidor.
+model StorageSubLocation {
+  id                Int                    @id @default(autoincrement())
+  storageLocationId Int
+  name              String
+  kind              StorageSubLocationKind
+  capacity          Int?
+  displayOrder      Int                    @default(0)
+  isActive          Boolean                @default(true)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  storageLocation     StorageLocation      @relation(fields: [storageLocationId], references: [id])
+  lotLocationBalances LotLocationBalance[]
+
+  @@unique([storageLocationId, name])
+  @@index([storageLocationId, isActive, displayOrder])
+}
+
+/// LotLocationBalance is a current-balance cache; inventory events remain the historical source of truth.
+model LotLocationBalance {
+  id                   Int      @id @default(autoincrement())
+  lotId                Int
+  storageSubLocationId Int
+  quantity             Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  lot                Lot                @relation(fields: [lotId], references: [id])
+  storageSubLocation StorageSubLocation @relation(fields: [storageSubLocationId], references: [id])
+
+  @@unique([lotId, storageSubLocationId])
+  @@index([lotId])
+  @@index([storageSubLocationId])
 }
 
 model InventoryEvent {
