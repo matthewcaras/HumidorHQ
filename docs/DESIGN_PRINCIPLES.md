@@ -24,6 +24,15 @@ Totals, remaining quantity, cost basis, MSRP value, savings, occupancy, average 
 
 Common workflows should be quick: add a purchase, place cigars in a humidor, find a cigar, smoke or gift one, and understand the collection at a glance. The interface should ask only for information that is useful now or necessary for future calculations.
 
+### Minimize ongoing maintenance.
+
+HumidorHQ should prioritize information that remains accurate over time. Before adding a manually maintained field, ask whether the collector will realistically keep it current for years. If not, calculate it, automate it, or omit it.
+
+- Track humidor and applicable drawer or shelf because those locations are useful and reasonably stable.
+- Do not track exact positions such as front-right or back-left.
+- Do not require manually maintained statuses such as New Arrival, Ready to Smoke, or Long-Term Aging.
+- Prefer calculations based on purchase dates, received dates, lots, and events.
+
 ## Product Direction
 
 - Favor workflow clarity over dense configuration.

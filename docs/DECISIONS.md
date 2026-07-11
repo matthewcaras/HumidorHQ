@@ -32,6 +32,26 @@ This preserves complete history and makes calculations reliable.
 
 ---
 
+## Collection Views and Location Search
+
+Decision:
+Collection is one dataset with multiple views, not separate collections.
+
+- The default view is By Cigar: Manufacturer -> Series -> Vitola.
+- A By Humidor view allows the user to open a humidor and see its contents, organized by drawer or shelf when applicable.
+- A future By Age view may be added.
+- Global collection search should locate a cigar and show every humidor and drawer or shelf where it is stored.
+- Exact positions within a drawer or shelf will not be tracked.
+- Cigar Details will provide the "baseball card" experience, including current quantity, lots, locations, purchase history, first and last purchase, average cost, MSRP, age, vendor history, and consumption history as data becomes available.
+- Users may move a selected quantity from one humidor/drawer/shelf to another.
+- A move creates an inventory event and preserves location history.
+- Vendor-based browsing belongs in Reports rather than the primary Collection toolbar.
+
+Reason:
+The Collection screen should support the main ways a collector thinks about owned cigars while avoiding manually maintained location detail that will become stale.
+
+---
+
 ## Consumption
 
 Decision:

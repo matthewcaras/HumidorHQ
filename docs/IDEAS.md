@@ -35,6 +35,15 @@ This document is a living backlog of ideas for HumidorHQ. It is not a roadmap or
 - Aging goals
 - Favorite cigars
 
+## Historical Import and Starting Inventory
+
+- Import approximately one year of historical purchase invoices.
+- Preserve vendor, manufacturer, purchase quantity, cost, MSRP, and savings history.
+- Complete a physical inventory after importing the historical purchases.
+- Treat the difference between historically purchased quantities and current quantities as historical consumption.
+- Do not require the user to reconstruct whether each historical cigar was smoked, gifted, or damaged.
+- Establish useful lifetime history while arriving at an accurate current collection.
+
 ## Consumption
 
 - Smoked
