@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
+  createCatalogCigar,
   createVendor,
+  getCatalogCigars,
   getPurchaseById,
   getPurchases,
   getVendors,
@@ -61,7 +63,27 @@ type PurchaseFormAction =
       field: keyof Omit<PurchaseFormLine, 'localId' | 'catalogCigar'>
       value: string
     }
+  | {
+      type: 'SET_LINE_CATALOG_CIGAR'
+      localId: string
+      catalogCigar: CatalogCigar | null
+      cigarSearch: string
+    }
   | { type: 'RESET_FORM' }
+
+type CatalogCreateDraft = {
+  manufacturer: string
+  series: string
+  vitola: string
+  shape: string
+  length: string
+  ringGauge: string
+  wrapper: string
+  strength: string
+  msrp: string
+}
+
+type CatalogCreateField = keyof CatalogCreateDraft
 
 function localDateString(date = new Date()) {
   const year = date.getFullYear()
@@ -87,6 +109,20 @@ function blankPurchaseLine(): PurchaseFormLine {
     quantity: '',
     unitPrice: '',
     msrpPerCigar: '',
+  }
+}
+
+function blankCatalogCreateDraft(searchText = ''): CatalogCreateDraft {
+  return {
+    manufacturer: searchText,
+    series: '',
+    vitola: '',
+    shape: '',
+    length: '',
+    ringGauge: '',
+    wrapper: '',
+    strength: '',
+    msrp: '',
   }
 }
 
@@ -143,6 +179,23 @@ function purchaseFormReducer(
           line.localId === action.localId ? { ...line, [action.field]: action.value } : line,
         ),
       }
+    case 'SET_LINE_CATALOG_CIGAR':
+      return {
+        ...state,
+        lines: state.lines.map((line) =>
+          line.localId === action.localId
+            ? {
+                ...line,
+                catalogCigar: action.catalogCigar,
+                cigarSearch: action.cigarSearch,
+                msrpPerCigar:
+                  action.catalogCigar?.msrp === null || action.catalogCigar?.msrp === undefined
+                    ? ''
+                    : String(action.catalogCigar.msrp),
+              }
+            : line,
+        ),
+      }
     case 'RESET_FORM':
       return initialPurchaseFormState()
     default:
@@ -181,6 +234,24 @@ function receiptLabel(state: PurchaseReceiptState) {
 function cigarName(line: PurchaseLine) {
   const cigar = line.catalogCigar
   return `${cigar.manufacturer} ${cigar.series} ${cigar.vitola}`
+}
+
+function catalogCigarName(cigar: CatalogCigar) {
+  return `${cigar.manufacturer} — ${cigar.series} — ${cigar.vitola}`
+}
+
+function catalogCigarDetails(cigar: CatalogCigar) {
+  const size =
+    cigar.length && cigar.ringGauge
+      ? `${cigar.length} × ${cigar.ringGauge}`
+      : cigar.length
+        ? String(cigar.length)
+        : cigar.ringGauge
+          ? String(cigar.ringGauge)
+          : ''
+  const details = [cigar.shape, size, cigar.wrapper].filter(Boolean)
+
+  return details.join(' · ')
 }
 
 function purchaseCigarQuantity(purchase: Purchase) {
@@ -261,6 +332,20 @@ function Purchases() {
   const [vendorError, setVendorError] = useState('')
   const [isVendorListOpen, setIsVendorListOpen] = useState(false)
   const vendorSearchRequestId = useRef(0)
+  const catalogSearchRequestIds = useRef<Record<string, number>>({})
+  const catalogSearchTimeouts = useRef<Record<string, number>>({})
+  const [catalogResultsByLine, setCatalogResultsByLine] = useState<Record<string, CatalogCigar[]>>(
+    {},
+  )
+  const [catalogSearchingByLine, setCatalogSearchingByLine] = useState<Record<string, boolean>>({})
+  const [catalogErrorByLine, setCatalogErrorByLine] = useState<Record<string, string>>({})
+  const [openCatalogLineId, setOpenCatalogLineId] = useState<string | null>(null)
+  const [activeCatalogCreateLineId, setActiveCatalogCreateLineId] = useState<string | null>(null)
+  const [catalogCreateDraft, setCatalogCreateDraft] = useState<CatalogCreateDraft>(
+    blankCatalogCreateDraft(),
+  )
+  const [catalogCreateError, setCatalogCreateError] = useState('')
+  const [isCatalogCreating, setIsCatalogCreating] = useState(false)
   const orderDiscountInfoRef = useRef<HTMLDivElement | null>(null)
   const [isOrderDiscountInfoPinned, setIsOrderDiscountInfoPinned] = useState(false)
   const [isOrderDiscountInfoHovered, setIsOrderDiscountInfoHovered] = useState(false)
@@ -308,6 +393,8 @@ function Purchases() {
         setIsOrderDiscountInfoPinned(false)
         setIsOrderDiscountInfoHovered(false)
         setIsOrderDiscountInfoFocused(false)
+        setOpenCatalogLineId(null)
+        setActiveCatalogCreateLineId(null)
       }
     }
 
@@ -319,6 +406,15 @@ function Purchases() {
       document.removeEventListener('keydown', handleDocumentKeyDown)
     }
   }, [])
+
+  useEffect(
+    () => () => {
+      for (const timeoutId of Object.values(catalogSearchTimeouts.current)) {
+        window.clearTimeout(timeoutId)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (pageMode !== 'ADD' || purchaseForm.vendor) {
@@ -477,6 +573,172 @@ function Purchases() {
       )
     } finally {
       setIsVendorCreating(false)
+    }
+  }
+
+  function selectedCatalogIds(excludeLineId?: string) {
+    return new Set(
+      purchaseForm.lines
+        .filter((line) => line.localId !== excludeLineId)
+        .map((line) => line.catalogCigar?.id)
+        .filter((id): id is number => id !== undefined),
+    )
+  }
+
+  function clearCatalogLineState(localId: string) {
+    catalogSearchRequestIds.current[localId] = (catalogSearchRequestIds.current[localId] ?? 0) + 1
+
+    if (catalogSearchTimeouts.current[localId]) {
+      window.clearTimeout(catalogSearchTimeouts.current[localId])
+      delete catalogSearchTimeouts.current[localId]
+    }
+
+    setCatalogResultsByLine((current) => ({ ...current, [localId]: [] }))
+    setCatalogSearchingByLine((current) => ({ ...current, [localId]: false }))
+    setCatalogErrorByLine((current) => ({ ...current, [localId]: '' }))
+
+    if (openCatalogLineId === localId) {
+      setOpenCatalogLineId(null)
+    }
+  }
+
+  function scheduleCatalogSearch(localId: string, searchText: string) {
+    const trimmedSearch = searchText.trim()
+
+    if (catalogSearchTimeouts.current[localId]) {
+      window.clearTimeout(catalogSearchTimeouts.current[localId])
+    }
+
+    if (trimmedSearch.length < 2) {
+      clearCatalogLineState(localId)
+      return
+    }
+
+    const requestId = (catalogSearchRequestIds.current[localId] ?? 0) + 1
+    catalogSearchRequestIds.current[localId] = requestId
+    setCatalogSearchingByLine((current) => ({ ...current, [localId]: true }))
+    setCatalogErrorByLine((current) => ({ ...current, [localId]: '' }))
+    setOpenCatalogLineId(localId)
+
+    catalogSearchTimeouts.current[localId] = window.setTimeout(async () => {
+      try {
+        const cigars = await getCatalogCigars({ search: trimmedSearch, limit: 10 })
+
+        if (catalogSearchRequestIds.current[localId] === requestId) {
+          setCatalogResultsByLine((current) => ({ ...current, [localId]: cigars }))
+        }
+      } catch (searchError) {
+        if (catalogSearchRequestIds.current[localId] === requestId) {
+          setCatalogResultsByLine((current) => ({ ...current, [localId]: [] }))
+          setCatalogErrorByLine((current) => ({
+            ...current,
+            [localId]:
+              searchError instanceof Error ? searchError.message : 'Unable to search catalog.',
+          }))
+        }
+      } finally {
+        if (catalogSearchRequestIds.current[localId] === requestId) {
+          setCatalogSearchingByLine((current) => ({ ...current, [localId]: false }))
+        }
+      }
+    }, 250)
+  }
+
+  function updateCigarSearch(line: PurchaseFormLine, value: string) {
+    setCatalogErrorByLine((current) => ({ ...current, [line.localId]: '' }))
+
+    if (line.catalogCigar) {
+      dispatchPurchaseForm({
+        type: 'SET_LINE_CATALOG_CIGAR',
+        localId: line.localId,
+        catalogCigar: null,
+        cigarSearch: value,
+      })
+    } else {
+      dispatchPurchaseForm({
+        type: 'UPDATE_LINE',
+        localId: line.localId,
+        field: 'cigarSearch',
+        value,
+      })
+    }
+
+    if (activeCatalogCreateLineId === line.localId) {
+      setActiveCatalogCreateLineId(null)
+    }
+
+    scheduleCatalogSearch(line.localId, value)
+  }
+
+  function selectCatalogCigar(localId: string, cigar: CatalogCigar) {
+    if (selectedCatalogIds(localId).has(cigar.id)) {
+      setCatalogErrorByLine((current) => ({
+        ...current,
+        [localId]: 'This cigar is already selected on another purchase line.',
+      }))
+      return
+    }
+
+    dispatchPurchaseForm({
+      type: 'SET_LINE_CATALOG_CIGAR',
+      localId,
+      catalogCigar: cigar,
+      cigarSearch: catalogCigarName(cigar),
+    })
+    clearCatalogLineState(localId)
+    setActiveCatalogCreateLineId(null)
+  }
+
+  function clearSelectedCatalogCigar(line: PurchaseFormLine) {
+    dispatchPurchaseForm({
+      type: 'SET_LINE_CATALOG_CIGAR',
+      localId: line.localId,
+      catalogCigar: null,
+      cigarSearch: '',
+    })
+    clearCatalogLineState(line.localId)
+  }
+
+  function openCatalogCreate(line: PurchaseFormLine) {
+    setActiveCatalogCreateLineId(line.localId)
+    setCatalogCreateDraft(blankCatalogCreateDraft(line.cigarSearch.trim()))
+    setCatalogCreateError('')
+    setOpenCatalogLineId(null)
+  }
+
+  function updateCatalogCreateField(field: CatalogCreateField, value: string) {
+    setCatalogCreateDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  async function createCatalogForLine(localId: string) {
+    if (isCatalogCreating) {
+      return
+    }
+
+    setIsCatalogCreating(true)
+    setCatalogCreateError('')
+
+    try {
+      const created = await createCatalogCigar({
+        manufacturer: catalogCreateDraft.manufacturer,
+        series: catalogCreateDraft.series,
+        vitola: catalogCreateDraft.vitola,
+        shape: catalogCreateDraft.shape || undefined,
+        length: catalogCreateDraft.length || undefined,
+        ringGauge: catalogCreateDraft.ringGauge || undefined,
+        wrapper: catalogCreateDraft.wrapper || undefined,
+        strength: catalogCreateDraft.strength || undefined,
+        msrp: catalogCreateDraft.msrp || undefined,
+      })
+      selectCatalogCigar(localId, created)
+      setActiveCatalogCreateLineId(null)
+      setCatalogCreateDraft(blankCatalogCreateDraft())
+    } catch (createError) {
+      setCatalogCreateError(
+        createError instanceof Error ? createError.message : 'Unable to create catalog cigar.',
+      )
+    } finally {
+      setIsCatalogCreating(false)
     }
   }
 
@@ -783,7 +1045,7 @@ function Purchases() {
               <div className="section-heading">
                 <h3>Purchase Lines</h3>
                 <p className="muted">
-                  Catalog cigar selection will be added in the next stage.
+                  Search the Catalog first, then create a new cigar only when no match exists.
                 </p>
               </div>
             </div>
@@ -795,18 +1057,200 @@ function Purchases() {
                   <label className="purchase-line-cigar">
                     Cigar Search
                     <input
+                      aria-autocomplete="list"
+                      aria-controls={`catalog-results-${line.localId}`}
+                      aria-expanded={openCatalogLineId === line.localId}
+                      autoComplete="off"
                       value={line.cigarSearch}
-                      onChange={(event) =>
-                        dispatchPurchaseForm({
-                          type: 'UPDATE_LINE',
-                          localId: line.localId,
-                          field: 'cigarSearch',
-                          value: event.target.value,
-                        })
-                      }
-                      placeholder="Search Catalog cigars soon"
+                      onChange={(event) => updateCigarSearch(line, event.target.value)}
+                      placeholder="Search Catalog cigars"
                     />
                   </label>
+                  {line.catalogCigar && (
+                    <div className="selected-catalog-cigar">
+                      <div>
+                        <p>Selected Cigar</p>
+                        <strong>{catalogCigarName(line.catalogCigar)}</strong>
+                        {catalogCigarDetails(line.catalogCigar) && (
+                          <span>{catalogCigarDetails(line.catalogCigar)}</span>
+                        )}
+                      </div>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => clearSelectedCatalogCigar(line)}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+                  {!line.catalogCigar && openCatalogLineId === line.localId && (
+                    <div
+                      aria-label={`Catalog cigar search results for line ${index + 1}`}
+                      className="catalog-autocomplete-results"
+                      id={`catalog-results-${line.localId}`}
+                      role="listbox"
+                    >
+                      {catalogSearchingByLine[line.localId] && (
+                        <p className="muted">Searching catalog...</p>
+                      )}
+
+                      {!catalogSearchingByLine[line.localId] &&
+                        line.cigarSearch.trim().length >= 2 &&
+                        (catalogResultsByLine[line.localId] ?? []).length === 0 && (
+                          <p className="muted">No catalog cigars found.</p>
+                        )}
+
+                      {!catalogSearchingByLine[line.localId] &&
+                        (catalogResultsByLine[line.localId] ?? []).map((cigar) => {
+                          const isAlreadySelected = selectedCatalogIds(line.localId).has(cigar.id)
+
+                          return (
+                            <button
+                              className="catalog-option"
+                              disabled={isAlreadySelected}
+                              key={cigar.id}
+                              role="option"
+                              type="button"
+                              onClick={() => selectCatalogCigar(line.localId, cigar)}
+                            >
+                              <span>{catalogCigarName(cigar)}</span>
+                              {catalogCigarDetails(cigar) && (
+                                <small>{catalogCigarDetails(cigar)}</small>
+                              )}
+                              {isAlreadySelected && <em>Already selected</em>}
+                            </button>
+                          )
+                        })}
+                    </div>
+                  )}
+                  {!line.catalogCigar && line.cigarSearch.trim().length > 0 && (
+                    <button
+                      className="create-inline-button catalog-create-toggle"
+                      type="button"
+                      onClick={() => openCatalogCreate(line)}
+                    >
+                      Create new cigar
+                    </button>
+                  )}
+                  {catalogErrorByLine[line.localId] && (
+                    <p className="error-text line-field-message">
+                      {catalogErrorByLine[line.localId]}
+                    </p>
+                  )}
+                  {activeCatalogCreateLineId === line.localId && (
+                    <div className="catalog-create-panel">
+                      <div className="catalog-create-grid">
+                        <label>
+                          Manufacturer *
+                          <input
+                            value={catalogCreateDraft.manufacturer}
+                            onChange={(event) =>
+                              updateCatalogCreateField('manufacturer', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Series *
+                          <input
+                            value={catalogCreateDraft.series}
+                            onChange={(event) =>
+                              updateCatalogCreateField('series', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Vitola *
+                          <input
+                            value={catalogCreateDraft.vitola}
+                            onChange={(event) =>
+                              updateCatalogCreateField('vitola', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Shape
+                          <input
+                            value={catalogCreateDraft.shape}
+                            onChange={(event) =>
+                              updateCatalogCreateField('shape', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Length
+                          <input
+                            inputMode="decimal"
+                            value={catalogCreateDraft.length}
+                            onChange={(event) =>
+                              updateCatalogCreateField('length', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Ring Gauge
+                          <input
+                            inputMode="numeric"
+                            value={catalogCreateDraft.ringGauge}
+                            onChange={(event) =>
+                              updateCatalogCreateField('ringGauge', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Wrapper
+                          <input
+                            value={catalogCreateDraft.wrapper}
+                            onChange={(event) =>
+                              updateCatalogCreateField('wrapper', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Strength
+                          <input
+                            value={catalogCreateDraft.strength}
+                            onChange={(event) =>
+                              updateCatalogCreateField('strength', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          MSRP
+                          <input
+                            inputMode="decimal"
+                            value={catalogCreateDraft.msrp}
+                            onChange={(event) =>
+                              updateCatalogCreateField('msrp', event.target.value)
+                            }
+                            placeholder="0.00"
+                          />
+                        </label>
+                      </div>
+
+                      {catalogCreateError && (
+                        <p className="error-text line-field-message">{catalogCreateError}</p>
+                      )}
+
+                      <div className="catalog-create-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => setActiveCatalogCreateLineId(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="primary-button"
+                          disabled={isCatalogCreating}
+                          type="button"
+                          onClick={() => createCatalogForLine(line.localId)}
+                        >
+                          {isCatalogCreating ? 'Creating...' : 'Create Cigar'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <label>
                     Quantity
                     <input
