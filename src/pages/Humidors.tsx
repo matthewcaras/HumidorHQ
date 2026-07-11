@@ -5,7 +5,77 @@ import {
   getHumidors,
   updateHumidor,
   type Humidor,
+  type StorageOrganizationType,
 } from '../services/api'
+
+const ORGANIZATION_OPTIONS: {
+  value: StorageOrganizationType
+  label: string
+  disabled?: boolean
+}[] = [
+  { value: 'GENERAL', label: 'General' },
+  { value: 'DRAWERS', label: 'Drawers' },
+  { value: 'SHELVES', label: 'Shelves' },
+  { value: 'CUSTOM', label: 'Custom - Coming Soon', disabled: true },
+]
+
+function organizationLabel(organizationType: StorageOrganizationType) {
+  switch (organizationType) {
+    case 'DRAWERS':
+      return 'Drawers'
+    case 'SHELVES':
+      return 'Shelves'
+    case 'CUSTOM':
+      return 'Custom'
+    case 'GENERAL':
+    default:
+      return 'General'
+  }
+}
+
+function inferSectionCount(humidor: Humidor) {
+  if (humidor.organizationType === 'DRAWERS') {
+    return String(
+      humidor.subLocations.filter(
+        (subLocation) => subLocation.isActive && subLocation.kind === 'DRAWER',
+      ).length,
+    )
+  }
+
+  if (humidor.organizationType === 'SHELVES') {
+    return String(
+      humidor.subLocations.filter(
+        (subLocation) => subLocation.isActive && subLocation.kind === 'SHELF',
+      ).length,
+    )
+  }
+
+  return ''
+}
+
+function visibleSectionCount(humidor: Humidor) {
+  if (humidor.organizationType === 'GENERAL') {
+    return 1
+  }
+
+  return humidor.subLocations.filter((subLocation) => subLocation.isActive).length
+}
+
+function previewSections(organizationType: StorageOrganizationType, sectionCount: string) {
+  if (organizationType === 'GENERAL') {
+    return ['General']
+  }
+
+  const count = Number(sectionCount)
+
+  if (!Number.isInteger(count) || count < 1) {
+    return []
+  }
+
+  const prefix = organizationType === 'DRAWERS' ? 'Drawer' : 'Shelf'
+
+  return Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}`)
+}
 
 function Humidors() {
   const [humidors, setHumidors] = useState<Humidor[]>([])
@@ -14,8 +84,9 @@ function Humidors() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [name, setName] = useState('')
   const [capacity, setCapacity] = useState('')
-  const [hasShelves, setHasShelves] = useState(false)
-  const [shelfCount, setShelfCount] = useState('')
+  const [organizationType, setOrganizationType] =
+    useState<StorageOrganizationType>('GENERAL')
+  const [sectionCount, setSectionCount] = useState('')
   const [editingHumidor, setEditingHumidor] = useState<Humidor | null>(null)
 
   async function loadHumidors() {
@@ -41,14 +112,31 @@ function Humidors() {
       return
     }
 
+    if (
+      (organizationType === 'DRAWERS' || organizationType === 'SHELVES') &&
+      (!Number.isInteger(Number(sectionCount)) || Number(sectionCount) < 1)
+    ) {
+      setError(
+        organizationType === 'DRAWERS'
+          ? 'Number of Drawers must be a positive whole number.'
+          : 'Number of Shelves must be a positive whole number.',
+      )
+      return
+    }
+
     try {
+      const humidorInput = {
+        name: name.trim(),
+        capacity,
+        organizationType,
+        sectionCount:
+          organizationType === 'DRAWERS' || organizationType === 'SHELVES'
+            ? sectionCount
+            : undefined,
+      }
+
       if (editingHumidor) {
-        const updatedHumidor = await updateHumidor(editingHumidor.id, {
-          name: name.trim(),
-          capacity,
-          hasShelves,
-          shelfCount,
-        })
+        const updatedHumidor = await updateHumidor(editingHumidor.id, humidorInput)
 
         setHumidors((current) =>
           current.map((humidor) =>
@@ -56,25 +144,20 @@ function Humidors() {
           ),
         )
       } else {
-        const createdHumidor = await createHumidor({
-          name: name.trim(),
-          capacity,
-          hasShelves,
-          shelfCount,
-        })
+        const createdHumidor = await createHumidor(humidorInput)
 
         setHumidors((current) => [...current, createdHumidor])
       }
 
       setName('')
       setCapacity('')
-      setHasShelves(false)
-      setShelfCount('')
+      setOrganizationType('GENERAL')
+      setSectionCount('')
       setEditingHumidor(null)
       setIsModalOpen(false)
       setError('')
-    } catch {
-      setError('Unable to save humidor.')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save humidor.')
     }
   }
 
@@ -82,8 +165,8 @@ function Humidors() {
     setEditingHumidor(null)
     setName('')
     setCapacity('')
-    setHasShelves(false)
-    setShelfCount('')
+    setOrganizationType('GENERAL')
+    setSectionCount('')
     setError('')
     setIsModalOpen(true)
   }
@@ -92,8 +175,9 @@ function Humidors() {
     setEditingHumidor(humidor)
     setName(humidor.name)
     setCapacity(humidor.capacity ? String(humidor.capacity) : '')
-    setHasShelves(humidor.hasShelves)
-    setShelfCount(humidor.shelfCount ? String(humidor.shelfCount) : '')
+    setOrganizationType(humidor.organizationType)
+    setSectionCount(inferSectionCount(humidor))
+    setError('')
     setIsModalOpen(true)
   }
 
@@ -107,9 +191,7 @@ function Humidors() {
     try {
       await archiveHumidor(humidor.id)
 
-      setHumidors((current) =>
-        current.filter((item) => item.id !== humidor.id),
-      )
+      setHumidors((current) => current.filter((item) => item.id !== humidor.id))
 
       setEditingHumidor(null)
       setIsModalOpen(false)
@@ -117,6 +199,10 @@ function Humidors() {
       setError('Unable to archive humidor.')
     }
   }
+
+  const sectionPreview = previewSections(organizationType, sectionCount)
+  const sectionCountLabel =
+    organizationType === 'DRAWERS' ? 'Number of Drawers' : 'Number of Shelves'
 
   return (
     <>
@@ -163,7 +249,7 @@ function Humidors() {
 
         {!isLoading && !error && humidors.length === 0 && (
           <p className="muted">
-            You have not created any humidors yet. Click “Add Humidor” to create your first one.
+            You have not created any humidors yet. Click "Add Humidor" to create your first one.
           </p>
         )}
 
@@ -173,7 +259,8 @@ function Humidors() {
               <tr>
                 <th>Name</th>
                 <th>Capacity</th>
-                <th>Shelves</th>
+                <th>Organization</th>
+                <th>Sections</th>
                 <th>Current Count</th>
                 <th>Occupancy</th>
                 <th>Oldest Lot</th>
@@ -185,14 +272,11 @@ function Humidors() {
                 <tr key={humidor.id}>
                   <td>{humidor.name}</td>
                   <td>{humidor.capacity ?? 'Not set'}</td>
-                  <td>
-                    {humidor.hasShelves
-                      ? humidor.shelfCount ?? 0
-                      : '—'}
-                  </td>
+                  <td>{organizationLabel(humidor.organizationType)}</td>
+                  <td>{visibleSectionCount(humidor)}</td>
                   <td>0</td>
                   <td>0%</td>
-                  <td>—</td>
+                  <td>-</td>
                   <td>
                     <button className="table-action" onClick={() => openEditModal(humidor)}>
                       Edit
@@ -211,7 +295,7 @@ function Humidors() {
             <div className="modal-header">
               <h3>{editingHumidor ? 'Edit Humidor' : 'Add Humidor'}</h3>
               <button className="icon-button" onClick={() => setIsModalOpen(false)}>
-                ×
+                &times;
               </button>
             </div>
 
@@ -235,26 +319,56 @@ function Humidors() {
                 />
               </label>
 
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={hasShelves}
-                  onChange={(event) => setHasShelves(event.target.checked)}
-                />
-                This humidor has shelves
-              </label>
+              <fieldset className="organization-section">
+                <legend>Organization</legend>
 
-              {hasShelves && (
-                <label>
-                  Number of Shelves
+                <div className="organization-options">
+                  {ORGANIZATION_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`organization-option${option.disabled ? ' disabled' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="organizationType"
+                        value={option.value}
+                        checked={organizationType === option.value}
+                        disabled={option.disabled}
+                        onChange={() => {
+                          setOrganizationType(option.value)
+                          setSectionCount('')
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {(organizationType === 'DRAWERS' || organizationType === 'SHELVES') && (
+                <label className="section-count-field">
+                  {sectionCountLabel}
                   <input
-                    value={shelfCount}
-                    onChange={(event) => setShelfCount(event.target.value)}
-                    placeholder="Example: 5"
+                    value={sectionCount}
+                    onChange={(event) => setSectionCount(event.target.value)}
+                    placeholder="Example: 4"
                     inputMode="numeric"
                   />
                 </label>
               )}
+
+              <div className="organization-preview">
+                <p>Preview</p>
+                {sectionPreview.length > 0 ? (
+                  <ul>
+                    {sectionPreview.map((section) => (
+                      <li key={section}>{section}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span>Enter a section count to preview.</span>
+                )}
+              </div>
 
               {editingHumidor && (
                 <div className="archive-section">

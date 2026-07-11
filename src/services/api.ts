@@ -1,5 +1,18 @@
 const API_BASE_URL = 'http://localhost:3001/api'
 
+export type StorageOrganizationType = 'GENERAL' | 'DRAWERS' | 'SHELVES' | 'CUSTOM'
+
+export type StorageSubLocationKind = 'GENERAL' | 'DRAWER' | 'SHELF' | 'CUSTOM'
+
+export type StorageSubLocation = {
+  id: number
+  name: string
+  kind: StorageSubLocationKind
+  capacity: number | null
+  displayOrder: number
+  isActive: boolean
+}
+
 export type Humidor = {
   id: number
   name: string
@@ -9,11 +22,15 @@ export type Humidor = {
   updatedAt: string
   hasShelves: boolean
 shelfCount: number | null
+  organizationType: StorageOrganizationType
+  subLocations: StorageSubLocation[]
 }
 
 export type CreateHumidorInput = {
   name: string
   capacity?: string
+  organizationType?: StorageOrganizationType
+  sectionCount?: string
   hasShelves?: boolean
   shelfCount?: string
 }
@@ -21,6 +38,8 @@ export type CreateHumidorInput = {
 export type UpdateHumidorInput = {
   name: string
   capacity?: string
+  organizationType?: StorageOrganizationType
+  sectionCount?: string
   hasShelves?: boolean
   shelfCount?: string
 }
