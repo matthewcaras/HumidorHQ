@@ -211,6 +211,174 @@ button:disabled {
   color: #f8f3ed;
 }
 
+.humidor-summary-grid .card {
+  align-items: center;
+  text-align: center;
+}
+
+.humidor-summary-grid .card p {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+.inventory-warning {
+  border: 1px solid #8b6a39;
+  border-radius: 12px;
+  background: #2a2014;
+  color: #f1c982;
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.humidor-management-panel {
+  overflow-x: visible;
+}
+
+.humidor-management-table {
+  table-layout: fixed;
+  min-width: 0;
+}
+
+.humidor-management-table th:nth-child(1),
+.humidor-management-table td:nth-child(1) {
+  width: 20%;
+}
+
+.humidor-management-table th:nth-child(2),
+.humidor-management-table td:nth-child(2) {
+  width: 11%;
+  text-align: center;
+}
+
+.humidor-management-table th:nth-child(3),
+.humidor-management-table td:nth-child(3) {
+  width: 14%;
+}
+
+.humidor-management-table th:nth-child(4),
+.humidor-management-table td:nth-child(4),
+.humidor-management-table th:nth-child(5),
+.humidor-management-table td:nth-child(5),
+.humidor-management-table th:nth-child(6),
+.humidor-management-table td:nth-child(6),
+.humidor-management-table th:nth-child(7),
+.humidor-management-table td:nth-child(7) {
+  text-align: center;
+}
+
+.humidor-management-table th:nth-child(4),
+.humidor-management-table td:nth-child(4) {
+  width: 9%;
+}
+
+.humidor-management-table th:nth-child(5),
+.humidor-management-table td:nth-child(5) {
+  width: 13%;
+}
+
+.humidor-management-table th:nth-child(6),
+.humidor-management-table td:nth-child(6) {
+  width: 11%;
+}
+
+.humidor-management-table th:nth-child(7),
+.humidor-management-table td:nth-child(7) {
+  width: 12%;
+}
+
+.humidor-management-table th:nth-child(8),
+.humidor-management-table td:nth-child(8) {
+  width: 10%;
+}
+
+.humidor-management-row {
+  cursor: pointer;
+}
+
+.humidor-management-row:hover td,
+.humidor-management-row:focus-visible td {
+  background: #2a201a;
+}
+
+.humidor-management-row:focus-visible {
+  outline: 2px solid #c99b63;
+  outline-offset: 3px;
+}
+
+.humidor-management-card-list {
+  display: none;
+}
+
+.humidor-management-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #3b2b22;
+  border-radius: 14px;
+  background: #1c1511;
+  padding: 14px;
+}
+
+.humidor-management-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.humidor-management-card h4 {
+  color: #ffffff;
+  margin: 0;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.humidor-management-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.humidor-management-card dl div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #3b2b22;
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  min-width: 0;
+}
+
+.humidor-management-card dt {
+  color: #b9a89a;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.humidor-management-card dd {
+  color: #ffffff;
+  margin: 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.humidor-management-card-interactive {
+  cursor: pointer;
+}
+
+.humidor-management-card-interactive:hover,
+.humidor-management-card-interactive:focus-visible {
+  background: #241b16;
+}
+
+.humidor-management-card-interactive:focus-visible {
+  outline: 2px solid #c99b63;
+  outline-offset: 3px;
+}
+
 .error-text {
   color: #ff9b9b;
 }
@@ -2503,6 +2671,10 @@ button:disabled {
     overflow-x: auto;
   }
 
+  .humidor-management-panel {
+    overflow-x: visible;
+  }
+
   .panel-header-row {
     flex-direction: column;
     align-items: stretch;
@@ -2546,6 +2718,12 @@ button:disabled {
   }
 
   .purchase-card-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .humidor-management-card-list {
     display: grid;
     gap: 12px;
     margin-top: 18px;
@@ -2970,9 +3148,15 @@ button:disabled {
   .collection-humidor-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .humidor-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 340px) {
+  .humidor-summary-grid,
+  .humidor-management-card dl,
   .collection-humidor-summary-grid,
   .collection-lot-definition {
     grid-template-columns: 1fr;
