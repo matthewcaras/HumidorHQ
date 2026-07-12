@@ -192,6 +192,73 @@ export type ReceiveStoreResult = {
   purchaseReceiptState: PurchaseReceiptState
 }
 
+export type CollectionInventoryIssue = {
+  code: string
+  message: string
+  severity: 'WARNING'
+  lotId?: number
+  catalogCigarId?: number
+  storageLocationId?: number
+  storageSubLocationId?: number
+}
+
+export type CollectionLocationSummary = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  storageSubLocationIsActive: boolean
+  quantity: number
+  lotCount: number
+  oldestReceivedDate: string | null
+}
+
+export type CollectionSearchMatchType = 'CIGAR' | 'LOCATION' | 'BOTH' | null
+
+export type CollectionItem = {
+  catalogCigar: CatalogCigar
+  totalQuantity: number
+  lotCount: number
+  locationCount: number
+  oldestReceivedDate: string | null
+  weightedAverageCostPerCigar: string | number | null
+  averageMsrpPerCigar: string | number | null
+  currentCostBasis: string | number | null
+  currentMsrpValue: string | number | null
+  savingsPerCigar: string | number | null
+  totalSavings: string | number | null
+  primaryLocations: CollectionLocationSummary[]
+  searchMatchType: CollectionSearchMatchType
+  matchingLocationQuantity: number
+  matchingLocations: CollectionLocationSummary[]
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionSummary = {
+  totalQuantity: number
+  uniqueCigarCount: number
+  lotCount: number
+  locationCount: number
+}
+
+export type CollectionSearchSummary = {
+  search: string
+  matchedItemCount: number
+  matchedLocationQuantity: number
+}
+
+export type CollectionResponse = {
+  summary: CollectionSummary
+  searchSummary: CollectionSearchSummary
+  items: CollectionItem[]
+  total: number
+  limit: number | 'all'
+  offset: number
+  issues: CollectionInventoryIssue[]
+}
+
 export type CreateHumidorInput = {
   name: string
   capacity?: string
@@ -276,6 +343,29 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
   })
 
   return parseJsonResponse<Humidor>(response, 'Failed to archive humidor')
+}
+
+export async function getCollection(
+  options: { search?: string; limit?: number | 'all'; offset?: number } = {},
+): Promise<CollectionResponse> {
+  const params = new URLSearchParams()
+
+  if (options.search?.trim()) {
+    params.set('search', options.search.trim())
+  }
+
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/collection${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<CollectionResponse>(response, 'Failed to load collection')
 }
 
 export async function getVendors(search?: string): Promise<Vendor[]> {

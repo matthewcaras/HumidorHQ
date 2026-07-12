@@ -761,6 +761,292 @@ button:disabled {
   padding: 12px 14px;
 }
 
+.collection-summary-card {
+  align-items: center;
+  text-align: center;
+}
+
+.collection-summary-card p {
+  display: grid;
+  min-height: 40px;
+  place-items: center;
+}
+
+.collection-panel {
+  overflow: visible;
+}
+
+.collection-search-form {
+  min-width: min(560px, 100%);
+}
+
+.collection-warning-panel {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #5a412c;
+  border-radius: 12px;
+  background: #2f251d;
+  margin-top: 18px;
+  padding: 12px 14px;
+}
+
+.collection-warning-panel strong {
+  color: #f1c982;
+}
+
+.collection-warning-panel p {
+  color: #d7c8ba;
+  margin: 0;
+}
+
+.collection-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  border: 1px solid #3b2b22;
+  border-radius: 14px;
+  background: #1c1511;
+  margin-top: 18px;
+  padding: 28px 18px;
+  text-align: center;
+}
+
+.collection-empty-state h3,
+.collection-empty-state p {
+  margin: 0;
+}
+
+.collection-empty-state p {
+  color: #b9a89a;
+}
+
+.collection-desktop-table {
+  overflow-x: visible;
+}
+
+.collection-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.collection-table th,
+.collection-table td {
+  padding: 12px 10px;
+  vertical-align: top;
+}
+
+.collection-col-cigar {
+  width: 31%;
+}
+
+.collection-col-qty {
+  width: 6%;
+}
+
+.collection-col-lots {
+  width: 6%;
+}
+
+.collection-col-locations {
+  width: 7%;
+}
+
+.collection-col-oldest {
+  width: 10%;
+}
+
+.collection-col-avg-cost {
+  width: 9%;
+}
+
+.collection-col-primary-location {
+  width: 31%;
+}
+
+.collection-table th:nth-child(2),
+.collection-table td:nth-child(2),
+.collection-table th:nth-child(3),
+.collection-table td:nth-child(3),
+.collection-table th:nth-child(4),
+.collection-table td:nth-child(4),
+.collection-table th:nth-child(5),
+.collection-table td:nth-child(5),
+.collection-table th:nth-child(6),
+.collection-table td:nth-child(6) {
+  text-align: center;
+}
+
+.collection-cigar-cell,
+.collection-location-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.collection-cigar-cell strong {
+  color: #ffffff;
+}
+
+.collection-cigar-cell span,
+.collection-location-cell span {
+  color: #f8f3ed;
+  overflow-wrap: anywhere;
+}
+
+.collection-cigar-cell small,
+.collection-location-cell small {
+  color: #b9a89a;
+}
+
+.collection-cigar-cell em,
+.attention-badge {
+  width: fit-content;
+  border: 1px solid #5a412c;
+  border-radius: 999px;
+  background: #2f251d;
+  color: #f1c982;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.collection-location-cell strong {
+  color: #f1c982;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.collection-number-cell {
+  text-align: center;
+}
+
+.collection-money-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.collection-card-list {
+  display: none;
+}
+
+.collection-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #3b2b22;
+  border-radius: 14px;
+  background: #1c1511;
+  padding: 14px;
+}
+
+.collection-card-title {
+  display: grid;
+  gap: 4px;
+}
+
+.collection-card-title strong {
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.collection-card-title span {
+  color: #f8f3ed;
+  overflow-wrap: anywhere;
+}
+
+.collection-card-title small {
+  color: #b9a89a;
+}
+
+.collection-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.collection-card-stats div {
+  border: 1px solid #3b2b22;
+  border-radius: 10px;
+  background: #241b16;
+  padding: 10px;
+  min-width: 0;
+}
+
+.collection-card-stats p {
+  color: #b9a89a;
+  font-size: 12px;
+  margin: 0 0 5px;
+}
+
+.collection-card-stats strong {
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.collection-card-locations {
+  display: grid;
+  gap: 5px;
+}
+
+.collection-card-locations strong {
+  color: #f1c982;
+}
+
+.collection-card-locations span {
+  color: #f8f3ed;
+  overflow-wrap: anywhere;
+}
+
+.collection-card-locations small {
+  color: #b9a89a;
+}
+
+.collection-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #3b2b22;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.collection-pagination p {
+  color: #b9a89a;
+  margin: 0;
+}
+
+.collection-pagination-controls {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.collection-pagination-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.collection-page-size {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: #d7c8ba;
+  font-weight: 700;
+}
+
+.collection-page-size select {
+  min-height: 40px;
+  border: 1px solid #3b2b22;
+  border-radius: 10px;
+  background: #17120f;
+  color: #ffffff;
+  padding: 8px 10px;
+}
+
 @media (max-width: 1100px) {
   .purchase-detail-modal .desktop-line-table {
     display: none;
@@ -769,6 +1055,18 @@ button:disabled {
   .purchase-detail-modal .purchase-line-card-list {
     display: grid;
     gap: 12px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .collection-desktop-table {
+    display: none;
+  }
+
+  .collection-card-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
   }
 }
 
@@ -1453,6 +1751,24 @@ button:disabled {
     display: none;
   }
 
+  .collection-panel {
+    overflow-x: visible;
+  }
+
+  .collection-panel-header {
+    align-items: stretch;
+  }
+
+  .collection-card-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .collection-search-form {
+    min-width: 0;
+  }
+
   .purchase-card-list {
     display: grid;
     gap: 12px;
@@ -1704,12 +2020,39 @@ button:disabled {
   .purchase-lines-actions .secondary-button {
     width: 100%;
   }
+
+  .collection-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collection-pagination-controls,
+  .collection-pagination-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .collection-pagination button {
+    width: 100%;
+  }
+
+  .collection-page-size {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .collection-page-size select {
+    flex: 1;
+  }
 }
 
 @media (max-width: 420px) {
   .summary-grid,
   .purchase-card,
-  .purchase-line-fields {
+  .purchase-line-fields,
+  .collection-card-stats {
     grid-template-columns: 1fr;
   }
 }

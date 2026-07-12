@@ -250,10 +250,14 @@ function parseLimit(value: unknown) {
     return 50
   }
 
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'all') {
+    return 'all' as const
+  }
+
   const numberValue = Number(value)
   if (!Number.isInteger(numberValue) || numberValue < 1) {
     throw new CollectionServiceError(
-      'limit must be a positive whole number.',
+      'limit must be a positive whole number or all.',
       'COLLECTION_VALIDATION_ERROR',
       400,
     )
@@ -288,11 +292,13 @@ function parseOffset(value: unknown) {
 }
 
 function normalizeInput(input: CollectionInput = {}) {
+  const limit = parseLimit(input.limit)
+
   return {
     search: typeof input.search === 'string' ? input.search.trim() : '',
     searchKey: typeof input.search === 'string' ? normalizeSearchKey(input.search) : '',
-    limit: parseLimit(input.limit),
-    offset: parseOffset(input.offset),
+    limit,
+    offset: limit === 'all' ? 0 : parseOffset(input.offset),
   }
 }
 
@@ -1158,9 +1164,9 @@ export async function getCollection(input: CollectionInput = {}) {
     )
     summary.locationCount = summaryLocationIds.size
 
-    const pagedItems = filteredItems
-      .slice(data.offset, data.offset + data.limit)
-      .map((item) => publicItem(item, data.searchKey))
+    const pagedSource =
+      data.limit === 'all' ? filteredItems : filteredItems.slice(data.offset, data.offset + data.limit)
+    const pagedItems = pagedSource.map((item) => publicItem(item, data.searchKey))
 
     return {
       summary,

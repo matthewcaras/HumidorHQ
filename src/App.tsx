@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Collection from './pages/Collection'
 import Humidors from './pages/Humidors'
 import Purchases from './pages/Purchases'
 import './App.css'
@@ -20,6 +21,10 @@ function App() {
   function renderPage() {
     if (activePage === 'Purchases') {
       return <Purchases />
+    }
+
+    if (activePage === 'Collection') {
+      return <Collection />
     }
 
     if (activePage === 'Humidors') {
