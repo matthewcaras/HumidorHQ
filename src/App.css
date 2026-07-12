@@ -245,6 +245,12 @@ button:disabled {
   margin-bottom: 22px;
 }
 
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .modal-header h3 {
   color: #ffffff;
   margin: 0;
@@ -463,6 +469,10 @@ button:disabled {
   overflow: auto;
 }
 
+.purchase-notes-modal {
+  width: min(640px, 100%);
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -493,6 +503,16 @@ button:disabled {
 
 .desktop-table {
   overflow-x: auto;
+}
+
+.purchase-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.purchase-history-actions-column .table-action {
+  margin-right: 0;
 }
 
 .desktop-line-table {
@@ -695,6 +715,50 @@ button:disabled {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 4px;
+}
+
+.purchase-card-actions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.purchase-card-actions .purchase-card-action {
+  width: 100%;
+}
+
+.notes-edit-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.locked-edit-message {
+  border: 1px solid #5a412c;
+  border-radius: 12px;
+  background: #2f251d;
+  color: #f1c98f;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+}
+
+.notes-edit-field {
+  display: grid;
+  gap: 8px;
+  color: #d7c8ba;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.notes-edit-field textarea {
+  min-height: 150px;
+  resize: vertical;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  color: #ffffff;
+  padding: 12px 14px;
 }
 
 @media (max-width: 1100px) {
@@ -1423,6 +1487,10 @@ button:disabled {
     width: 100%;
   }
 
+  .purchase-card-actions {
+    grid-template-columns: 1fr;
+  }
+
   .modal-backdrop {
     align-items: stretch;
     place-items: stretch;
@@ -1445,6 +1513,22 @@ button:disabled {
     z-index: 1;
     background: #241b16;
     padding-bottom: 12px;
+  }
+
+  .modal-header-actions {
+    gap: 8px;
+  }
+
+  .notes-edit-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-notes-modal .form-actions {
+    flex-direction: column;
+  }
+
+  .purchase-notes-modal .form-actions button {
+    width: 100%;
   }
 
   .icon-button {

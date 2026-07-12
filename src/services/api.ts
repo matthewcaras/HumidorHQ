@@ -28,6 +28,8 @@ shelfCount: number | null
 
 export type PurchaseReceiptState = 'EN_ROUTE' | 'PARTIALLY_RECEIVED' | 'RECEIVED'
 
+export type PurchaseEditState = 'FULLY_EDITABLE' | 'NOTES_ONLY'
+
 export type ReceiveStoreLineState = 'EN_ROUTE' | 'RECEIVED_NOT_STORED' | 'STORED'
 
 export type Vendor = {
@@ -151,6 +153,7 @@ export type Purchase = {
   vendor: PurchaseVendor | null
   lines: PurchaseLine[]
   receiptState: PurchaseReceiptState
+  editState: PurchaseEditState
 }
 
 export type CreatePurchaseLineInput = {
@@ -362,6 +365,36 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
   })
 
   return parseJsonResponse<Purchase>(response, 'Failed to create purchase')
+}
+
+export async function updatePurchase(
+  id: number,
+  input: CreatePurchaseInput,
+): Promise<Purchase> {
+  const response = await fetch(`${API_BASE_URL}/purchases/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<Purchase>(response, 'Failed to update purchase')
+}
+
+export async function updatePurchaseNotes(
+  id: number,
+  notes: string | null,
+): Promise<Purchase> {
+  const response = await fetch(`${API_BASE_URL}/purchases/${id}/notes`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ notes }),
+  })
+
+  return parseJsonResponse<Purchase>(response, 'Failed to update purchase notes')
 }
 
 export async function receiveAndStorePurchaseLine(

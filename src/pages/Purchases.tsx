@@ -9,6 +9,8 @@ import {
   getPurchases,
   getVendors,
   receiveAndStorePurchaseLine,
+  updatePurchase,
+  updatePurchaseNotes,
   type CatalogCigar,
   type Humidor,
   type Purchase,
@@ -43,7 +45,7 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 const orderDiscountHelpText =
   'Enter the dollar discount shown on the invoice. Do not enter a percentage or a discount already reflected in individual cigar unit prices.'
 
-type PageMode = 'HISTORY' | 'ADD'
+type PageMode = 'HISTORY' | 'ADD' | 'EDIT'
 
 type PurchaseFormLine = {
   localId: string
@@ -87,6 +89,7 @@ type PurchaseFormAction =
       catalogCigar: CatalogCigar | null
       cigarSearch: string
     }
+  | { type: 'LOAD_FORM'; state: PurchaseFormState }
   | { type: 'RESET_FORM' }
 
 type CatalogCreateDraft = {
@@ -114,6 +117,13 @@ type ReceiveStorePanelState = {
     storageLocationId?: string
     storageSubLocationId?: string
   }
+}
+
+type NotesEditState = {
+  purchase: Purchase
+  notes: string
+  error: string
+  openedFromDetails: boolean
 }
 
 function localDateString(date = new Date()) {
@@ -187,6 +197,52 @@ function initialPurchaseFormState(): PurchaseFormState {
   }
 }
 
+function purchaseToFormState(purchase: Purchase): PurchaseFormState {
+  return {
+    vendor: purchase.vendor,
+    vendorSearch: purchase.vendor?.name ?? '',
+    purchaseDate: calendarDateValue(purchase.purchaseDate),
+    invoiceNumber: purchase.invoiceNumber ?? '',
+    shipping: normalizeMoneyInput(String(purchase.shipping ?? '')),
+    exciseTax: normalizeMoneyInput(String(purchase.exciseTax ?? '')),
+    salesTax: normalizeMoneyInput(String(purchase.salesTax ?? '')),
+    discount: normalizeMoneyInput(String(purchase.discount ?? '')),
+    totalPaid:
+      purchase.totalPaid === null || purchase.totalPaid === undefined
+        ? ''
+        : normalizeMoneyInput(String(purchase.totalPaid)),
+    notes: purchase.notes ?? '',
+    lines: purchase.lines
+      .slice()
+      .sort((left, right) => left.lineNumber - right.lineNumber)
+      .map((line) => ({
+        localId: makeLocalId(),
+        catalogCigar: line.catalogCigar,
+        cigarSearch: catalogCigarName(line.catalogCigar),
+        quantity: String(line.quantity),
+        unitPrice: normalizeMoneyInput(String(line.unitPrice)),
+        msrpPerCigar:
+          line.msrpPerCigar === null || line.msrpPerCigar === undefined
+            ? ''
+            : normalizeMoneyInput(String(line.msrpPerCigar)),
+      })),
+  }
+}
+
+function purchaseFormSnapshot(state: PurchaseFormState) {
+  return JSON.stringify({
+    ...state,
+    vendor: state.vendor?.id ?? null,
+    lines: state.lines.map((line) => ({
+      catalogCigar: line.catalogCigar?.id ?? null,
+      cigarSearch: line.cigarSearch,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      msrpPerCigar: line.msrpPerCigar,
+    })),
+  })
+}
+
 function purchaseFormReducer(
   state: PurchaseFormState,
   action: PurchaseFormAction,
@@ -241,6 +297,8 @@ function purchaseFormReducer(
             : line,
         ),
       }
+    case 'LOAD_FORM':
+      return action.state
     case 'RESET_FORM':
       return initialPurchaseFormState()
     default:
@@ -619,6 +677,10 @@ function Purchases() {
   const [isOrderDiscountInfoPinned, setIsOrderDiscountInfoPinned] = useState(false)
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null)
+  const editInitialSnapshotRef = useRef('')
+  const [notesEdit, setNotesEdit] = useState<NotesEditState | null>(null)
+  const [isSavingNotes, setIsSavingNotes] = useState(false)
   const [receiveStorePanel, setReceiveStorePanel] = useState<ReceiveStorePanelState | null>(null)
   const [humidors, setHumidors] = useState<Humidor[]>([])
   const [isHumidorsLoading, setIsHumidorsLoading] = useState(false)
@@ -931,6 +993,8 @@ function Purchases() {
 
   function openAddPurchase() {
     dispatchPurchaseForm({ type: 'RESET_FORM' })
+    setEditingPurchase(null)
+    editInitialSnapshotRef.current = ''
     setError('')
     setVendorError('')
     setVendorResults([])
@@ -942,19 +1006,65 @@ function Purchases() {
     setPageMode('ADD')
   }
 
+  async function openEditPurchase(purchase: Purchase) {
+    setIsDetailLoading(true)
+    setError('')
+
+    try {
+      const detail = await getPurchaseById(purchase.id)
+
+      if (detail.editState !== 'FULLY_EDITABLE') {
+        openNotesEditor(detail, Boolean(selectedPurchase && selectedPurchase.id === detail.id))
+        return
+      }
+
+      const editState = purchaseToFormState(detail)
+      dispatchPurchaseForm({ type: 'LOAD_FORM', state: editState })
+      editInitialSnapshotRef.current = purchaseFormSnapshot(editState)
+      setEditingPurchase(detail)
+      setSelectedPurchase(null)
+      setReceiveStorePanel(null)
+      setError('')
+      setVendorError('')
+      setVendorResults([])
+      setIsVendorListOpen(false)
+      setSaveAttempted(false)
+      setSaveErrorMessage('')
+      setSaveSuccessMessage('')
+      setPageMode('EDIT')
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : 'Unable to load purchase.')
+    } finally {
+      setIsDetailLoading(false)
+    }
+  }
+
+  function openNotesEditor(purchase: Purchase, openedFromDetails = false) {
+    setNotesEdit({
+      purchase,
+      notes: purchase.notes ?? '',
+      error: '',
+      openedFromDetails,
+    })
+  }
+
   function returnToHistory() {
     if (isSavingPurchase) {
       return
     }
 
-    if (
-      isPurchaseDraftNonempty(purchaseForm) &&
-      !window.confirm('Discard this purchase draft and return to Purchase History?')
-    ) {
+    const isDirty =
+      pageMode === 'EDIT'
+        ? purchaseFormSnapshot(purchaseForm) !== editInitialSnapshotRef.current
+        : isPurchaseDraftNonempty(purchaseForm)
+
+    if (isDirty && !window.confirm('Discard this purchase draft and return to Purchase History?')) {
       return
     }
 
     dispatchPurchaseForm({ type: 'RESET_FORM' })
+    setEditingPurchase(null)
+    editInitialSnapshotRef.current = ''
     setError('')
     setVendorError('')
     setVendorResults([])
@@ -963,6 +1073,39 @@ function Purchases() {
     setSaveErrorMessage('')
     setSaveSuccessMessage('')
     setPageMode('HISTORY')
+  }
+
+  async function handleSaveNotes() {
+    if (!notesEdit || isSavingNotes) {
+      return
+    }
+
+    setIsSavingNotes(true)
+    setNotesEdit((current) => (current ? { ...current, error: '' } : current))
+
+    try {
+      const updated = await updatePurchaseNotes(
+        notesEdit.purchase.id,
+        notesEdit.notes.trim().length === 0 ? null : notesEdit.notes,
+      )
+
+      if (selectedPurchase?.id === updated.id || notesEdit.openedFromDetails) {
+        setSelectedPurchase(updated)
+      }
+
+      setPurchases((current) =>
+        current.map((purchase) => (purchase.id === updated.id ? updated : purchase)),
+      )
+      await loadPurchases(submittedSearch)
+      setNotesEdit(null)
+      setSaveSuccessMessage('Purchase notes updated successfully.')
+    } catch (notesError) {
+      const message =
+        notesError instanceof Error ? notesError.message : 'Unable to update purchase notes.'
+      setNotesEdit((current) => (current ? { ...current, error: message } : current))
+    } finally {
+      setIsSavingNotes(false)
+    }
   }
 
   function updateVendorSearch(value: string) {
@@ -1227,21 +1370,52 @@ function Purchases() {
     setIsSavingPurchase(true)
 
     try {
-      const normalizePayloadMoney = (value: string, fieldName: string, required = false) => {
-        const cents = parseMoneyCents(value, fieldName, false)
+      const payload = buildPurchasePayload()
+      const savedPurchase =
+        pageMode === 'EDIT' && editingPurchase
+          ? await updatePurchase(editingPurchase.id, payload)
+          : await createPurchase(payload)
 
-        if (cents === null) {
-          if (required) {
-            throw new Error(`${fieldName} is required.`)
-          }
+      setPurchases((current) => [
+        savedPurchase,
+        ...current.filter((purchase) => purchase.id !== savedPurchase.id),
+      ])
+      dispatchPurchaseForm({ type: 'RESET_FORM' })
+      setPageMode('HISTORY')
+      setSearch('')
+      setSubmittedSearch('')
+      setSelectedPurchase(null)
+      setEditingPurchase(null)
+      editInitialSnapshotRef.current = ''
+      setSaveAttempted(false)
+      setSaveSuccessMessage(
+        pageMode === 'EDIT' ? 'Purchase updated successfully.' : 'Purchase saved successfully.',
+      )
+      void loadPurchases('')
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : 'Unable to save purchase.'
+      setSaveErrorMessage(message)
+    } finally {
+      setIsSavingPurchase(false)
+    }
+  }
 
-          return undefined
+  function buildPurchasePayload() {
+    const normalizePayloadMoney = (value: string, fieldName: string, required = false) => {
+      const cents = parseMoneyCents(value, fieldName, false)
+
+      if (cents === null) {
+        if (required) {
+          throw new Error(`${fieldName} is required.`)
         }
 
-        return formatCentsForInput(cents)
+        return undefined
       }
 
-      const createdPurchase = await createPurchase({
+      return formatCentsForInput(cents)
+    }
+
+    return {
         vendorId: purchaseForm.vendor!.id,
         purchaseDate: purchaseForm.purchaseDate,
         invoiceNumber: purchaseForm.invoiceNumber.trim() || undefined,
@@ -1260,22 +1434,6 @@ function Purchases() {
               ? normalizePayloadMoney(line.msrpPerCigar, 'MSRP Each', true)
               : undefined,
         })),
-      })
-
-      setPurchases((current) => [createdPurchase, ...current.filter((purchase) => purchase.id !== createdPurchase.id)])
-      dispatchPurchaseForm({ type: 'RESET_FORM' })
-      setPageMode('HISTORY')
-      setSearch('')
-      setSubmittedSearch('')
-      setSelectedPurchase(null)
-      setSaveAttempted(false)
-      setSaveSuccessMessage('Purchase saved successfully.')
-      void loadPurchases('')
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Unable to save purchase.'
-      setSaveErrorMessage(message)
-    } finally {
-      setIsSavingPurchase(false)
     }
   }
 
@@ -1331,11 +1489,17 @@ function Purchases() {
     ? purchaseSubmissionValidation.reconciliationErrors
     : []
   const canSubmitPurchase = purchaseSubmissionValidation.isValid && !isSavingPurchase
-  const savePurchaseButtonLabel = isSavingPurchase ? 'Saving...' : 'Save Purchase'
+  const formModeLabel = pageMode === 'EDIT' ? 'Edit Purchase' : 'Add Purchase'
+  const savePurchaseButtonText = pageMode === 'EDIT' ? 'Save Changes' : 'Save Purchase'
+  const savePurchaseButtonLabel = isSavingPurchase ? 'Saving...' : savePurchaseButtonText
   const savePurchaseButtonTitle = isSavingPurchase
-    ? 'Saving purchase...'
+    ? pageMode === 'EDIT'
+      ? 'Saving changes...'
+      : 'Saving purchase...'
     : purchaseSubmissionValidation.isValid
-      ? 'Save this purchase.'
+      ? pageMode === 'EDIT'
+        ? 'Save changes to this purchase.'
+        : 'Save this purchase.'
       : 'Complete the vendor, line items, and balanced invoice before saving.'
   const receiveStoreLineState = receiveStorePanel ? lineState(receiveStorePanel.line) : null
   const receiveStorePurchaseDate = calendarDateValue(selectedPurchase?.purchaseDate)
@@ -1379,14 +1543,16 @@ function Purchases() {
     }
   }, [saveSuccessMessage, receiveStoreSuccessMessage])
 
-  if (pageMode === 'ADD') {
+  if (pageMode === 'ADD' || pageMode === 'EDIT') {
     return (
       <>
         <header className="page-header purchase-form-header">
           <div className="page-header-copy">
-            <h2>Add Purchase</h2>
+            <h2>{formModeLabel}</h2>
             <p className="page-subtitle">
-              Record one purchase with one or more cigar lines.
+              {pageMode === 'EDIT'
+                ? 'Update this fully editable purchase before receiving begins.'
+                : 'Record one purchase with one or more cigar lines.'}
             </p>
           </div>
           <div className="page-header-actions">
@@ -1397,7 +1563,7 @@ function Purchases() {
               type="button"
               onClick={returnToHistory}
             >
-              Back to Purchases
+              {pageMode === 'EDIT' ? 'Cancel' : 'Back to Purchases'}
             </button>
             <button
               className="primary-button"
@@ -2148,7 +2314,7 @@ function Purchases() {
               type="button"
               onClick={returnToHistory}
             >
-              Back to Purchases
+              {pageMode === 'EDIT' ? 'Cancel' : 'Back to Purchases'}
             </button>
             <button
               className="primary-button"
@@ -2257,8 +2423,7 @@ function Purchases() {
                     <th>Cigars</th>
                     <th>Total Paid</th>
                     <th>Receipt Status</th>
-                    {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
-                    <th>Actions</th>
+                    <th className="purchase-history-actions-column">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2271,16 +2436,35 @@ function Purchases() {
                       <td>{purchaseCigarQuantity(purchase)}</td>
                       <td>{money(purchase.totalPaid)}</td>
                       <td>{receiptLabel(purchase.receiptState)}</td>
-                      <td>
-                        {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
-                        <button
-                          className="table-action"
-                          type="button"
-                          disabled={isDetailLoading}
-                          onClick={() => openPurchaseDetails(purchase)}
-                        >
-                          View
-                        </button>
+                      <td className="purchase-history-actions-column">
+                        <div className="purchase-actions">
+                          <button
+                            className="table-action"
+                            type="button"
+                            disabled={isDetailLoading}
+                            onClick={() => openPurchaseDetails(purchase)}
+                          >
+                            View
+                          </button>
+                          {purchase.editState === 'FULLY_EDITABLE' ? (
+                            <button
+                              className="table-action"
+                              type="button"
+                              disabled={isDetailLoading}
+                              onClick={() => void openEditPurchase(purchase)}
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              className="table-action"
+                              type="button"
+                              onClick={() => openNotesEditor(purchase)}
+                            >
+                              Edit Notes
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2315,15 +2499,34 @@ function Purchases() {
                     <p>Receipt Status</p>
                     <strong>{receiptLabel(purchase.receiptState)}</strong>
                   </div>
-                  {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
-                  <button
-                    className="primary-button purchase-card-action"
-                    type="button"
-                    disabled={isDetailLoading}
-                    onClick={() => openPurchaseDetails(purchase)}
-                  >
-                    View
-                  </button>
+                  <div className="purchase-card-actions">
+                    <button
+                      className="primary-button purchase-card-action"
+                      type="button"
+                      disabled={isDetailLoading}
+                      onClick={() => openPurchaseDetails(purchase)}
+                    >
+                      View
+                    </button>
+                    {purchase.editState === 'FULLY_EDITABLE' ? (
+                      <button
+                        className="secondary-button purchase-card-action"
+                        type="button"
+                        disabled={isDetailLoading}
+                        onClick={() => void openEditPurchase(purchase)}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <button
+                        className="secondary-button purchase-card-action"
+                        type="button"
+                        onClick={() => openNotesEditor(purchase)}
+                      >
+                        Edit Notes
+                      </button>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>
@@ -2336,14 +2539,33 @@ function Purchases() {
           <div className="modal purchase-detail-modal">
             <div className="modal-header">
               <h3>Purchase Details</h3>
-              <button
-                aria-label="Close purchase details"
-                className="icon-button"
-                type="button"
-                onClick={() => setSelectedPurchase(null)}
-              >
-                &times;
-              </button>
+              <div className="modal-header-actions">
+                {selectedPurchase.editState === 'FULLY_EDITABLE' ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void openEditPurchase(selectedPurchase)}
+                  >
+                    Edit Purchase
+                  </button>
+                ) : (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => openNotesEditor(selectedPurchase, true)}
+                  >
+                    Edit Notes
+                  </button>
+                )}
+                <button
+                  aria-label="Close purchase details"
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setSelectedPurchase(null)}
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
             <div className="detail-grid">
@@ -2498,6 +2720,83 @@ function Purchases() {
                   </article>
                 )
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {notesEdit && (
+        <div className="modal-backdrop">
+          <div className="modal purchase-notes-modal">
+            <div className="modal-header">
+              <h3>Edit Notes</h3>
+              <button
+                aria-label="Close notes editor"
+                className="icon-button"
+                disabled={isSavingNotes}
+                type="button"
+                onClick={() => setNotesEdit(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="detail-grid notes-edit-summary">
+              <div>
+                <p>Vendor</p>
+                <strong>{notesEdit.purchase.vendor?.name ?? '-'}</strong>
+              </div>
+              <div>
+                <p>Purchase Date</p>
+                <strong>{dateLabel(notesEdit.purchase.purchaseDate)}</strong>
+              </div>
+              <div>
+                <p>Invoice Number</p>
+                <strong>{notesEdit.purchase.invoiceNumber ?? '-'}</strong>
+              </div>
+            </div>
+
+            <p className="locked-edit-message">
+              Purchase details are locked because receiving or inventory history exists. Notes may
+              still be edited.
+            </p>
+
+            {notesEdit.error && (
+              <p className="error-text receive-store-error" role="alert">
+                {notesEdit.error}
+              </p>
+            )}
+
+            <label className="notes-edit-field">
+              Notes
+              <textarea
+                value={notesEdit.notes}
+                disabled={isSavingNotes}
+                onChange={(event) =>
+                  setNotesEdit((current) =>
+                    current ? { ...current, notes: event.target.value, error: '' } : current,
+                  )
+                }
+              />
+            </label>
+
+            <div className="form-actions">
+              <button
+                className="secondary-button"
+                disabled={isSavingNotes}
+                type="button"
+                onClick={() => setNotesEdit(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={isSavingNotes}
+                type="button"
+                onClick={() => void handleSaveNotes()}
+              >
+                {isSavingNotes ? 'Saving...' : 'Save Notes'}
+              </button>
             </div>
           </div>
         </div>
