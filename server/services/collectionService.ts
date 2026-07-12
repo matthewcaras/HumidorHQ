@@ -6,6 +6,7 @@ type CollectionPrismaClient = any
 
 export type CollectionServiceErrorCode =
   | 'COLLECTION_VALIDATION_ERROR'
+  | 'COLLECTION_ITEM_NOT_FOUND'
   | 'COLLECTION_DATABASE_ERROR'
 
 type InventoryIssueSeverity = 'WARNING'
@@ -49,10 +50,17 @@ type CatalogCigarRecord = {
 
 type LotRecord = {
   id: number
+  purchaseOrderId: number | null
+  purchaseLineId: number | null
   catalogCigarId: number | null
+  vendorIdSnapshot: number | null
+  vendorNameSnapshot: string | null
+  purchaseDate: Date | null
   currentQuantity: number | null
+  originalQuantity: number | null
   receivedDateSnapshot: Date | null
   purchaseDateSnapshot: Date | null
+  sourceSnapshot: string | null
   costPerCigarSnapshot: unknown
   allocatedCostPerCigar: unknown
   actualCostPerCigar: unknown
@@ -109,6 +117,40 @@ type LocationSummary = {
   oldestReceivedDate: string | null
 }
 
+type LotLocationSummary = {
+  storageLocationId: number
+  storageLocationName: string
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: string
+  quantity: number
+  storageLocationIsActive: boolean
+  storageSubLocationIsActive: boolean
+}
+
+type LotSummary = {
+  lotId: number
+  purchaseOrderId: number | null
+  purchaseLineId: number | null
+  vendorIdSnapshot: number | null
+  vendorNameSnapshot: string | null
+  purchaseDate: string | null
+  receivedDate: string | null
+  originalQuantity: number | null
+  currentQuantity: number
+  cachedCurrentQuantity: number | null
+  costPerCigar: string | null
+  costSource: 'SNAPSHOT' | 'ALLOCATED' | 'ACTUAL_FALLBACK' | null
+  msrpPerCigar: string | null
+  msrpSource: 'SNAPSHOT' | 'LOT' | 'CATALOG_FALLBACK' | null
+  currentCostBasis: string | null
+  currentMsrpValue: string | null
+  totalSavings: string | null
+  invoiceOrSource: string | null
+  locations: LotLocationSummary[]
+  issues: InventoryIssue[]
+}
+
 type CollectionItemInternal = {
   catalogCigar: CatalogCigarRecord
   totalQuantity: number
@@ -142,12 +184,39 @@ type CollectionItem = {
   issues: InventoryIssue[]
 }
 
+type CollectionCigarDetails = {
+  catalogCigar: CatalogCigarRecord
+  summary: {
+    totalQuantity: number
+    lotCount: number
+    locationCount: number
+    oldestReceivedDate: string | null
+    weightedAverageCostPerCigar: string | null
+    averageMsrpPerCigar: string | null
+    currentCostBasis: string | null
+    currentMsrpValue: string | null
+    savingsPerCigar: string | null
+    totalSavings: string | null
+  }
+  locations: LocationSummary[]
+  lots: LotSummary[]
+  issues: InventoryIssue[]
+}
+
 type SearchMatchInfo = {
   cigarMatch: boolean
   locationMatch: boolean
   searchMatchType: 'CIGAR' | 'LOCATION' | 'BOTH' | null
   matchingLocationQuantity: number
   matchingLocations: LocationSummary[]
+}
+
+type CollectionAggregation = {
+  itemsByCatalogCigarId: Map<number, CollectionItemInternal>
+  positiveQuantityByLotId: Map<number, number>
+  lotById: Map<number, LotRecord>
+  responseIssues: InventoryIssue[]
+  responseIssueKeys: Set<string>
 }
 
 export class CollectionServiceError extends Error {
@@ -227,6 +296,20 @@ function normalizeInput(input: CollectionInput = {}) {
   }
 }
 
+export function collectionCatalogCigarIdParam(value: string) {
+  const id = Number(value)
+
+  if (!Number.isInteger(id) || id < 1) {
+    throw new CollectionServiceError(
+      'Catalog cigar id must be a positive integer.',
+      'COLLECTION_VALIDATION_ERROR',
+      400,
+    )
+  }
+
+  return id
+}
+
 function decimalToMillionths(value: unknown): bigint | null {
   if (value === undefined || value === null || value === '') {
     return null
@@ -290,6 +373,10 @@ function dateString(date: Date | null) {
   return date ? date.toISOString() : null
 }
 
+function purchaseDate(lot: LotRecord) {
+  return lot.purchaseDateSnapshot ?? lot.purchaseDate
+}
+
 function issueKey(issue: InventoryIssue) {
   return [
     issue.code,
@@ -329,77 +416,99 @@ function addResponseIssue(
   issues.push(issue)
 }
 
-function costPerCigarMillionths(
+type IssueTarget = {
+  issues: InventoryIssue[]
+  issueKeys: Set<string>
+}
+
+function resolveCostPerCigar(
   lot: LotRecord,
-  item: CollectionItemInternal,
+  catalogCigar: CatalogCigarRecord,
+  issueTarget: IssueTarget,
 ) {
   const snapshotCost = decimalToMillionths(lot.costPerCigarSnapshot)
   if (snapshotCost !== null) {
-    return snapshotCost
+    return { value: snapshotCost, source: 'SNAPSHOT' as const }
   }
 
   const allocatedCost = decimalToMillionths(lot.allocatedCostPerCigar)
   if (allocatedCost !== null) {
-    return allocatedCost
+    return { value: allocatedCost, source: 'ALLOCATED' as const }
   }
 
   const actualCost = decimalToMillionths(lot.actualCostPerCigar)
   if (actualCost !== null) {
-    addIssue(item, {
+    addIssue(issueTarget, {
       code: 'COST_FALLBACK_USED',
       message:
         'Actual cost per cigar was used because historical true-cost fields were unavailable.',
       severity: 'WARNING',
       lotId: lot.id,
-      catalogCigarId: item.catalogCigar.id,
+      catalogCigarId: catalogCigar.id,
     })
-    return actualCost
+    return { value: actualCost, source: 'ACTUAL_FALLBACK' as const }
   }
 
-  addIssue(item, {
+  addIssue(issueTarget, {
     code: 'COST_DATA_MISSING',
     message: 'Cost data is missing for this lot, so cost metrics cannot be fully calculated.',
     severity: 'WARNING',
     lotId: lot.id,
-    catalogCigarId: item.catalogCigar.id,
+    catalogCigarId: catalogCigar.id,
   })
-  return null
+  return { value: null, source: null }
+}
+
+function resolveMsrpPerCigar(
+  lot: LotRecord,
+  catalogCigar: CatalogCigarRecord,
+  issueTarget: IssueTarget,
+) {
+  const snapshotMsrp = decimalToMillionths(lot.msrpPerCigarSnapshot)
+  if (snapshotMsrp !== null) {
+    return { value: snapshotMsrp, source: 'SNAPSHOT' as const }
+  }
+
+  const lotMsrp = decimalToMillionths(lot.msrpPerCigar)
+  if (lotMsrp !== null) {
+    return { value: lotMsrp, source: 'LOT' as const }
+  }
+
+  const catalogMsrp = decimalToMillionths(catalogCigar.msrp)
+  if (catalogMsrp !== null) {
+    addIssue(issueTarget, {
+      code: 'MSRP_CATALOG_FALLBACK_USED',
+      message: 'Catalog MSRP was used because Lot snapshot MSRP fields were unavailable.',
+      severity: 'WARNING',
+      lotId: lot.id,
+      catalogCigarId: catalogCigar.id,
+    })
+    return { value: catalogMsrp, source: 'CATALOG_FALLBACK' as const }
+  }
+
+  addIssue(issueTarget, {
+    code: 'MSRP_DATA_MISSING',
+    message:
+      'MSRP data is missing for this lot, so MSRP and savings metrics cannot be fully calculated.',
+    severity: 'WARNING',
+    lotId: lot.id,
+    catalogCigarId: catalogCigar.id,
+  })
+  return { value: null, source: null }
+}
+
+function costPerCigarMillionths(
+  lot: LotRecord,
+  item: CollectionItemInternal,
+) {
+  return resolveCostPerCigar(lot, item.catalogCigar, item).value
 }
 
 function msrpPerCigarMillionths(
   lot: LotRecord,
   item: CollectionItemInternal,
 ) {
-  const snapshotMsrp = decimalToMillionths(lot.msrpPerCigarSnapshot)
-  if (snapshotMsrp !== null) {
-    return snapshotMsrp
-  }
-
-  const lotMsrp = decimalToMillionths(lot.msrpPerCigar)
-  if (lotMsrp !== null) {
-    return lotMsrp
-  }
-
-  const catalogMsrp = decimalToMillionths(item.catalogCigar.msrp)
-  if (catalogMsrp !== null) {
-    addIssue(item, {
-      code: 'MSRP_CATALOG_FALLBACK_USED',
-      message: 'Catalog MSRP was used because Lot snapshot MSRP fields were unavailable.',
-      severity: 'WARNING',
-      lotId: lot.id,
-      catalogCigarId: item.catalogCigar.id,
-    })
-    return catalogMsrp
-  }
-
-  addIssue(item, {
-    code: 'MSRP_DATA_MISSING',
-    message: 'MSRP data is missing for this lot, so MSRP and savings metrics cannot be fully calculated.',
-    severity: 'WARNING',
-    lotId: lot.id,
-    catalogCigarId: item.catalogCigar.id,
-  })
-  return null
+  return resolveMsrpPerCigar(lot, item.catalogCigar, item).value
 }
 
 function catalogSearchText(catalogCigar: CatalogCigarRecord) {
@@ -541,9 +650,7 @@ function locationSummaries(item: CollectionItemInternal): LocationSummary[] {
     }))
 }
 
-function publicItem(item: CollectionItemInternal, searchKey: string): CollectionItem {
-  const sortedLocations = locationSummaries(item)
-  const matchInfo = searchMatchInfo(item, searchKey, sortedLocations)
+function itemSummary(item: CollectionItemInternal) {
   const weightedAverageCostPerCigar = item.hasCompleteCostData
     ? divideRoundHalfUp(item.costBasisMillionths, item.totalQuantity)
     : null
@@ -558,7 +665,6 @@ function publicItem(item: CollectionItemInternal, searchKey: string): Collection
     totalSavings === null ? null : divideRoundHalfUp(totalSavings, item.totalQuantity)
 
   return {
-    catalogCigar: item.catalogCigar,
     totalQuantity: item.totalQuantity,
     lotCount: item.lotIds.size,
     locationCount: item.locationsById.size,
@@ -571,6 +677,16 @@ function publicItem(item: CollectionItemInternal, searchKey: string): Collection
     currentMsrpValue: item.hasCompleteMsrpData ? formatMillionths(item.msrpValueMillionths) : null,
     savingsPerCigar: savingsPerCigar === null ? null : formatMillionths(savingsPerCigar),
     totalSavings: totalSavings === null ? null : formatMillionths(totalSavings),
+  }
+}
+
+function publicItem(item: CollectionItemInternal, searchKey: string): CollectionItem {
+  const sortedLocations = locationSummaries(item)
+  const matchInfo = searchMatchInfo(item, searchKey, sortedLocations)
+
+  return {
+    catalogCigar: item.catalogCigar,
+    ...itemSummary(item),
     primaryLocations: sortedLocations.slice(0, 3),
     searchMatchType: matchInfo.searchMatchType,
     matchingLocationQuantity: matchInfo.matchingLocationQuantity,
@@ -694,12 +810,248 @@ function addLotBalanceMismatchIssues(
   }
 }
 
+function lotLocationSummaries(balances: PositiveBalanceRecord[]): LotLocationSummary[] {
+  return Array.from(
+    balances
+      .reduce((locations, balance) => {
+        const subLocation = balance.storageSubLocation
+        const storageLocation = subLocation.storageLocation
+        const existing = locations.get(subLocation.id)
+
+        if (existing) {
+          existing.quantity += balance.quantity
+          return locations
+        }
+
+        locations.set(subLocation.id, {
+          storageLocationId: storageLocation?.id ?? subLocation.storageLocationId,
+          storageLocationName: storageLocation?.name ?? 'Unknown Humidor',
+          storageSubLocationId: subLocation.id,
+          storageSubLocationName: subLocation.name,
+          storageSubLocationKind: subLocation.kind,
+          quantity: balance.quantity,
+          storageLocationIsActive: storageLocation?.isActive ?? false,
+          storageSubLocationIsActive: subLocation.isActive,
+          storageSubLocationDisplayOrder: subLocation.displayOrder,
+        })
+
+        return locations
+      }, new Map<number, LotLocationSummary & { storageSubLocationDisplayOrder: number }>())
+      .values(),
+  )
+    .sort((left, right) => {
+      const storageLocationName = left.storageLocationName.localeCompare(
+        right.storageLocationName,
+      )
+      if (storageLocationName !== 0) {
+        return storageLocationName
+      }
+
+      if (left.storageSubLocationDisplayOrder !== right.storageSubLocationDisplayOrder) {
+        return left.storageSubLocationDisplayOrder - right.storageSubLocationDisplayOrder
+      }
+
+      return left.storageSubLocationName.localeCompare(right.storageSubLocationName)
+    })
+    .map(({ storageSubLocationDisplayOrder, ...location }) => location)
+}
+
+function lotSortDateValue(date: Date | null) {
+  return date?.getTime() ?? Number.MAX_SAFE_INTEGER
+}
+
+function lotSummaries(
+  balances: PositiveBalanceRecord[],
+  catalogCigar: CatalogCigarRecord,
+): LotSummary[] {
+  const balancesByLotId = new Map<number, PositiveBalanceRecord[]>()
+
+  for (const balance of balances) {
+    const lotBalances = balancesByLotId.get(balance.lotId) ?? []
+    lotBalances.push(balance)
+    balancesByLotId.set(balance.lotId, lotBalances)
+  }
+
+  return Array.from(balancesByLotId.values())
+    .map((lotBalances) => {
+      const lot = lotBalances[0].lot
+      const lotIssues: InventoryIssue[] = []
+      const lotIssueKeys = new Set<string>()
+      const issueTarget = { issues: lotIssues, issueKeys: lotIssueKeys }
+      const visibleCurrentQuantity = lotBalances.reduce(
+        (total, balance) => total + balance.quantity,
+        0,
+      )
+      const cost = resolveCostPerCigar(lot, catalogCigar, issueTarget)
+      const msrp = resolveMsrpPerCigar(lot, catalogCigar, issueTarget)
+      const currentCostBasis =
+        cost.value === null ? null : BigInt(visibleCurrentQuantity) * cost.value
+      const currentMsrpValue =
+        msrp.value === null ? null : BigInt(visibleCurrentQuantity) * msrp.value
+      const totalSavings =
+        currentCostBasis === null || currentMsrpValue === null
+          ? null
+          : currentMsrpValue - currentCostBasis
+
+      if (lot.currentQuantity !== visibleCurrentQuantity) {
+        addIssue(issueTarget, {
+          code: 'LOT_BALANCE_MISMATCH',
+          message:
+            'The sum of positive location balances does not match the Lot current quantity cache.',
+          severity: 'WARNING',
+          lotId: lot.id,
+          catalogCigarId: catalogCigar.id,
+        })
+      }
+
+      if (!catalogCigar.isActive) {
+        addIssue(issueTarget, {
+          code: 'ARCHIVED_CATALOG_WITH_INVENTORY',
+          message: 'This catalog cigar is archived but has positive inventory.',
+          severity: 'WARNING',
+          lotId: lot.id,
+          catalogCigarId: catalogCigar.id,
+        })
+      }
+
+      for (const balance of lotBalances) {
+        const subLocation = balance.storageSubLocation
+        const storageLocation = subLocation.storageLocation
+
+        if (!subLocation.isActive || !storageLocation?.isActive) {
+          addIssue(issueTarget, {
+            code: 'ARCHIVED_LOCATION_WITH_INVENTORY',
+            message: 'This inventory is stored in an archived humidor or sub-location.',
+            severity: 'WARNING',
+            lotId: lot.id,
+            catalogCigarId: catalogCigar.id,
+            storageLocationId: storageLocation?.id ?? subLocation.storageLocationId,
+            storageSubLocationId: subLocation.id,
+          })
+        }
+      }
+
+      return {
+        lotId: lot.id,
+        purchaseOrderId: lot.purchaseOrderId,
+        purchaseLineId: lot.purchaseLineId,
+        vendorIdSnapshot: lot.vendorIdSnapshot,
+        vendorNameSnapshot: lot.vendorNameSnapshot,
+        purchaseDate: dateString(purchaseDate(lot)),
+        receivedDate: dateString(lot.receivedDateSnapshot),
+        originalQuantity: lot.originalQuantity,
+        currentQuantity: visibleCurrentQuantity,
+        cachedCurrentQuantity: lot.currentQuantity,
+        costPerCigar: cost.value === null ? null : formatMillionths(cost.value),
+        costSource: cost.source,
+        msrpPerCigar: msrp.value === null ? null : formatMillionths(msrp.value),
+        msrpSource: msrp.source,
+        currentCostBasis:
+          currentCostBasis === null ? null : formatMillionths(currentCostBasis),
+        currentMsrpValue:
+          currentMsrpValue === null ? null : formatMillionths(currentMsrpValue),
+        totalSavings: totalSavings === null ? null : formatMillionths(totalSavings),
+        invoiceOrSource: lot.sourceSnapshot,
+        locations: lotLocationSummaries(lotBalances),
+        issues: lotIssues,
+      }
+    })
+    .sort((left, right) => {
+      const leftLot = balancesByLotId.get(left.lotId)?.[0].lot
+      const rightLot = balancesByLotId.get(right.lotId)?.[0].lot
+
+      if (!leftLot || !rightLot) {
+        return left.lotId - right.lotId
+      }
+
+      const receivedDateComparison =
+        lotSortDateValue(effectiveDate(leftLot)) - lotSortDateValue(effectiveDate(rightLot))
+      if (receivedDateComparison !== 0) {
+        return receivedDateComparison
+      }
+
+      const purchaseDateComparison =
+        lotSortDateValue(purchaseDate(leftLot)) - lotSortDateValue(purchaseDate(rightLot))
+      if (purchaseDateComparison !== 0) {
+        return purchaseDateComparison
+      }
+
+      return left.lotId - right.lotId
+    })
+}
+
+function buildCollectionAggregation(positiveBalances: PositiveBalanceRecord[]): CollectionAggregation {
+  const itemsByCatalogCigarId = new Map<number, CollectionItemInternal>()
+  const positiveQuantityByLotId = new Map<number, number>()
+  const lotById = new Map<number, LotRecord>()
+  const responseIssues: InventoryIssue[] = []
+  const responseIssueKeys = new Set<string>()
+
+  for (const balance of positiveBalances) {
+    const lot = balance.lot
+    lotById.set(lot.id, lot)
+    positiveQuantityByLotId.set(
+      lot.id,
+      (positiveQuantityByLotId.get(lot.id) ?? 0) + balance.quantity,
+    )
+
+    if (!lot.catalogCigar) {
+      addResponseIssue(responseIssues, responseIssueKeys, {
+        code: 'CATALOG_CIGAR_MISSING',
+        message: 'A positive location balance belongs to a Lot without a Catalog cigar.',
+        severity: 'WARNING',
+        lotId: lot.id,
+      })
+      continue
+    }
+
+    let item = itemsByCatalogCigarId.get(lot.catalogCigar.id)
+    if (!item) {
+      item = createCollectionItem(lot.catalogCigar)
+      itemsByCatalogCigarId.set(lot.catalogCigar.id, item)
+    }
+
+    addBalanceToItem(item, balance)
+  }
+
+  addLotBalanceMismatchIssues(itemsByCatalogCigarId, positiveQuantityByLotId, lotById)
+
+  return {
+    itemsByCatalogCigarId,
+    positiveQuantityByLotId,
+    lotById,
+    responseIssues,
+    responseIssueKeys,
+  }
+}
+
 function currentLotMatchesSearch(lot: LotRecord, searchKey: string) {
   if (!searchKey) {
     return true
   }
 
   return lot.catalogCigar ? catalogSearchText(lot.catalogCigar).includes(searchKey) : false
+}
+
+function addCurrentWithoutBalanceIssues(
+  lotsWithCurrentQuantity: Array<LotRecord & { locationBalances: unknown[] }>,
+  responseIssues: InventoryIssue[],
+  responseIssueKeys: Set<string>,
+  searchKey = '',
+) {
+  for (const lot of lotsWithCurrentQuantity) {
+    if ((lot.locationBalances?.length ?? 0) > 0 || !currentLotMatchesSearch(lot, searchKey)) {
+      continue
+    }
+
+    addResponseIssue(responseIssues, responseIssueKeys, {
+      code: 'LOT_CURRENT_WITHOUT_LOCATION_BALANCE',
+      message: 'Lot current quantity is positive, but the Lot has no positive location balance.',
+      severity: 'WARNING',
+      lotId: lot.id,
+      catalogCigarId: lot.catalogCigarId ?? undefined,
+    })
+  }
 }
 
 function mapDatabaseError(error: unknown): never {
@@ -751,54 +1103,18 @@ export async function getCollection(input: CollectionInput = {}) {
       }),
     ])
 
-    const itemsByCatalogCigarId = new Map<number, CollectionItemInternal>()
-    const positiveQuantityByLotId = new Map<number, number>()
-    const lotById = new Map<number, LotRecord>()
-    const responseIssues: InventoryIssue[] = []
-    const responseIssueKeys = new Set<string>()
+    const {
+      itemsByCatalogCigarId,
+      responseIssues,
+      responseIssueKeys,
+    } = buildCollectionAggregation(positiveBalances as PositiveBalanceRecord[])
 
-    for (const balance of positiveBalances as PositiveBalanceRecord[]) {
-      const lot = balance.lot
-      lotById.set(lot.id, lot)
-      positiveQuantityByLotId.set(
-        lot.id,
-        (positiveQuantityByLotId.get(lot.id) ?? 0) + balance.quantity,
-      )
-
-      if (!lot.catalogCigar) {
-        addResponseIssue(responseIssues, responseIssueKeys, {
-          code: 'CATALOG_CIGAR_MISSING',
-          message: 'A positive location balance belongs to a Lot without a Catalog cigar.',
-          severity: 'WARNING',
-          lotId: lot.id,
-        })
-        continue
-      }
-
-      let item = itemsByCatalogCigarId.get(lot.catalogCigar.id)
-      if (!item) {
-        item = createCollectionItem(lot.catalogCigar)
-        itemsByCatalogCigarId.set(lot.catalogCigar.id, item)
-      }
-
-      addBalanceToItem(item, balance)
-    }
-
-    addLotBalanceMismatchIssues(itemsByCatalogCigarId, positiveQuantityByLotId, lotById)
-
-    for (const lot of lotsWithCurrentQuantity as Array<LotRecord & { locationBalances: unknown[] }>) {
-      if ((lot.locationBalances?.length ?? 0) > 0 || !currentLotMatchesSearch(lot, data.searchKey)) {
-        continue
-      }
-
-      addResponseIssue(responseIssues, responseIssueKeys, {
-        code: 'LOT_CURRENT_WITHOUT_LOCATION_BALANCE',
-        message: 'Lot current quantity is positive, but the Lot has no positive location balance.',
-        severity: 'WARNING',
-        lotId: lot.id,
-        catalogCigarId: lot.catalogCigarId ?? undefined,
-      })
-    }
+    addCurrentWithoutBalanceIssues(
+      lotsWithCurrentQuantity as Array<LotRecord & { locationBalances: unknown[] }>,
+      responseIssues,
+      responseIssueKeys,
+      data.searchKey,
+    )
 
     const filteredItems = Array.from(itemsByCatalogCigarId.values())
       .filter((item) => matchesSearch(item, data.searchKey))
@@ -853,6 +1169,107 @@ export async function getCollection(input: CollectionInput = {}) {
       total: filteredItems.length,
       limit: data.limit,
       offset: data.offset,
+      issues: responseIssues,
+    }
+  } catch (error) {
+    mapDatabaseError(error)
+  }
+}
+
+export async function getCollectionCigarDetails(
+  catalogCigarId: number,
+): Promise<CollectionCigarDetails> {
+  const prisma = getPrismaClient()
+
+  try {
+    const [catalogCigar, positiveBalances, lotsWithCurrentQuantity] = await Promise.all([
+      prisma.catalogCigar.findUnique({
+        where: { id: catalogCigarId },
+      }),
+      prisma.lotLocationBalance.findMany({
+        where: {
+          quantity: { gt: 0 },
+          lot: {
+            catalogCigarId,
+          },
+        },
+        include: {
+          lot: {
+            include: {
+              catalogCigar: true,
+            },
+          },
+          storageSubLocation: {
+            include: {
+              storageLocation: true,
+            },
+          },
+        },
+      }),
+      prisma.lot.findMany({
+        where: {
+          catalogCigarId,
+          currentQuantity: { gt: 0 },
+        },
+        include: {
+          catalogCigar: true,
+          locationBalances: {
+            where: { quantity: { gt: 0 } },
+            select: {
+              id: true,
+              quantity: true,
+            },
+          },
+        },
+      }),
+    ])
+
+    if (!catalogCigar || positiveBalances.length === 0) {
+      throw new CollectionServiceError(
+        'Collection cigar was not found.',
+        'COLLECTION_ITEM_NOT_FOUND',
+        404,
+      )
+    }
+
+    const {
+      itemsByCatalogCigarId,
+      responseIssues,
+      responseIssueKeys,
+    } = buildCollectionAggregation(positiveBalances as PositiveBalanceRecord[])
+    const item = itemsByCatalogCigarId.get(catalogCigarId)
+
+    if (!item) {
+      throw new CollectionServiceError(
+        'Collection cigar was not found.',
+        'COLLECTION_ITEM_NOT_FOUND',
+        404,
+      )
+    }
+
+    addCurrentWithoutBalanceIssues(
+      lotsWithCurrentQuantity as Array<LotRecord & { locationBalances: unknown[] }>,
+      responseIssues,
+      responseIssueKeys,
+    )
+
+    for (const issue of item.issues) {
+      addResponseIssue(responseIssues, responseIssueKeys, issue)
+    }
+
+    const lots = lotSummaries(positiveBalances as PositiveBalanceRecord[], item.catalogCigar)
+
+    for (const lot of lots) {
+      for (const issue of lot.issues) {
+        addResponseIssue(responseIssues, responseIssueKeys, issue)
+      }
+    }
+
+    return {
+      catalogCigar: item.catalogCigar,
+      summary: itemSummary(item),
+      locations: locationSummaries(item),
+      lots,
       issues: responseIssues,
     }
   } catch (error) {

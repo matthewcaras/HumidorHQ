@@ -38,8 +38,10 @@ import {
   purchaseLineIdParam,
 } from './services/receiveStoreService.ts'
 import {
+  collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
+  getCollectionCigarDetails,
 } from './services/collectionService.ts'
 
 const app = express()
@@ -188,6 +190,19 @@ app.get('/api/collection', async (req, res) => {
     })
 
     res.json({ data: collection })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+// Future static Collection routes, such as /api/collection/humidors, must be registered before this parameter route.
+app.get('/api/collection/:catalogCigarId', async (req, res) => {
+  try {
+    const details = await getCollectionCigarDetails(
+      collectionCatalogCigarIdParam(req.params.catalogCigarId),
+    )
+
+    res.json({ data: details })
   } catch (error) {
     handleCollectionError(error, res)
   }
