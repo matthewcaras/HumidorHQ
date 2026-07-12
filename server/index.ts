@@ -37,6 +37,10 @@ import {
   ReceiveStoreServiceError,
   purchaseLineIdParam,
 } from './services/receiveStoreService.ts'
+import {
+  CollectionServiceError,
+  getCollection,
+} from './services/collectionService.ts'
 
 const app = express()
 
@@ -155,6 +159,39 @@ function handleReceiveStoreError(error: unknown, res: express.Response) {
     },
   })
 }
+
+function handleCollectionError(error: unknown, res: express.Response) {
+  if (error instanceof CollectionServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'COLLECTION_UNEXPECTED_ERROR',
+      message: 'The collection request could not be completed.',
+    },
+  })
+}
+
+app.get('/api/collection', async (req, res) => {
+  try {
+    const collection = await getCollection({
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      limit: typeof req.query.limit === 'string' ? req.query.limit : undefined,
+      offset: typeof req.query.offset === 'string' ? req.query.offset : undefined,
+    })
+
+    res.json({ data: collection })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
 
 app.get('/api/catalog', async (req, res) => {
   try {
