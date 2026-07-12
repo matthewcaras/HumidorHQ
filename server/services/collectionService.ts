@@ -25,7 +25,19 @@ type CollectionInput = {
   search?: unknown
   limit?: unknown
   offset?: unknown
+  sortBy?: unknown
+  sortDirection?: unknown
 }
+
+type CollectionSortBy =
+  | 'CIGAR'
+  | 'QUANTITY'
+  | 'LOTS'
+  | 'LOCATIONS'
+  | 'OLDEST'
+  | 'AVERAGE_COST'
+
+type CollectionSortDirection = 'ASC' | 'DESC'
 
 type CatalogCigarRecord = {
   id: number
@@ -291,6 +303,65 @@ function parseOffset(value: unknown) {
   return numberValue
 }
 
+function parseSortBy(value: unknown): CollectionSortBy {
+  if (value === undefined || value === null || value === '') {
+    return 'CIGAR'
+  }
+
+  if (typeof value !== 'string') {
+    throw new CollectionServiceError(
+      'sortBy must be CIGAR, QUANTITY, LOTS, LOCATIONS, OLDEST, or AVERAGE_COST.',
+      'COLLECTION_VALIDATION_ERROR',
+      400,
+    )
+  }
+
+  const sortBy = value.trim().toUpperCase()
+
+  if (
+    sortBy === 'CIGAR' ||
+    sortBy === 'QUANTITY' ||
+    sortBy === 'LOTS' ||
+    sortBy === 'LOCATIONS' ||
+    sortBy === 'OLDEST' ||
+    sortBy === 'AVERAGE_COST'
+  ) {
+    return sortBy
+  }
+
+  throw new CollectionServiceError(
+    'sortBy must be CIGAR, QUANTITY, LOTS, LOCATIONS, OLDEST, or AVERAGE_COST.',
+    'COLLECTION_VALIDATION_ERROR',
+    400,
+  )
+}
+
+function parseSortDirection(value: unknown): CollectionSortDirection {
+  if (value === undefined || value === null || value === '') {
+    return 'ASC'
+  }
+
+  if (typeof value !== 'string') {
+    throw new CollectionServiceError(
+      'sortDirection must be ASC or DESC.',
+      'COLLECTION_VALIDATION_ERROR',
+      400,
+    )
+  }
+
+  const sortDirection = value.trim().toUpperCase()
+
+  if (sortDirection === 'ASC' || sortDirection === 'DESC') {
+    return sortDirection
+  }
+
+  throw new CollectionServiceError(
+    'sortDirection must be ASC or DESC.',
+    'COLLECTION_VALIDATION_ERROR',
+    400,
+  )
+}
+
 function normalizeInput(input: CollectionInput = {}) {
   const limit = parseLimit(input.limit)
 
@@ -299,6 +370,8 @@ function normalizeInput(input: CollectionInput = {}) {
     searchKey: typeof input.search === 'string' ? normalizeSearchKey(input.search) : '',
     limit,
     offset: limit === 'all' ? 0 : parseOffset(input.offset),
+    sortBy: parseSortBy(input.sortBy),
+    sortDirection: parseSortDirection(input.sortDirection),
   }
 }
 
@@ -620,6 +693,141 @@ function sortItems(left: CollectionItemInternal, right: CollectionItemInternal) 
   }
 
   return left.catalogCigar.id - right.catalogCigar.id
+}
+
+function sortItemsByCigarDescending(
+  left: CollectionItemInternal,
+  right: CollectionItemInternal,
+) {
+  const manufacturer = sortableText(right.catalogCigar.manufacturerKey).localeCompare(
+    sortableText(left.catalogCigar.manufacturerKey),
+  )
+  if (manufacturer !== 0) {
+    return manufacturer
+  }
+
+  const series = sortableText(right.catalogCigar.seriesKey).localeCompare(
+    sortableText(left.catalogCigar.seriesKey),
+  )
+  if (series !== 0) {
+    return series
+  }
+
+  const vitola = sortableText(right.catalogCigar.vitolaKey).localeCompare(
+    sortableText(left.catalogCigar.vitolaKey),
+  )
+  if (vitola !== 0) {
+    return vitola
+  }
+
+  return right.catalogCigar.id - left.catalogCigar.id
+}
+
+function applyDirection(comparison: number, sortDirection: CollectionSortDirection) {
+  return sortDirection === 'ASC' ? comparison : -comparison
+}
+
+function compareNumberMetric(
+  leftValue: number,
+  rightValue: number,
+  sortDirection: CollectionSortDirection,
+) {
+  if (leftValue === rightValue) {
+    return 0
+  }
+
+  return applyDirection(leftValue < rightValue ? -1 : 1, sortDirection)
+}
+
+function compareNullableDateMetric(
+  leftDate: Date | null,
+  rightDate: Date | null,
+  sortDirection: CollectionSortDirection,
+) {
+  if (!leftDate && !rightDate) {
+    return 0
+  }
+
+  if (!leftDate) {
+    return 1
+  }
+
+  if (!rightDate) {
+    return -1
+  }
+
+  if (leftDate.getTime() === rightDate.getTime()) {
+    return 0
+  }
+
+  return applyDirection(leftDate < rightDate ? -1 : 1, sortDirection)
+}
+
+function compareAverageCostMetric(
+  left: CollectionItemInternal,
+  right: CollectionItemInternal,
+  sortDirection: CollectionSortDirection,
+) {
+  const leftHasCost = left.hasCompleteCostData && left.totalQuantity > 0
+  const rightHasCost = right.hasCompleteCostData && right.totalQuantity > 0
+
+  if (!leftHasCost && !rightHasCost) {
+    return 0
+  }
+
+  if (!leftHasCost) {
+    return 1
+  }
+
+  if (!rightHasCost) {
+    return -1
+  }
+
+  const leftScaled = left.costBasisMillionths * BigInt(right.totalQuantity)
+  const rightScaled = right.costBasisMillionths * BigInt(left.totalQuantity)
+
+  if (leftScaled === rightScaled) {
+    return 0
+  }
+
+  return applyDirection(leftScaled < rightScaled ? -1 : 1, sortDirection)
+}
+
+function sortCollectionItems(
+  sortBy: CollectionSortBy,
+  sortDirection: CollectionSortDirection,
+) {
+  return (left: CollectionItemInternal, right: CollectionItemInternal) => {
+    if (sortBy === 'CIGAR') {
+      return sortDirection === 'ASC'
+        ? sortItems(left, right)
+        : sortItemsByCigarDescending(left, right)
+    }
+
+    let comparison = 0
+
+    if (sortBy === 'QUANTITY') {
+      comparison = compareNumberMetric(left.totalQuantity, right.totalQuantity, sortDirection)
+    } else if (sortBy === 'LOTS') {
+      comparison = compareNumberMetric(left.lotIds.size, right.lotIds.size, sortDirection)
+    } else if (sortBy === 'LOCATIONS') {
+      comparison = compareNumberMetric(
+        left.locationsById.size,
+        right.locationsById.size,
+        sortDirection,
+      )
+    } else if (sortBy === 'OLDEST') {
+      comparison = compareNullableDateMetric(
+        left.oldestReceivedDate,
+        right.oldestReceivedDate,
+        sortDirection,
+      )
+    } else {
+      comparison = compareAverageCostMetric(left, right, sortDirection)
+    }
+
+    return comparison === 0 ? sortItems(left, right) : comparison
+  }
 }
 
 function locationSummaries(item: CollectionItemInternal): LocationSummary[] {
@@ -1124,7 +1332,7 @@ export async function getCollection(input: CollectionInput = {}) {
 
     const filteredItems = Array.from(itemsByCatalogCigarId.values())
       .filter((item) => matchesSearch(item, data.searchKey))
-      .sort(sortItems)
+      .sort(sortCollectionItems(data.sortBy, data.sortDirection))
 
     for (const item of filteredItems) {
       for (const issue of item.issues) {
@@ -1175,6 +1383,10 @@ export async function getCollection(input: CollectionInput = {}) {
       total: filteredItems.length,
       limit: data.limit,
       offset: data.offset,
+      sort: {
+        sortBy: data.sortBy,
+        sortDirection: data.sortDirection,
+      },
       issues: responseIssues,
     }
   } catch (error) {

@@ -6,6 +6,8 @@ import {
   type CollectionItem,
   type CollectionLocationSummary,
   type CollectionResponse,
+  type CollectionSortBy,
+  type CollectionSortDirection,
 } from '../services/api'
 
 type PageSize = 50 | 100 | 'all'
@@ -16,6 +18,33 @@ const PAGE_SIZE_OPTIONS: { value: PageSize; label: string }[] = [
   { value: 100, label: '100 cigars' },
   { value: 'all', label: 'All cigars' },
 ]
+
+const SORT_OPTIONS: { value: CollectionSortBy; label: string }[] = [
+  { value: 'CIGAR', label: 'Cigar' },
+  { value: 'QUANTITY', label: 'Quantity' },
+  { value: 'LOTS', label: 'Lots' },
+  { value: 'LOCATIONS', label: 'Locations' },
+  { value: 'OLDEST', label: 'Oldest' },
+  { value: 'AVERAGE_COST', label: 'Avg Cost' },
+]
+
+const SORT_LABELS: Record<CollectionSortBy, string> = {
+  CIGAR: 'Cigar',
+  QUANTITY: 'Qty',
+  LOTS: 'Lots',
+  LOCATIONS: 'Locations',
+  OLDEST: 'Oldest',
+  AVERAGE_COST: 'Avg Cost',
+}
+
+const NATURAL_SORT_DIRECTIONS: Record<CollectionSortBy, CollectionSortDirection> = {
+  CIGAR: 'ASC',
+  QUANTITY: 'DESC',
+  LOTS: 'DESC',
+  LOCATIONS: 'DESC',
+  OLDEST: 'ASC',
+  AVERAGE_COST: 'ASC',
+}
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
@@ -136,18 +165,65 @@ function locationDisplay(item: CollectionItem, isSearchActive: boolean) {
   }
 }
 
+function nextSortDirection(
+  currentSortBy: CollectionSortBy,
+  currentSortDirection: CollectionSortDirection,
+  selectedSortBy: CollectionSortBy,
+) {
+  if (currentSortBy !== selectedSortBy) {
+    return NATURAL_SORT_DIRECTIONS[selectedSortBy]
+  }
+
+  return currentSortDirection === 'ASC' ? 'DESC' : 'ASC'
+}
+
+function sortDirectionLabel(sortBy: CollectionSortBy, sortDirection: CollectionSortDirection) {
+  if (sortBy === 'CIGAR') {
+    return sortDirection === 'ASC' ? 'A-Z' : 'Z-A'
+  }
+
+  if (sortBy === 'QUANTITY' || sortBy === 'LOTS' || sortBy === 'LOCATIONS') {
+    return sortDirection === 'ASC' ? 'Low-High' : 'High-Low'
+  }
+
+  if (sortBy === 'OLDEST') {
+    return sortDirection === 'ASC' ? 'Oldest-Newest' : 'Newest-Oldest'
+  }
+
+  return sortDirection === 'ASC' ? 'Low-High' : 'High-Low'
+}
+
+function nextSortLabel(
+  currentSortBy: CollectionSortBy,
+  currentSortDirection: CollectionSortDirection,
+  selectedSortBy: CollectionSortBy,
+) {
+  return sortDirectionLabel(
+    selectedSortBy,
+    nextSortDirection(currentSortBy, currentSortDirection, selectedSortBy),
+  )
+}
+
 function Collection() {
   const [collection, setCollection] = useState<CollectionResponse | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
+  const [sortBy, setSortBy] = useState<CollectionSortBy>('CIGAR')
+  const [sortDirection, setSortDirection] = useState<CollectionSortDirection>('ASC')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const requestIdRef = useRef(0)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
-  async function loadCollection(search: string, nextOffset: number, selectedPageSize = pageSize) {
+  async function loadCollection(
+    search: string,
+    nextOffset: number,
+    selectedPageSize = pageSize,
+    selectedSortBy = sortBy,
+    selectedSortDirection = sortDirection,
+  ) {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     setIsLoading(true)
@@ -158,6 +234,8 @@ function Collection() {
         search,
         limit: selectedPageSize,
         offset: selectedPageSize === 'all' ? 0 : nextOffset,
+        sortBy: selectedSortBy,
+        sortDirection: selectedSortDirection,
       })
 
       if (requestId !== requestIdRef.current) {
@@ -179,7 +257,7 @@ function Collection() {
   }
 
   useEffect(() => {
-    void loadCollection('', 0, DEFAULT_PAGE_SIZE)
+    void loadCollection('', 0, DEFAULT_PAGE_SIZE, 'CIGAR', 'ASC')
   }, [])
 
   function handleSearch(event: FormEvent) {
@@ -189,19 +267,19 @@ function Collection() {
     setSearchInput(submittedSearch)
     setActiveSearch(submittedSearch)
     setOffset(0)
-    void loadCollection(submittedSearch, 0, pageSize)
+    void loadCollection(submittedSearch, 0, pageSize, sortBy, sortDirection)
   }
 
   function handleClearSearch() {
     setSearchInput('')
     setActiveSearch('')
     setOffset(0)
-    void loadCollection('', 0, pageSize)
+    void loadCollection('', 0, pageSize, sortBy, sortDirection)
   }
 
   function handlePageChange(nextOffset: number) {
     setOffset(nextOffset)
-    void loadCollection(activeSearch, nextOffset, pageSize)
+    void loadCollection(activeSearch, nextOffset, pageSize, sortBy, sortDirection)
     headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -210,7 +288,18 @@ function Collection() {
 
     setPageSize(nextPageSize)
     setOffset(0)
-    void loadCollection(activeSearch, 0, nextPageSize)
+    void loadCollection(activeSearch, 0, nextPageSize, sortBy, sortDirection)
+    headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function handleSortChange(nextSortBy: CollectionSortBy, nextDirection?: CollectionSortDirection) {
+    const resolvedDirection =
+      nextDirection ?? nextSortDirection(sortBy, sortDirection, nextSortBy)
+
+    setSortBy(nextSortBy)
+    setSortDirection(resolvedDirection)
+    setOffset(0)
+    void loadCollection(activeSearch, 0, pageSize, nextSortBy, resolvedDirection)
     headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -242,6 +331,31 @@ function Collection() {
     collection.offset + collection.items.length < collection.total
   const showPageButtons = canPageBackward || canPageForward
   const visibleTopLevelIssues = collection ? topLevelIssues(collection) : []
+  const renderSortHeader = (headerSortBy: CollectionSortBy) => {
+    const isActive = sortBy === headerSortBy
+    const nextDirection = nextSortDirection(sortBy, sortDirection, headerSortBy)
+
+    return (
+      <button
+        className={isActive ? 'collection-sort-header active' : 'collection-sort-header'}
+        type="button"
+        onClick={() => handleSortChange(headerSortBy)}
+        aria-label={`Sort by ${SORT_LABELS[headerSortBy]} ${nextSortLabel(
+          sortBy,
+          sortDirection,
+          headerSortBy,
+        )}`}
+      >
+        <span className="collection-sort-label">{SORT_LABELS[headerSortBy]}</span>
+        {isActive ? (
+          <span className="collection-sort-indicator" aria-hidden="true">
+            {sortDirection === 'ASC' ? '▲' : '▼'}
+          </span>
+        ) : null}
+        <span className="collection-sort-spacer" aria-hidden="true" />
+      </button>
+    )
+  }
 
   return (
     <div className="collection-page">
@@ -304,6 +418,41 @@ function Collection() {
           </form>
         </div>
 
+        <div className="collection-mobile-sort">
+          <label>
+            <span>Sort By</span>
+            <select
+              value={sortBy}
+              onChange={(event) =>
+                handleSortChange(
+                  event.target.value as CollectionSortBy,
+                  NATURAL_SORT_DIRECTIONS[event.target.value as CollectionSortBy],
+                )
+              }
+              disabled={isLoading}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Direction</span>
+            <select
+              value={sortDirection}
+              onChange={(event) =>
+                handleSortChange(sortBy, event.target.value as CollectionSortDirection)
+              }
+              disabled={isLoading}
+            >
+              <option value="ASC">{sortDirectionLabel(sortBy, 'ASC')}</option>
+              <option value="DESC">{sortDirectionLabel(sortBy, 'DESC')}</option>
+            </select>
+          </label>
+        </div>
+
         {error ? <p className="error-text">{error}</p> : null}
         {isLoading && !collection ? <p className="muted">Loading Collection...</p> : null}
         {isLoading && collection ? <p className="search-results-message">Updating Collection...</p> : null}
@@ -363,12 +512,24 @@ function Collection() {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th>Cigar</th>
-                    <th>Qty</th>
-                    <th>Lots</th>
-                    <th>Locations</th>
-                    <th>Oldest</th>
-                    <th>Avg Cost</th>
+                    <th aria-sort={sortBy === 'CIGAR' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('CIGAR')}
+                    </th>
+                    <th aria-sort={sortBy === 'QUANTITY' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('QUANTITY')}
+                    </th>
+                    <th aria-sort={sortBy === 'LOTS' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('LOTS')}
+                    </th>
+                    <th aria-sort={sortBy === 'LOCATIONS' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('LOCATIONS')}
+                    </th>
+                    <th aria-sort={sortBy === 'OLDEST' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('OLDEST')}
+                    </th>
+                    <th aria-sort={sortBy === 'AVERAGE_COST' ? (sortDirection === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                      {renderSortHeader('AVERAGE_COST')}
+                    </th>
                     <th>Primary Location</th>
                   </tr>
                 </thead>

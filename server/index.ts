@@ -187,6 +187,9 @@ app.get('/api/collection', async (req, res) => {
       search: typeof req.query.search === 'string' ? req.query.search : undefined,
       limit: typeof req.query.limit === 'string' ? req.query.limit : undefined,
       offset: typeof req.query.offset === 'string' ? req.query.offset : undefined,
+      sortBy: typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined,
+      sortDirection:
+        typeof req.query.sortDirection === 'string' ? req.query.sortDirection : undefined,
     })
 
     res.json({ data: collection })

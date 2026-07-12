@@ -217,6 +217,16 @@ export type CollectionLocationSummary = {
 
 export type CollectionSearchMatchType = 'CIGAR' | 'LOCATION' | 'BOTH' | null
 
+export type CollectionSortBy =
+  | 'CIGAR'
+  | 'QUANTITY'
+  | 'LOTS'
+  | 'LOCATIONS'
+  | 'OLDEST'
+  | 'AVERAGE_COST'
+
+export type CollectionSortDirection = 'ASC' | 'DESC'
+
 export type CollectionItem = {
   catalogCigar: CatalogCigar
   totalQuantity: number
@@ -256,6 +266,10 @@ export type CollectionResponse = {
   total: number
   limit: number | 'all'
   offset: number
+  sort: {
+    sortBy: CollectionSortBy
+    sortDirection: CollectionSortDirection
+  }
   issues: CollectionInventoryIssue[]
 }
 
@@ -346,7 +360,13 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
 }
 
 export async function getCollection(
-  options: { search?: string; limit?: number | 'all'; offset?: number } = {},
+  options: {
+    search?: string
+    limit?: number | 'all'
+    offset?: number
+    sortBy?: CollectionSortBy
+    sortDirection?: CollectionSortDirection
+  } = {},
 ): Promise<CollectionResponse> {
   const params = new URLSearchParams()
 
@@ -360,6 +380,14 @@ export async function getCollection(
 
   if (options.offset !== undefined) {
     params.set('offset', String(options.offset))
+  }
+
+  if (options.sortBy !== undefined) {
+    params.set('sortBy', options.sortBy)
+  }
+
+  if (options.sortDirection !== undefined) {
+    params.set('sortDirection', options.sortDirection)
   }
 
   const query = params.toString()
