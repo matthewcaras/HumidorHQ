@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
   getCollection,
+  getCollectionCigarDetails,
   type CatalogCigar,
+  type CollectionCigarDetails,
   type CollectionInventoryIssue,
   type CollectionItem,
   type CollectionLocationSummary,
+  type CollectionLotSummary,
   type CollectionResponse,
   type CollectionSortBy,
   type CollectionSortDirection,
@@ -123,8 +126,50 @@ function locationQuantityLine(location: CollectionLocationSummary) {
   return `${locationLine(location)} - Qty ${location.quantity}`
 }
 
+function dimensionsLabel(cigar: CatalogCigar) {
+  if (!cigar.length && !cigar.ringGauge) {
+    return ''
+  }
+
+  return [cigar.length ? String(cigar.length) : null, cigar.ringGauge ? String(cigar.ringGauge) : null]
+    .filter(Boolean)
+    .join(' x ')
+}
+
+function cigarHeaderMeta(cigar: CatalogCigar) {
+  return [
+    dimensionsLabel(cigar),
+    cigar.wrapper,
+    cigar.strength,
+    cigar.country,
+  ].filter(Boolean)
+}
+
+function issueMessage(issue: CollectionInventoryIssue) {
+  switch (issue.code) {
+    case 'LOT_BALANCE_MISMATCH':
+      return 'A lot quantity does not match its stored location balances.'
+    case 'LOT_CURRENT_WITHOUT_LOCATION_BALANCE':
+      return 'A lot has current quantity but no stored location balance.'
+    case 'ARCHIVED_LOCATION_WITH_INVENTORY':
+      return 'Inventory is stored in an archived humidor or section.'
+    case 'ARCHIVED_CATALOG_WITH_INVENTORY':
+      return 'This cigar is archived in the Catalog but still has inventory.'
+    case 'COST_FALLBACK_USED':
+      return 'Original unit price is being used because true-cost history is missing.'
+    case 'MSRP_CATALOG_FALLBACK_USED':
+      return 'Current Catalog MSRP is being used because lot MSRP history is missing.'
+    case 'COST_DATA_MISSING':
+      return 'Cost history is missing for part of this inventory.'
+    case 'MSRP_DATA_MISSING':
+      return 'MSRP history is missing for part of this inventory.'
+    default:
+      return issue.message
+  }
+}
+
 function issueTitle(issues: CollectionInventoryIssue[]) {
-  return issues.map((issue) => issue.message).join(' ')
+  return issues.map((issue) => issueMessage(issue)).join(' ')
 }
 
 function issueKey(issue: CollectionInventoryIssue) {
@@ -163,6 +208,10 @@ function locationDisplay(item: CollectionItem, isSearchActive: boolean) {
     moreCount: Math.max(item.locationCount - 1, 0),
     isMatch: false,
   }
+}
+
+function lotIssueTitle(lot: CollectionLotSummary) {
+  return lot.issues.map((issue) => issueMessage(issue)).join(' ')
 }
 
 function nextSortDirection(
@@ -214,7 +263,13 @@ function Collection() {
   const [sortDirection, setSortDirection] = useState<CollectionSortDirection>('ASC')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedCigarId, setSelectedCigarId] = useState<number | null>(null)
+  const [cigarDetailsData, setCigarDetailsData] = useState<CollectionCigarDetails | null>(null)
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+  const [detailsError, setDetailsError] = useState('')
   const requestIdRef = useRef(0)
+  const detailsRequestIdRef = useRef(0)
+  const detailsOpenerRef = useRef<HTMLElement | null>(null)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
   async function loadCollection(
@@ -256,9 +311,69 @@ function Collection() {
     }
   }
 
+  async function openCigarDetails(catalogCigarId: number, opener: HTMLElement) {
+    const requestId = detailsRequestIdRef.current + 1
+    detailsRequestIdRef.current = requestId
+    detailsOpenerRef.current = opener
+    setSelectedCigarId(catalogCigarId)
+    setCigarDetailsData(null)
+    setDetailsError('')
+    setIsDetailsLoading(true)
+
+    try {
+      const data = await getCollectionCigarDetails(catalogCigarId)
+
+      if (requestId !== detailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsData(data)
+    } catch (loadError) {
+      if (requestId !== detailsRequestIdRef.current) {
+        return
+      }
+
+      setDetailsError(loadError instanceof Error ? loadError.message : 'Unable to load cigar details.')
+    } finally {
+      if (requestId === detailsRequestIdRef.current) {
+        setIsDetailsLoading(false)
+      }
+    }
+  }
+
+  function closeCigarDetails() {
+    detailsRequestIdRef.current += 1
+    setSelectedCigarId(null)
+    setCigarDetailsData(null)
+    setDetailsError('')
+    setIsDetailsLoading(false)
+
+    window.setTimeout(() => {
+      detailsOpenerRef.current?.focus()
+    }, 0)
+  }
+
   useEffect(() => {
     void loadCollection('', 0, DEFAULT_PAGE_SIZE, 'CIGAR', 'ASC')
   }, [])
+
+  useEffect(() => {
+    if (selectedCigarId === null) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        closeCigarDetails()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedCigarId])
 
   function handleSearch(event: FormEvent) {
     event.preventDefault()
@@ -354,6 +469,299 @@ function Collection() {
         ) : null}
         <span className="collection-sort-spacer" aria-hidden="true" />
       </button>
+    )
+  }
+
+  function handleOpenDetailsKeyDown(
+    event: KeyboardEvent<HTMLElement>,
+    catalogCigarId: number,
+  ) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      void openCigarDetails(catalogCigarId, event.currentTarget)
+    }
+  }
+
+  function renderDetailsPanel() {
+    if (selectedCigarId === null) {
+      return null
+    }
+
+    const details = cigarDetailsData
+    const cigar = details?.catalogCigar
+    const headerMeta = cigar ? cigarHeaderMeta(cigar) : []
+
+    return (
+      <div
+        className="modal-backdrop collection-details-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            closeCigarDetails()
+          }
+        }}
+      >
+        <section
+          className="modal collection-details-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="collection-cigar-details-title"
+        >
+          <div className="modal-header collection-details-header">
+            <div>
+              <p className="modal-kicker">Cigar Details</p>
+              <h3 id="collection-cigar-details-title">
+                {cigar ? cigar.manufacturer : 'Cigar Details'}
+              </h3>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Close cigar details"
+              onClick={closeCigarDetails}
+            >
+              &times;
+            </button>
+          </div>
+
+          {isDetailsLoading ? <p className="muted">Loading cigar details...</p> : null}
+          {detailsError ? <p className="error-text">{detailsError}</p> : null}
+
+          {details ? (
+            <div className="collection-details-content">
+              <section className="collection-details-hero">
+                <div>
+                  <p>{details.catalogCigar.manufacturer}</p>
+                  <h4>
+                    {details.catalogCigar.series} - {details.catalogCigar.vitola}
+                  </h4>
+                  {headerMeta.length > 0 ? (
+                    <span>{headerMeta.join(' - ')}</span>
+                  ) : null}
+                </div>
+                {!details.catalogCigar.isActive ? (
+                  <span className="attention-badge">Catalog Archived</span>
+                ) : null}
+              </section>
+
+              {details.issues.length > 0 ? (
+                <section className="collection-detail-warning">
+                  <strong>Needs Attention</strong>
+                  <ul>
+                    {details.issues.map((issue) => (
+                      <li key={issueKey(issue)}>{issueMessage(issue)}</li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              <section className="collection-details-section">
+                <div className="collection-section-heading">
+                  <h4>Current Collection</h4>
+                </div>
+                <div className="collection-detail-summary-grid">
+                  <article>
+                    <span>Total Owned</span>
+                    <strong>{details.summary.totalQuantity}</strong>
+                  </article>
+                  <article>
+                    <span>Lots</span>
+                    <strong>{details.summary.lotCount}</strong>
+                  </article>
+                  <article>
+                    <span>Locations</span>
+                    <strong>{details.summary.locationCount}</strong>
+                  </article>
+                  <article>
+                    <span>Oldest Received</span>
+                    <strong>{formatDate(details.summary.oldestReceivedDate)}</strong>
+                  </article>
+                  <article>
+                    <span>Avg True Cost</span>
+                    <strong>{formatMoney(details.summary.weightedAverageCostPerCigar)}</strong>
+                  </article>
+                  <article>
+                    <span>Avg MSRP</span>
+                    <strong>{formatMoney(details.summary.averageMsrpPerCigar)}</strong>
+                  </article>
+                  <article>
+                    <span>Current Cost Basis</span>
+                    <strong>{formatMoney(details.summary.currentCostBasis)}</strong>
+                  </article>
+                  <article>
+                    <span>Current MSRP Value</span>
+                    <strong>{formatMoney(details.summary.currentMsrpValue)}</strong>
+                  </article>
+                  <article>
+                    <span>Total Savings</span>
+                    <strong>{formatMoney(details.summary.totalSavings)}</strong>
+                  </article>
+                </div>
+              </section>
+
+              <section className="collection-details-section">
+                <div className="collection-section-heading">
+                  <h4>Current Locations</h4>
+                </div>
+                <div className="collection-detail-location-table">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Humidor</th>
+                        <th>Section</th>
+                        <th>Qty</th>
+                        <th>Lots</th>
+                        <th>Oldest</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {details.locations.map((location) => (
+                        <tr key={location.storageSubLocationId}>
+                          <td>
+                            {location.storageLocationName}
+                            {!location.storageLocationIsActive ? (
+                              <span className="inline-warning">Archived</span>
+                            ) : null}
+                          </td>
+                          <td>
+                            {location.storageSubLocationName}
+                            {!location.storageSubLocationIsActive ? (
+                              <span className="inline-warning">Archived</span>
+                            ) : null}
+                          </td>
+                          <td>{location.quantity}</td>
+                          <td>{location.lotCount}</td>
+                          <td>{formatDate(location.oldestReceivedDate)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="collection-detail-location-cards">
+                  {details.locations.map((location) => (
+                    <article key={location.storageSubLocationId}>
+                      <div>
+                        <strong>{location.storageLocationName}</strong>
+                        <span>{location.storageSubLocationName}</span>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>Qty</dt>
+                          <dd>{location.quantity}</dd>
+                        </div>
+                        <div>
+                          <dt>Lots</dt>
+                          <dd>{location.lotCount}</dd>
+                        </div>
+                        <div>
+                          <dt>Oldest</dt>
+                          <dd>{formatDate(location.oldestReceivedDate)}</dd>
+                        </div>
+                      </dl>
+                      {!location.storageLocationIsActive || !location.storageSubLocationIsActive ? (
+                        <span className="attention-badge">Archived Location</span>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="collection-details-section">
+                <div className="collection-section-heading">
+                  <h4>Lots</h4>
+                </div>
+                <div className="collection-lot-grid">
+                  {details.lots.map((lot) => (
+                    <article className="collection-lot-card" key={lot.lotId}>
+                      <div className="collection-lot-card-header">
+                        <div className="collection-lot-title">
+                          <p>Lot #{lot.lotId}</p>
+                          <strong>{lot.vendorNameSnapshot ?? 'Unknown Vendor'}</strong>
+                        </div>
+                        {lot.issues.length > 0 ? (
+                          <span className="attention-badge" title={lotIssueTitle(lot)}>
+                            Needs Attention
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {lot.issues.length > 0 ? (
+                        <div className="collection-lot-warning">
+                          {lot.issues.map((issue) => (
+                            <p key={issueKey(issue)}>{issueMessage(issue)}</p>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <dl className="collection-lot-definition">
+                        <div className="collection-lot-field-wide">
+                          <dt>Invoice/source</dt>
+                          <dd>{lot.invoiceOrSource ?? '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>Purchase date</dt>
+                          <dd>{formatDate(lot.purchaseDate)}</dd>
+                        </div>
+                        <div>
+                          <dt>Received date</dt>
+                          <dd>{formatDate(lot.receivedDate)}</dd>
+                        </div>
+                        <div>
+                          <dt>Original qty</dt>
+                          <dd>{lot.originalQuantity ?? '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>Current qty</dt>
+                          <dd>{lot.currentQuantity}</dd>
+                        </div>
+                        <div>
+                          <dt>True cost each</dt>
+                          <dd>
+                            {formatMoney(lot.costPerCigar)}
+                            {lot.costSource === 'ACTUAL_FALLBACK' ? (
+                              <small>Using original unit price</small>
+                            ) : null}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>MSRP each</dt>
+                          <dd>
+                            {formatMoney(lot.msrpPerCigar)}
+                            {lot.msrpSource === 'CATALOG_FALLBACK' ? (
+                              <small>Using current Catalog MSRP</small>
+                            ) : null}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Cost basis</dt>
+                          <dd>{formatMoney(lot.currentCostBasis)}</dd>
+                        </div>
+                        <div>
+                          <dt>MSRP value</dt>
+                          <dd>{formatMoney(lot.currentMsrpValue)}</dd>
+                        </div>
+                        <div className="collection-lot-field-wide collection-lot-total-savings">
+                          <dt>Total savings</dt>
+                          <dd>{formatMoney(lot.totalSavings)}</dd>
+                        </div>
+                      </dl>
+
+                      <div className="collection-lot-placements">
+                        <span>Current placement</span>
+                        {lot.locations.map((location) => (
+                          <p key={location.storageSubLocationId}>
+                            {location.storageLocationName} / {location.storageSubLocationName}{' '}
+                            &mdash; Qty {location.quantity}
+                          </p>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </section>
+      </div>
     )
   }
 
@@ -540,7 +948,15 @@ function Collection() {
                     const details = cigarDetails(cigar)
 
                     return (
-                      <tr key={cigar.id}>
+                      <tr
+                        className="collection-row-interactive"
+                        key={cigar.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${cigar.manufacturer} ${cigar.series} ${cigar.vitola}`}
+                        onClick={(event) => void openCigarDetails(cigar.id, event.currentTarget)}
+                        onKeyDown={(event) => handleOpenDetailsKeyDown(event, cigar.id)}
+                      >
                         <td>
                           <div className="collection-cigar-cell">
                             <strong>{cigarTitle(cigar)}</strong>
@@ -600,7 +1016,15 @@ function Collection() {
                 const details = cigarDetails(cigar)
 
                 return (
-                  <article className="collection-card" key={cigar.id}>
+                  <article
+                    className="collection-card collection-card-interactive"
+                    key={cigar.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`View details for ${cigar.manufacturer} ${cigar.series} ${cigar.vitola}`}
+                    onClick={(event) => void openCigarDetails(cigar.id, event.currentTarget)}
+                    onKeyDown={(event) => handleOpenDetailsKeyDown(event, cigar.id)}
+                  >
                     <div className="collection-card-title">
                       <strong>{cigarTitle(cigar)}</strong>
                       <span>{cigarSubtitle(cigar)}</span>
@@ -660,6 +1084,7 @@ function Collection() {
                         </small>
                       ) : null}
                     </div>
+                    <span className="collection-card-details-cue">View Details</span>
                   </article>
                 )
               })}
@@ -715,6 +1140,7 @@ function Collection() {
           </div>
         ) : null}
       </section>
+      {renderDetailsPanel()}
     </div>
   )
 }

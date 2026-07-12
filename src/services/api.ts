@@ -273,6 +273,61 @@ export type CollectionResponse = {
   issues: CollectionInventoryIssue[]
 }
 
+export type CollectionCigarSummary = {
+  totalQuantity: number
+  lotCount: number
+  locationCount: number
+  oldestReceivedDate: string | null
+  weightedAverageCostPerCigar: string | number | null
+  averageMsrpPerCigar: string | number | null
+  currentCostBasis: string | number | null
+  currentMsrpValue: string | number | null
+  savingsPerCigar: string | number | null
+  totalSavings: string | number | null
+}
+
+export type CollectionLotLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  quantity: number
+  storageLocationIsActive: boolean
+  storageSubLocationIsActive: boolean
+}
+
+export type CollectionLotSummary = {
+  lotId: number
+  purchaseOrderId: number | null
+  purchaseLineId: number | null
+  vendorIdSnapshot: number | null
+  vendorNameSnapshot: string | null
+  purchaseDate: string | null
+  receivedDate: string | null
+  originalQuantity: number | null
+  currentQuantity: number
+  cachedCurrentQuantity: number | null
+  costPerCigar: string | number | null
+  costSource: 'SNAPSHOT' | 'ALLOCATED' | 'ACTUAL_FALLBACK' | null
+  msrpPerCigar: string | number | null
+  msrpSource: 'SNAPSHOT' | 'LOT' | 'CATALOG_FALLBACK' | null
+  currentCostBasis: string | number | null
+  currentMsrpValue: string | number | null
+  totalSavings: string | number | null
+  invoiceOrSource: string | null
+  locations: CollectionLotLocation[]
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionCigarDetails = {
+  catalogCigar: CatalogCigar
+  summary: CollectionCigarSummary
+  locations: CollectionLocationSummary[]
+  lots: CollectionLotSummary[]
+  issues: CollectionInventoryIssue[]
+}
+
 export type CreateHumidorInput = {
   name: string
   capacity?: string
@@ -394,6 +449,17 @@ export async function getCollection(
   const response = await fetch(`${API_BASE_URL}/collection${query ? `?${query}` : ''}`)
 
   return parseJsonResponse<CollectionResponse>(response, 'Failed to load collection')
+}
+
+export async function getCollectionCigarDetails(
+  catalogCigarId: number,
+): Promise<CollectionCigarDetails> {
+  const response = await fetch(`${API_BASE_URL}/collection/${catalogCigarId}`)
+
+  return parseJsonResponse<CollectionCigarDetails>(
+    response,
+    'Failed to load cigar details',
+  )
 }
 
 export async function getVendors(search?: string): Promise<Vendor[]> {
