@@ -248,6 +248,37 @@ function Collection() {
     }
   }
 
+  async function reloadOpenCigarDetails() {
+    if (selectedCigarId === null) {
+      return
+    }
+
+    const requestId = detailsRequestIdRef.current + 1
+    detailsRequestIdRef.current = requestId
+    setDetailsError('')
+    setIsDetailsLoading(true)
+
+    try {
+      const data = await getCollectionCigarDetails(selectedCigarId)
+
+      if (requestId !== detailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsData(data)
+    } catch (loadError) {
+      if (requestId !== detailsRequestIdRef.current) {
+        return
+      }
+
+      setDetailsError(loadError instanceof Error ? loadError.message : 'Unable to load cigar details.')
+    } finally {
+      if (requestId === detailsRequestIdRef.current) {
+        setIsDetailsLoading(false)
+      }
+    }
+  }
+
   async function loadCollectionHumidors() {
     const requestId = humidorsRequestIdRef.current + 1
     humidorsRequestIdRef.current = requestId
@@ -307,6 +338,49 @@ function Collection() {
         setIsHumidorDetailsLoading(false)
       }
     }
+  }
+
+  async function reloadOpenHumidorDetails() {
+    if (selectedHumidorId === null) {
+      return
+    }
+
+    const requestId = humidorDetailsRequestIdRef.current + 1
+    humidorDetailsRequestIdRef.current = requestId
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(true)
+
+    try {
+      const data = await getCollectionHumidorDetails(selectedHumidorId)
+
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetails(data)
+    } catch (loadError) {
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Humidor details.',
+      )
+    } finally {
+      if (requestId === humidorDetailsRequestIdRef.current) {
+        setIsHumidorDetailsLoading(false)
+      }
+    }
+  }
+
+  async function handleInventoryChanged() {
+    await Promise.all([
+      collection
+        ? loadCollection(activeSearch, offset, pageSize, sortBy, sortDirection)
+        : Promise.resolve(),
+      collectionHumidors ? loadCollectionHumidors() : Promise.resolve(),
+      selectedHumidorId !== null ? reloadOpenHumidorDetails() : Promise.resolve(),
+    ])
   }
 
   function closeCigarDetails() {
@@ -1091,6 +1165,8 @@ function Collection() {
           isLoading={isDetailsLoading}
           error={detailsError}
           onClose={closeCigarDetails}
+          onReloadDetails={reloadOpenCigarDetails}
+          onInventoryChanged={handleInventoryChanged}
         />
       ) : null}
     </div>

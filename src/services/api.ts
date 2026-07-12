@@ -192,6 +192,35 @@ export type ReceiveStoreResult = {
   purchaseReceiptState: PurchaseReceiptState
 }
 
+export type MoveLotInput = {
+  fromStorageSubLocationId: number
+  toStorageSubLocationId: number
+  quantity: number
+  eventDate: string
+  notes?: string
+}
+
+export type MoveLocationSnapshot = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  storageSubLocationIsActive: boolean
+}
+
+export type MoveLotResult = {
+  lot: PurchaseLot
+  inventoryEvent: InventoryEvent
+  sourceBalance: LotLocationBalance | null
+  destinationBalance: LotLocationBalance
+  balances: LotLocationBalance[]
+  totalCurrentQuantity: number
+  sourceLocation: MoveLocationSnapshot
+  destinationLocation: MoveLocationSnapshot
+}
+
 export type CollectionInventoryIssue = {
   code: string
   message: string
@@ -565,6 +594,21 @@ export async function getCollectionHumidorDetails(
     response,
     'Failed to load humidor collection details',
   )
+}
+
+export async function moveLot(
+  lotId: number,
+  input: MoveLotInput,
+): Promise<MoveLotResult> {
+  const response = await fetch(`${API_BASE_URL}/lots/${lotId}/move`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<MoveLotResult>(response, 'Failed to move cigars')
 }
 
 export async function getVendors(search?: string): Promise<Vendor[]> {

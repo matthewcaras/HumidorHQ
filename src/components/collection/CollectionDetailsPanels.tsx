@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import type {
   CatalogCigar,
   CollectionCigarDetails,
   CollectionHumidorDetails,
   CollectionHumidorSectionCigar,
   CollectionInventoryIssue,
+  CollectionLotLocation,
   CollectionLotSummary,
+  MoveLotResult,
 } from '../../services/api'
+import { MoveLotPanel } from './MoveLotPanel'
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
@@ -193,6 +197,8 @@ type CigarDetailsPanelProps = {
   isLoading: boolean
   error: string
   onClose: () => void
+  onReloadDetails?: () => Promise<void>
+  onInventoryChanged?: () => void | Promise<void>
 }
 
 export function CigarDetailsPanel({
@@ -200,9 +206,28 @@ export function CigarDetailsPanel({
   isLoading,
   error,
   onClose,
+  onReloadDetails,
+  onInventoryChanged,
 }: CigarDetailsPanelProps) {
+  const [moveTarget, setMoveTarget] = useState<{
+    lot: CollectionLotSummary
+    placement: CollectionLotLocation
+  } | null>(null)
+  const [successMessage, setSuccessMessage] = useState('')
   const cigar = details?.catalogCigar
   const headerMeta = cigar ? cigarHeaderMeta(cigar) : []
+
+  async function handleMoveSuccess(_result: MoveLotResult) {
+    setMoveTarget(null)
+    setSuccessMessage('Cigars moved successfully.')
+
+    try {
+      await onReloadDetails?.()
+      await onInventoryChanged?.()
+    } catch {
+      setSuccessMessage('Cigars moved successfully. Refresh the page if the updated placement is not visible.')
+    }
+  }
 
   return (
     <div
@@ -238,6 +263,11 @@ export function CigarDetailsPanel({
 
         {isLoading ? <p className="muted">Loading cigar details...</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
+        {successMessage ? (
+          <p className="collection-detail-success" role="status">
+            {successMessage}
+          </p>
+        ) : null}
 
         {details ? (
           <div className="collection-details-content">
@@ -459,10 +489,25 @@ export function CigarDetailsPanel({
                     <div className="collection-lot-placements">
                       <span>Current placement</span>
                       {lot.locations.map((location) => (
-                        <p key={location.storageSubLocationId}>
-                          {location.storageLocationName} / {location.storageSubLocationName}{' '}
-                          &mdash; Qty {location.quantity}
-                        </p>
+                        <div
+                          className="collection-lot-placement-row"
+                          key={location.storageSubLocationId}
+                        >
+                          <p>
+                            {location.storageLocationName} / {location.storageSubLocationName}{' '}
+                            &mdash; Qty {location.quantity}
+                          </p>
+                          <button
+                            className="secondary-button collection-placement-move-button"
+                            type="button"
+                            onClick={() => {
+                              setSuccessMessage('')
+                              setMoveTarget({ lot, placement: location })
+                            }}
+                          >
+                            Move
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </article>
@@ -470,6 +515,16 @@ export function CigarDetailsPanel({
               </div>
             </section>
           </div>
+        ) : null}
+
+        {moveTarget && cigar ? (
+          <MoveLotPanel
+            cigar={cigar}
+            lot={moveTarget.lot}
+            placement={moveTarget.placement}
+            onClose={() => setMoveTarget(null)}
+            onSuccess={handleMoveSuccess}
+          />
         ) : null}
       </section>
     </div>

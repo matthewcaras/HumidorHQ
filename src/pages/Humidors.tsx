@@ -274,6 +274,39 @@ function Humidors() {
     }
   }
 
+  async function reloadOpenHumidorDetails() {
+    if (selectedHumidorId === null) {
+      return
+    }
+
+    const requestId = humidorDetailsRequestIdRef.current + 1
+    humidorDetailsRequestIdRef.current = requestId
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(true)
+
+    try {
+      const data = await getCollectionHumidorDetails(selectedHumidorId)
+
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetails(data)
+    } catch (loadError) {
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Humidor details.',
+      )
+    } finally {
+      if (requestId === humidorDetailsRequestIdRef.current) {
+        setIsHumidorDetailsLoading(false)
+      }
+    }
+  }
+
   async function openCigarDetails(catalogCigarId: number, opener: HTMLElement) {
     const requestId = cigarDetailsRequestIdRef.current + 1
     cigarDetailsRequestIdRef.current = requestId
@@ -304,6 +337,46 @@ function Humidors() {
         setIsCigarDetailsLoading(false)
       }
     }
+  }
+
+  async function reloadOpenCigarDetails() {
+    if (selectedCigarId === null) {
+      return
+    }
+
+    const requestId = cigarDetailsRequestIdRef.current + 1
+    cigarDetailsRequestIdRef.current = requestId
+    setCigarDetailsError('')
+    setIsCigarDetailsLoading(true)
+
+    try {
+      const data = await getCollectionCigarDetails(selectedCigarId)
+
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsData(data)
+    } catch (loadError) {
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load cigar details.',
+      )
+    } finally {
+      if (requestId === cigarDetailsRequestIdRef.current) {
+        setIsCigarDetailsLoading(false)
+      }
+    }
+  }
+
+  async function handleInventoryChanged() {
+    await Promise.all([
+      refreshInventorySummaries(),
+      selectedHumidorId !== null ? reloadOpenHumidorDetails() : Promise.resolve(),
+    ])
   }
 
   function closeCigarDetails() {
@@ -712,6 +785,8 @@ function Humidors() {
           isLoading={isCigarDetailsLoading}
           error={cigarDetailsError}
           onClose={closeCigarDetails}
+          onReloadDetails={reloadOpenCigarDetails}
+          onInventoryChanged={handleInventoryChanged}
         />
       ) : null}
 
