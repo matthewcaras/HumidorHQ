@@ -7,6 +7,7 @@ type CollectionPrismaClient = any
 export type CollectionServiceErrorCode =
   | 'COLLECTION_VALIDATION_ERROR'
   | 'COLLECTION_ITEM_NOT_FOUND'
+  | 'COLLECTION_HUMIDOR_NOT_FOUND'
   | 'COLLECTION_DATABASE_ERROR'
 
 type InventoryIssueSeverity = 'WARNING'

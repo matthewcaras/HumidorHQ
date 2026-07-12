@@ -43,6 +43,11 @@ import {
   getCollection,
   getCollectionCigarDetails,
 } from './services/collectionService.ts'
+import {
+  collectionStorageLocationIdParam,
+  getCollectionHumidorDetails,
+  getCollectionHumidors,
+} from './services/collectionHumidorService.ts'
 
 const app = express()
 
@@ -198,7 +203,29 @@ app.get('/api/collection', async (req, res) => {
   }
 })
 
-// Future static Collection routes, such as /api/collection/humidors, must be registered before this parameter route.
+app.get('/api/collection/humidors', async (_req, res) => {
+  try {
+    const humidors = await getCollectionHumidors()
+
+    res.json({ data: humidors })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+app.get('/api/collection/humidors/:storageLocationId', async (req, res) => {
+  try {
+    const humidor = await getCollectionHumidorDetails(
+      collectionStorageLocationIdParam(req.params.storageLocationId),
+    )
+
+    res.json({ data: humidor })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+// Static Collection routes, including /api/collection/humidors, must be registered before this parameter route.
 app.get('/api/collection/:catalogCigarId', async (req, res) => {
   try {
     const details = await getCollectionCigarDetails(
