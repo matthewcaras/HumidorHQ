@@ -29,6 +29,8 @@ import {
   getPurchases,
   purchaseIdParam,
   PurchaseServiceError,
+  updatePurchase,
+  updatePurchaseNotes,
 } from './services/purchaseService.ts'
 import {
   receiveAndStorePurchaseLine,
@@ -263,6 +265,24 @@ app.post('/api/purchases', async (req, res) => {
   try {
     const purchase = await createPurchase(req.body)
     res.status(201).json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.put('/api/purchases/:id', async (req, res) => {
+  try {
+    const purchase = await updatePurchase(purchaseIdParam(req.params.id), req.body)
+    res.json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.patch('/api/purchases/:id/notes', async (req, res) => {
+  try {
+    const purchase = await updatePurchaseNotes(purchaseIdParam(req.params.id), req.body)
+    res.json({ data: purchase })
   } catch (error) {
     handlePurchaseError(error, res)
   }
