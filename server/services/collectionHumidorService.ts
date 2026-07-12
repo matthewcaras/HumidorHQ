@@ -231,8 +231,10 @@ function sortHumidors(a: HumidorAccumulator, b: HumidorAccumulator) {
   }
 
   return (
-    a.storageLocation.displayOrder - b.storageLocation.displayOrder ||
-    a.storageLocation.name.localeCompare(b.storageLocation.name) ||
+    a.storageLocation.name.localeCompare(b.storageLocation.name, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }) ||
     a.storageLocation.id - b.storageLocation.id
   )
 }

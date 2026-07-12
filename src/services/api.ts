@@ -328,6 +328,91 @@ export type CollectionCigarDetails = {
   issues: CollectionInventoryIssue[]
 }
 
+export type CollectionHumidorStorageLocation = {
+  id: number
+  name: string
+  capacity: number | null
+  organizationType: StorageOrganizationType
+  displayOrder: number
+  isActive: boolean
+  notes?: string | null
+}
+
+export type CollectionHumidorSectionPreview = {
+  storageSubLocationId: number
+  name: string
+  kind: StorageSubLocationKind
+  displayOrder: number
+  isActive: boolean
+  quantity: number
+  uniqueCigarCount: number
+  lotCount: number
+}
+
+export type CollectionHumidorSummary = {
+  storageLocation: CollectionHumidorStorageLocation
+  totalQuantity: number
+  uniqueCigarCount: number
+  lotCount: number
+  occupiedSubLocationCount: number
+  totalSubLocationCount: number
+  oldestReceivedDate: string | null
+  capacityUsedPercent: number | null
+  sectionsPreview: CollectionHumidorSectionPreview[]
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionHumidorsResponse = {
+  summary: {
+    humidorCount: number
+    totalQuantity: number
+    uniqueCigarCount: number
+    lotCount: number
+    occupiedSubLocationCount: number
+  }
+  humidors: CollectionHumidorSummary[]
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionHumidorSectionCigar = {
+  catalogCigar: CatalogCigar
+  quantity: number
+  lotCount: number
+  oldestReceivedDate: string | null
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionHumidorSection = {
+  storageSubLocationId: number
+  name: string
+  kind: StorageSubLocationKind
+  displayOrder: number
+  isActive: boolean
+  quantity: number
+  uniqueCigarCount: number
+  lotCount: number
+  oldestReceivedDate: string | null
+  cigars: CollectionHumidorSectionCigar[]
+  issues: CollectionInventoryIssue[]
+}
+
+export type CollectionHumidorDetailsSummary = {
+  totalQuantity: number
+  uniqueCigarCount: number
+  lotCount: number
+  occupiedSubLocationCount: number
+  totalSubLocationCount: number
+  oldestReceivedDate: string | null
+  capacityUsedPercent: number | null
+}
+
+export type CollectionHumidorDetails = {
+  storageLocation: CollectionHumidorStorageLocation
+  summary: CollectionHumidorDetailsSummary
+  sections: CollectionHumidorSection[]
+  issues: CollectionInventoryIssue[]
+}
+
 export type CreateHumidorInput = {
   name: string
   capacity?: string
@@ -459,6 +544,26 @@ export async function getCollectionCigarDetails(
   return parseJsonResponse<CollectionCigarDetails>(
     response,
     'Failed to load cigar details',
+  )
+}
+
+export async function getCollectionHumidors(): Promise<CollectionHumidorsResponse> {
+  const response = await fetch(`${API_BASE_URL}/collection/humidors`)
+
+  return parseJsonResponse<CollectionHumidorsResponse>(
+    response,
+    'Failed to load collection humidors',
+  )
+}
+
+export async function getCollectionHumidorDetails(
+  storageLocationId: number,
+): Promise<CollectionHumidorDetails> {
+  const response = await fetch(`${API_BASE_URL}/collection/humidors/${storageLocationId}`)
+
+  return parseJsonResponse<CollectionHumidorDetails>(
+    response,
+    'Failed to load humidor collection details',
   )
 }
 

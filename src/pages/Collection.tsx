@@ -2,8 +2,14 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import {
   getCollection,
   getCollectionCigarDetails,
+  getCollectionHumidorDetails,
+  getCollectionHumidors,
   type CatalogCigar,
   type CollectionCigarDetails,
+  type CollectionHumidorDetails,
+  type CollectionHumidorSectionCigar,
+  type CollectionHumidorSummary,
+  type CollectionHumidorsResponse,
   type CollectionInventoryIssue,
   type CollectionItem,
   type CollectionLocationSummary,
@@ -14,6 +20,7 @@ import {
 } from '../services/api'
 
 type PageSize = 50 | 100 | 'all'
+type CollectionView = 'CIGAR' | 'HUMIDOR'
 
 const DEFAULT_PAGE_SIZE: PageSize = 50
 const PAGE_SIZE_OPTIONS: { value: PageSize; label: string }[] = [
@@ -90,6 +97,64 @@ function formatMoney(value: string | number | null | undefined) {
   const formatted = `$${dollars}.${centsText}`
 
   return isNegative ? `$(${dollars}.${centsText})` : formatted
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-'
+  }
+
+  return `${value.toFixed(1)}%`
+}
+
+function sectionKindLabel(value: string | null | undefined) {
+  switch (value) {
+    case 'DRAWER':
+      return 'Drawer'
+    case 'SHELF':
+      return 'Shelf'
+    case 'CUSTOM':
+      return 'Custom'
+    case 'GENERAL':
+    default:
+      return 'General'
+  }
+}
+
+function capacityText(totalQuantity: number, capacity: number | null | undefined) {
+  if (capacity === null || capacity === undefined || capacity <= 0) {
+    return 'Capacity not set'
+  }
+
+  return `${totalQuantity} of ${capacity} cigars`
+}
+
+function capacityPercentText(percent: number | null | undefined) {
+  if (percent === null || percent === undefined || !Number.isFinite(percent)) {
+    return ''
+  }
+
+  return percent > 100 ? `${formatPercent(percent)} of stated capacity` : `${formatPercent(percent)} full`
+}
+
+function humidorMetadataLine(
+  isActive: boolean,
+  totalQuantity: number,
+  capacity: number | null | undefined,
+  percent: number | null | undefined,
+) {
+  const status = isActive ? 'Active' : 'Archived'
+  const percentText = capacityPercentText(percent)
+
+  if (capacity === null || capacity === undefined || capacity <= 0) {
+    return totalQuantity > 0 ? `${status} - ${totalQuantity} cigars` : `${status} - Capacity not set`
+  }
+
+  if (totalQuantity === 0) {
+    return `${status} - Empty - Capacity ${capacity}`
+  }
+
+  return `${status} - ${totalQuantity} of ${capacity} cigars${percentText ? ` - ${percentText}` : ''}`
 }
 
 function cigarTitle(cigar: CatalogCigar) {
@@ -254,6 +319,7 @@ function nextSortLabel(
 }
 
 function Collection() {
+  const [activeView, setActiveView] = useState<CollectionView>('HUMIDOR')
   const [collection, setCollection] = useState<CollectionResponse | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
@@ -267,9 +333,20 @@ function Collection() {
   const [cigarDetailsData, setCigarDetailsData] = useState<CollectionCigarDetails | null>(null)
   const [isDetailsLoading, setIsDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
+  const [collectionHumidors, setCollectionHumidors] =
+    useState<CollectionHumidorsResponse | null>(null)
+  const [isHumidorsLoading, setIsHumidorsLoading] = useState(false)
+  const [humidorsError, setHumidorsError] = useState('')
+  const [selectedHumidorId, setSelectedHumidorId] = useState<number | null>(null)
+  const [humidorDetails, setHumidorDetails] = useState<CollectionHumidorDetails | null>(null)
+  const [isHumidorDetailsLoading, setIsHumidorDetailsLoading] = useState(false)
+  const [humidorDetailsError, setHumidorDetailsError] = useState('')
   const requestIdRef = useRef(0)
   const detailsRequestIdRef = useRef(0)
+  const humidorsRequestIdRef = useRef(0)
+  const humidorDetailsRequestIdRef = useRef(0)
   const detailsOpenerRef = useRef<HTMLElement | null>(null)
+  const humidorOpenerRef = useRef<HTMLElement | null>(null)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
   async function loadCollection(
@@ -341,6 +418,67 @@ function Collection() {
     }
   }
 
+  async function loadCollectionHumidors() {
+    const requestId = humidorsRequestIdRef.current + 1
+    humidorsRequestIdRef.current = requestId
+    setIsHumidorsLoading(true)
+    setHumidorsError('')
+
+    try {
+      const data = await getCollectionHumidors()
+
+      if (requestId !== humidorsRequestIdRef.current) {
+        return
+      }
+
+      setCollectionHumidors(data)
+    } catch (loadError) {
+      if (requestId !== humidorsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Collection humidors.',
+      )
+    } finally {
+      if (requestId === humidorsRequestIdRef.current) {
+        setIsHumidorsLoading(false)
+      }
+    }
+  }
+
+  async function openHumidorDetails(storageLocationId: number, opener: HTMLElement) {
+    const requestId = humidorDetailsRequestIdRef.current + 1
+    humidorDetailsRequestIdRef.current = requestId
+    humidorOpenerRef.current = opener
+    setSelectedHumidorId(storageLocationId)
+    setHumidorDetails(null)
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(true)
+
+    try {
+      const data = await getCollectionHumidorDetails(storageLocationId)
+
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetails(data)
+    } catch (loadError) {
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Humidor details.',
+      )
+    } finally {
+      if (requestId === humidorDetailsRequestIdRef.current) {
+        setIsHumidorDetailsLoading(false)
+      }
+    }
+  }
+
   function closeCigarDetails() {
     detailsRequestIdRef.current += 1
     setSelectedCigarId(null)
@@ -353,8 +491,20 @@ function Collection() {
     }, 0)
   }
 
+  function closeHumidorDetails() {
+    humidorDetailsRequestIdRef.current += 1
+    setSelectedHumidorId(null)
+    setHumidorDetails(null)
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(false)
+
+    window.setTimeout(() => {
+      humidorOpenerRef.current?.focus()
+    }, 0)
+  }
+
   useEffect(() => {
-    void loadCollection('', 0, DEFAULT_PAGE_SIZE, 'CIGAR', 'ASC')
+    void loadCollectionHumidors()
   }, [])
 
   useEffect(() => {
@@ -374,6 +524,24 @@ function Collection() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [selectedCigarId])
+
+  useEffect(() => {
+    if (selectedHumidorId === null) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && selectedCigarId === null) {
+        closeHumidorDetails()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedHumidorId, selectedCigarId])
 
   function handleSearch(event: FormEvent) {
     event.preventDefault()
@@ -418,11 +586,26 @@ function Collection() {
     headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  function handleViewChange(nextView: CollectionView) {
+    setActiveView(nextView)
+
+    if (nextView === 'HUMIDOR' && !collectionHumidors && !isHumidorsLoading) {
+      void loadCollectionHumidors()
+    }
+  }
+
   const summary = collection?.summary ?? {
     totalQuantity: 0,
     uniqueCigarCount: 0,
     lotCount: 0,
     locationCount: 0,
+  }
+  const humidorSummary = collectionHumidors?.summary ?? {
+    humidorCount: 0,
+    totalQuantity: 0,
+    uniqueCigarCount: 0,
+    lotCount: 0,
+    occupiedSubLocationCount: 0,
   }
   const isSearchActive = activeSearch.trim().length > 0
   const items = collection?.items ?? []
@@ -480,6 +663,405 @@ function Collection() {
       event.preventDefault()
       void openCigarDetails(catalogCigarId, event.currentTarget)
     }
+  }
+
+  function handleOpenHumidorDetailsKeyDown(
+    event: KeyboardEvent<HTMLElement>,
+    storageLocationId: number,
+  ) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      void openHumidorDetails(storageLocationId, event.currentTarget)
+    }
+  }
+
+  function renderHumidorSummaryCards() {
+    return (
+      <section className="summary-grid collection-summary-grid collection-humidor-summary-grid">
+        <article className="card collection-summary-card">
+          <p>Humidors</p>
+          <strong>{humidorSummary.humidorCount}</strong>
+        </article>
+        <article className="card collection-summary-card">
+          <p>Total Cigars</p>
+          <strong>{humidorSummary.totalQuantity}</strong>
+        </article>
+        <article className="card collection-summary-card">
+          <p>Unique Cigars</p>
+          <strong>{humidorSummary.uniqueCigarCount}</strong>
+        </article>
+        <article className="card collection-summary-card">
+          <p>Lots</p>
+          <strong>{humidorSummary.lotCount}</strong>
+        </article>
+      </section>
+    )
+  }
+
+  function renderHumidorCard(humidor: CollectionHumidorSummary) {
+    const capacitySummary = capacityText(
+      humidor.totalQuantity,
+      humidor.storageLocation.capacity,
+    )
+    const capacityPercent = capacityPercentText(humidor.capacityUsedPercent)
+    const moreSections = Math.max(
+      humidor.occupiedSubLocationCount - humidor.sectionsPreview.length,
+      0,
+    )
+
+    return (
+      <article
+        className="collection-humidor-card"
+        key={humidor.storageLocation.id}
+        tabIndex={0}
+        role="button"
+        aria-label={`Open ${humidor.storageLocation.name} Collection details`}
+        onClick={(event) =>
+          void openHumidorDetails(humidor.storageLocation.id, event.currentTarget)
+        }
+        onKeyDown={(event) =>
+          handleOpenHumidorDetailsKeyDown(event, humidor.storageLocation.id)
+        }
+      >
+        <div className="collection-humidor-card-header">
+          <div>
+            <h4>{humidor.storageLocation.name}</h4>
+          </div>
+          {!humidor.storageLocation.isActive ? (
+            <span className="attention-badge">Archived</span>
+          ) : null}
+          {humidor.issues.length > 0 ? (
+            <span className="attention-badge" title={issueTitle(humidor.issues)}>
+              Needs Attention
+            </span>
+          ) : null}
+        </div>
+
+        <div className="collection-humidor-stats">
+          <div>
+            <p>Total</p>
+            <strong>{humidor.totalQuantity}</strong>
+          </div>
+          <div>
+            <p>Unique</p>
+            <strong>{humidor.uniqueCigarCount}</strong>
+          </div>
+          <div>
+            <p>Lots</p>
+            <strong>{humidor.lotCount}</strong>
+          </div>
+          <div>
+            <p>Sections</p>
+            <strong>
+              {humidor.occupiedSubLocationCount}/{humidor.totalSubLocationCount}
+            </strong>
+          </div>
+          <div>
+            <p>Oldest</p>
+            <strong>{formatDate(humidor.oldestReceivedDate)}</strong>
+          </div>
+          <div>
+            <p>Capacity</p>
+            <strong>{capacitySummary}</strong>
+            {capacityPercent ? <small>{capacityPercent}</small> : null}
+          </div>
+        </div>
+
+        <div className="collection-humidor-sections-preview">
+          {humidor.sectionsPreview.length > 0 ? (
+            humidor.sectionsPreview.map((section) => (
+              <div key={section.storageSubLocationId}>
+                <strong>{section.name}</strong>
+                <span>
+                  {sectionKindLabel(section.kind)} - Qty {section.quantity}
+                </span>
+                <small>
+                  {section.uniqueCigarCount} unique - {section.lotCount}{' '}
+                  {section.lotCount === 1 ? 'lot' : 'lots'}
+                </small>
+              </div>
+            ))
+          ) : (
+            <div>
+              <strong>Empty</strong>
+              <span>{humidor.totalSubLocationCount} active sections</span>
+            </div>
+          )}
+          {moreSections > 0 ? (
+            <small>
+              +{moreSections} more occupied {moreSections === 1 ? 'section' : 'sections'}
+            </small>
+          ) : null}
+        </div>
+      </article>
+    )
+  }
+
+  function renderHumidorView() {
+    const humidors = collectionHumidors?.humidors ?? []
+
+    return (
+      <>
+        {renderHumidorSummaryCards()}
+
+        <section className="panel collection-panel collection-humidor-panel">
+          <div className="panel-header-row collection-panel-header collection-humidor-panel-header">
+            <div>
+              <h3>By Humidor</h3>
+              <p className="muted">Current inventory grouped by humidor and section.</p>
+            </div>
+          </div>
+
+          {humidorsError ? <p className="error-text">{humidorsError}</p> : null}
+          {isHumidorsLoading && !collectionHumidors ? (
+            <p className="muted">Loading Collection humidors...</p>
+          ) : null}
+          {isHumidorsLoading && collectionHumidors ? (
+            <p className="search-results-message">Updating Collection humidors...</p>
+          ) : null}
+
+          {collectionHumidors && collectionHumidors.issues.length > 0 ? (
+            <div className="collection-warning-panel" role="status">
+              <strong>Needs attention</strong>
+              <p>
+                Some Humidor inventory records need review. Quantities are still shown from
+                current positive location balances.
+              </p>
+            </div>
+          ) : null}
+
+          {collectionHumidors && humidors.length === 0 ? (
+            <div className="collection-empty-state">
+              <h3>No active humidors are available.</h3>
+            </div>
+          ) : null}
+
+          {humidors.length > 0 ? (
+            <div className="collection-humidor-grid">
+              {humidors.map((humidor) => renderHumidorCard(humidor))}
+            </div>
+          ) : null}
+        </section>
+      </>
+    )
+  }
+
+  function renderSectionCigar(cigar: CollectionHumidorSectionCigar) {
+    const details = cigarDetails(cigar.catalogCigar)
+
+    return (
+      <button
+        className="collection-section-cigar"
+        key={cigar.catalogCigar.id}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          void openCigarDetails(cigar.catalogCigar.id, event.currentTarget)
+        }}
+      >
+        <div className="collection-section-cigar-identity">
+          <strong>{cigar.catalogCigar.manufacturer}</strong>
+          <span>
+            {cigar.catalogCigar.series} - {cigar.catalogCigar.vitola}
+          </span>
+          {details ? <small>{details}</small> : null}
+          {cigar.issues.length > 0 ? (
+            <em title={issueTitle(cigar.issues)}>Needs Attention</em>
+          ) : null}
+        </div>
+        <div className="collection-section-cigar-stats">
+          <span>
+            <strong>{cigar.quantity}</strong>
+            Qty
+          </span>
+          <span>
+            <strong>{cigar.lotCount}</strong>
+            {cigar.lotCount === 1 ? 'Lot' : 'Lots'}
+          </span>
+          <span>
+            <strong>{formatDate(cigar.oldestReceivedDate)}</strong>
+            Oldest
+          </span>
+        </div>
+      </button>
+    )
+  }
+
+  function renderHumidorDetailsPanel() {
+    if (selectedHumidorId === null) {
+      return null
+    }
+
+    const details = humidorDetails
+    const storageLocation = details?.storageLocation
+    const metadataLine =
+      details && storageLocation
+        ? humidorMetadataLine(
+            storageLocation.isActive,
+            details.summary.totalQuantity,
+            storageLocation.capacity,
+            details.summary.capacityUsedPercent,
+          )
+        : ''
+
+    return (
+      <div
+        className="modal-backdrop collection-details-backdrop collection-humidor-details-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && selectedCigarId === null) {
+            closeHumidorDetails()
+          }
+        }}
+      >
+        <section
+          className="modal collection-details-modal collection-humidor-details-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="collection-humidor-details-title"
+        >
+          <div className="modal-header collection-details-header collection-humidor-modal-header">
+            <div>
+              <p className="modal-kicker">Humidor Details</p>
+              <h3 id="collection-humidor-details-title">
+                {storageLocation ? storageLocation.name : 'Humidor Details'}
+              </h3>
+              {metadataLine ? (
+                <span className="collection-humidor-modal-meta">{metadataLine}</span>
+              ) : null}
+              {storageLocation && !storageLocation.isActive ? (
+                <span className="attention-badge">Archived</span>
+              ) : null}
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Close humidor details"
+              onClick={closeHumidorDetails}
+            >
+              &times;
+            </button>
+          </div>
+
+          {isHumidorDetailsLoading ? <p className="muted">Loading Humidor details...</p> : null}
+          {humidorDetailsError ? <p className="error-text">{humidorDetailsError}</p> : null}
+
+          {details && storageLocation ? (
+            <div className="collection-details-content collection-humidor-details-content">
+              {storageLocation.notes ? (
+                <section className="collection-humidor-notes">
+                  <p>{storageLocation.notes}</p>
+                </section>
+              ) : null}
+
+              {details.issues.length > 0 ? (
+                <section className="collection-detail-warning">
+                  <strong>Needs Attention</strong>
+                  <ul>
+                    {details.issues.map((issue) => (
+                      <li key={issueKey(issue)}>{issueMessage(issue)}</li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              <section className="collection-details-section">
+                <div className="collection-section-heading">
+                  <h4>Current Humidor</h4>
+                </div>
+                <div className="collection-detail-summary-grid collection-humidor-detail-summary-grid">
+                  <article>
+                    <span>Total Cigars</span>
+                    <strong>{details.summary.totalQuantity}</strong>
+                  </article>
+                  <article>
+                    <span>Unique Cigars</span>
+                    <strong>{details.summary.uniqueCigarCount}</strong>
+                  </article>
+                  <article>
+                    <span>Lots</span>
+                    <strong>{details.summary.lotCount}</strong>
+                  </article>
+                  <article>
+                    <span>Oldest Received</span>
+                    <strong>{formatDate(details.summary.oldestReceivedDate)}</strong>
+                  </article>
+                  <article>
+                    <span>Capacity Used</span>
+                    <strong>{formatPercent(details.summary.capacityUsedPercent)}</strong>
+                  </article>
+                </div>
+              </section>
+
+              {details.summary.totalQuantity === 0 ? (
+                <div className="collection-empty-state collection-humidor-empty-state">
+                  <h3>No cigars are currently stored in this Humidor.</h3>
+                </div>
+              ) : null}
+
+              <section className="collection-details-section">
+                <div className="collection-section-heading">
+                  <h4>Sections</h4>
+                </div>
+                <div className="collection-humidor-section-grid">
+                  {details.sections.map((section) => (
+                    <article className="collection-humidor-section-card" key={section.storageSubLocationId}>
+                      <div className="collection-humidor-section-header">
+                        <div>
+                          <h5>{section.name}</h5>
+                        </div>
+                        {!section.isActive ? <span className="attention-badge">Archived</span> : null}
+                        {section.issues.length > 0 ? (
+                          <span className="attention-badge" title={issueTitle(section.issues)}>
+                            Needs Attention
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {section.issues.length > 0 ? (
+                        <div className="collection-lot-warning">
+                          {section.issues.map((issue) => (
+                            <p key={issueKey(issue)}>{issueMessage(issue)}</p>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="collection-humidor-section-stats">
+                        <div>
+                          <p>Qty</p>
+                          <strong>{section.quantity}</strong>
+                        </div>
+                        <div>
+                          <p>Unique</p>
+                          <strong>{section.uniqueCigarCount}</strong>
+                        </div>
+                        <div>
+                          <p>Lots</p>
+                          <strong>{section.lotCount}</strong>
+                        </div>
+                        <div>
+                          <p>Oldest</p>
+                          <strong>{formatDate(section.oldestReceivedDate)}</strong>
+                        </div>
+                      </div>
+
+                      {section.cigars.length > 0 ? (
+                        <div className="collection-section-cigar-list">
+                          {section.cigars.map((cigar) => renderSectionCigar(cigar))}
+                        </div>
+                      ) : (
+                        <p className="collection-section-empty">
+                          No cigars stored in this section.
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    )
   }
 
   function renderDetailsPanel() {
@@ -774,8 +1356,30 @@ function Collection() {
             Browse your current cigars and find exactly where they are stored.
           </p>
         </div>
+        <div className="collection-view-switch" role="tablist" aria-label="Collection view">
+          <button
+            className={activeView === 'CIGAR' ? 'active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={activeView === 'CIGAR'}
+            onClick={() => handleViewChange('CIGAR')}
+          >
+            By Cigar
+          </button>
+          <button
+            className={activeView === 'HUMIDOR' ? 'active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={activeView === 'HUMIDOR'}
+            onClick={() => handleViewChange('HUMIDOR')}
+          >
+            By Humidor
+          </button>
+        </div>
       </header>
 
+      {activeView === 'CIGAR' ? (
+        <>
       <section className="summary-grid collection-summary-grid">
         <article className="card collection-summary-card">
           <p>Total Cigars</p>
@@ -788,10 +1392,6 @@ function Collection() {
         <article className="card collection-summary-card">
           <p>Lots</p>
           <strong>{summary.lotCount}</strong>
-        </article>
-        <article className="card collection-summary-card">
-          <p>Storage Locations</p>
-          <strong>{summary.locationCount}</strong>
         </article>
       </section>
 
@@ -1140,6 +1740,11 @@ function Collection() {
           </div>
         ) : null}
       </section>
+        </>
+      ) : (
+        renderHumidorView()
+      )}
+      {renderHumidorDetailsPanel()}
       {renderDetailsPanel()}
     </div>
   )

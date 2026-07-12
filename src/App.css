@@ -772,6 +772,10 @@ button:disabled {
   place-items: center;
 }
 
+.collection-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .collection-panel {
   overflow: visible;
 }
@@ -1100,6 +1104,165 @@ button:disabled {
   background: #17120f;
   color: #ffffff;
   padding: 8px 10px;
+}
+
+.collection-view-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 150px));
+  justify-content: center;
+  gap: 0;
+  margin: 18px auto 0;
+  width: min(300px, 100%);
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  overflow: hidden;
+}
+
+.collection-view-switch button {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: #d7c8ba;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 10px 14px;
+}
+
+.collection-view-switch button.active {
+  background: #c99b63;
+  color: #17120f;
+}
+
+.collection-view-switch button:focus-visible {
+  outline: 2px solid #f1c982;
+  outline-offset: -3px;
+}
+
+.collection-humidor-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.collection-humidor-panel-header {
+  justify-content: center;
+  text-align: center;
+}
+
+.collection-humidor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.collection-humidor-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 14px;
+  background: #1c1511;
+  cursor: pointer;
+  padding: 15px;
+}
+
+.collection-humidor-card:hover,
+.collection-humidor-card:focus-visible {
+  background: #241b16;
+}
+
+.collection-humidor-card:focus-visible {
+  outline: 2px solid #c99b63;
+  outline-offset: 3px;
+}
+
+.collection-humidor-card-header {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.collection-humidor-card-header div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.collection-humidor-card-header h4 {
+  color: #ffffff;
+  font-size: 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.collection-humidor-stats,
+.collection-humidor-section-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.collection-humidor-stats div,
+.collection-humidor-section-stats div {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 10px;
+  background: #241b16;
+  padding: 10px;
+  text-align: center;
+}
+
+.collection-humidor-stats p,
+.collection-humidor-section-stats p {
+  color: #b9a89a;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.collection-humidor-stats strong,
+.collection-humidor-section-stats strong {
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.collection-humidor-stats small {
+  color: #f1c982;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.collection-humidor-sections-preview {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #3b2b22;
+  padding-top: 12px;
+}
+
+.collection-humidor-sections-preview div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.collection-humidor-sections-preview strong {
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.collection-humidor-sections-preview span {
+  color: #f1c982;
+  font-weight: 800;
+}
+
+.collection-humidor-sections-preview small {
+  color: #b9a89a;
 }
 
 .collection-row-interactive {
@@ -1433,6 +1596,189 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.collection-humidor-modal-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: start;
+  text-align: center;
+}
+
+.collection-humidor-modal-header > div {
+  display: grid;
+  justify-items: center;
+  grid-column: 2;
+  min-width: 0;
+}
+
+.collection-humidor-modal-header .icon-button {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.collection-humidor-modal-meta {
+  color: #d7c8ba;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.collection-humidor-modal-header .attention-badge {
+  margin-top: 8px;
+}
+
+.collection-humidor-notes {
+  border-bottom: 1px solid #3b2b22;
+  padding-bottom: 16px;
+  text-align: center;
+}
+
+.collection-humidor-notes p {
+  color: #b9a89a;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.collection-humidor-detail-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.collection-humidor-detail-summary-grid article {
+  grid-column: auto;
+}
+
+.collection-humidor-empty-state {
+  margin-top: 0;
+}
+
+.collection-humidor-section-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.collection-humidor-section-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 14px;
+  background: #1c1511;
+  padding: 15px;
+}
+
+.collection-humidor-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collection-humidor-section-header div {
+  display: grid;
+  min-width: 0;
+}
+
+.collection-humidor-section-header h5 {
+  color: #ffffff;
+  font-size: 18px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.collection-section-empty {
+  border-top: 1px solid #3b2b22;
+  color: #b9a89a;
+  margin: 0;
+  padding-top: 12px;
+  text-align: center;
+}
+
+.collection-section-cigar-list {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #3b2b22;
+  padding-top: 12px;
+}
+
+.collection-section-cigar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #241b16;
+  color: inherit;
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.collection-section-cigar:hover,
+.collection-section-cigar:focus-visible {
+  border-color: #c99b63;
+}
+
+.collection-section-cigar:focus-visible {
+  outline: 2px solid #c99b63;
+  outline-offset: 2px;
+}
+
+.collection-section-cigar-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.collection-section-cigar-identity strong {
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.collection-section-cigar-identity span {
+  color: #f8f3ed;
+  overflow-wrap: anywhere;
+}
+
+.collection-section-cigar-identity small {
+  color: #b9a89a;
+}
+
+.collection-section-cigar-identity em {
+  width: fit-content;
+  border: 1px solid #5a412c;
+  border-radius: 999px;
+  background: #2f251d;
+  color: #f1c982;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.collection-section-cigar-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.collection-section-cigar-stats span {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  color: #b9a89a;
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 0;
+  text-align: center;
+}
+
+.collection-section-cigar-stats strong {
+  color: #ffffff;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1100px) {
   .purchase-detail-modal .desktop-line-table {
     display: none;
@@ -1445,6 +1791,21 @@ button:disabled {
 }
 
 @media (max-width: 1040px) {
+  .collection-summary-grid,
+  .collection-humidor-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .collection-summary-grid:not(.collection-humidor-summary-grid) .collection-summary-card:last-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 260px);
+  }
+
+  .collection-humidor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .collection-desktop-table {
     display: none;
   }
@@ -2468,6 +2829,12 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .collection-humidor-detail-summary-grid article:last-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 360px);
+  }
+
   .collection-lot-grid {
     grid-template-columns: 1fr;
   }
@@ -2538,6 +2905,50 @@ button:disabled {
     margin: 0;
   }
 
+  .collection-view-switch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .collection-summary-grid,
+  .collection-humidor-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .collection-summary-grid:not(.collection-humidor-summary-grid) .collection-summary-card:last-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 240px);
+  }
+
+  .collection-humidor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-humidor-card {
+    padding: 14px;
+  }
+
+  .collection-humidor-section-header {
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .collection-section-cigar {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .collection-section-cigar-identity {
+    justify-items: center;
+  }
+
+  .collection-section-cigar-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
 }
 
 @media (max-width: 420px) {
@@ -2549,9 +2960,20 @@ button:disabled {
   .collection-detail-location-cards dl {
     grid-template-columns: 1fr;
   }
+
+  .collection-humidor-stats,
+  .collection-humidor-section-stats,
+  .collection-section-cigar-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-humidor-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 340px) {
+  .collection-humidor-summary-grid,
   .collection-lot-definition {
     grid-template-columns: 1fr;
   }
