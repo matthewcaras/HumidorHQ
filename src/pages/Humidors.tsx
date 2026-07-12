@@ -207,8 +207,7 @@ function Humidors() {
   return (
     <>
       <header className="page-header">
-        <div>
-          <p className="eyebrow">Humidors</p>
+        <div className="page-header-copy">
           <h2>Humidors</h2>
           <p className="page-subtitle">
             Manage your storage locations, capacity, shelves, and occupancy.
