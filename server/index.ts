@@ -38,6 +38,11 @@ import {
   purchaseLineIdParam,
 } from './services/receiveStoreService.ts'
 import {
+  moveLot,
+  MoveServiceError,
+  moveLotIdParam,
+} from './services/moveService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -163,6 +168,25 @@ function handleReceiveStoreError(error: unknown, res: express.Response) {
     error: {
       code: 'RECEIVE_STORE_UNEXPECTED_ERROR',
       message: 'The receive and store request could not be completed.',
+    },
+  })
+}
+
+function handleMoveError(error: unknown, res: express.Response) {
+  if (error instanceof MoveServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'MOVE_UNEXPECTED_ERROR',
+      message: 'The Move request could not be completed.',
     },
   })
 }
@@ -379,6 +403,15 @@ app.post('/api/purchase-lines/:id/receive-store', async (req, res) => {
     res.json({ data: result })
   } catch (error) {
     handleReceiveStoreError(error, res)
+  }
+})
+
+app.post('/api/lots/:lotId/move', async (req, res) => {
+  try {
+    const result = await moveLot(moveLotIdParam(req.params.lotId), req.body)
+    res.json({ data: result })
+  } catch (error) {
+    handleMoveError(error, res)
   }
 })
 
