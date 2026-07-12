@@ -197,8 +197,10 @@ model StorageSubLocation {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
-  storageLocation     StorageLocation      @relation(fields: [storageLocationId], references: [id])
-  lotLocationBalances LotLocationBalance[]
+  storageLocation         StorageLocation      @relation(fields: [storageLocationId], references: [id])
+  lotLocationBalances     LotLocationBalance[]
+  outboundInventoryEvents InventoryEvent[]     @relation("InventoryEventFromStorageSubLocation")
+  inboundInventoryEvents  InventoryEvent[]     @relation("InventoryEventToStorageSubLocation")
 
   @@unique([storageLocationId, name])
   @@index([storageLocationId, isActive, displayOrder])
@@ -221,20 +223,29 @@ model LotLocationBalance {
   @@index([storageSubLocationId])
 }
 
+/// InventoryEvent is the historical source of truth. Initial placement uses a null source and populated destination. Movement uses both source and destination. Consumption or removal uses a populated source and null destination.
 model InventoryEvent {
-  id        Int      @id @default(autoincrement())
-  lotId     Int
-  eventType String
-  quantity  Int
-  eventDate DateTime
-  notes     String?
+  id                       Int      @id @default(autoincrement())
+  lotId                    Int
+  eventType                String
+  quantity                 Int
+  eventDate                DateTime
+  notes                    String?
+  fromStorageSubLocationId Int?
+  toStorageSubLocationId   Int?
 
   costPerCigarAtEvent Decimal?
   msrpPerCigarAtEvent Decimal?
 
   createdAt DateTime @default(now())
 
-  lot Lot @relation(fields: [lotId], references: [id])
+  lot                    Lot                 @relation(fields: [lotId], references: [id])
+  fromStorageSubLocation StorageSubLocation? @relation("InventoryEventFromStorageSubLocation", fields: [fromStorageSubLocationId], references: [id])
+  toStorageSubLocation   StorageSubLocation? @relation("InventoryEventToStorageSubLocation", fields: [toStorageSubLocationId], references: [id])
+
+  @@index([fromStorageSubLocationId])
+  @@index([toStorageSubLocationId])
+  @@index([eventType, eventDate])
 }
 
 /// Catalog records describe what a cigar is. They do not store quantity, cost basis, purchase history, or humidor location.
