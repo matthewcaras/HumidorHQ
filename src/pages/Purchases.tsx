@@ -4,13 +4,18 @@ import {
   createPurchase,
   createVendor,
   getCatalogCigars,
+  getHumidors,
   getPurchaseById,
   getPurchases,
   getVendors,
+  receiveAndStorePurchaseLine,
   type CatalogCigar,
+  type Humidor,
   type Purchase,
   type PurchaseLine,
   type PurchaseReceiptState,
+  type ReceiveStoreLineState,
+  type StorageSubLocation,
   type Vendor,
 } from '../services/api'
 import {
@@ -98,12 +103,39 @@ type CatalogCreateDraft = {
 
 type CatalogCreateField = keyof CatalogCreateDraft
 
+type ReceiveStorePanelState = {
+  line: PurchaseLine
+  receivedDate: string
+  storageLocationId: string
+  storageSubLocationId: string
+  error: string
+  fieldErrors: {
+    receivedDate?: string
+    storageLocationId?: string
+    storageSubLocationId?: string
+  }
+}
+
 function localDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function calendarDateValue(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return date.toISOString().slice(0, 10)
 }
 
 function makeLocalId() {
@@ -242,6 +274,34 @@ function receiptLabel(state: PurchaseReceiptState) {
     default:
       return 'En Route'
   }
+}
+
+function lineState(line: PurchaseLine): ReceiveStoreLineState {
+  if (line.lot?.currentQuantity !== null && line.lot?.currentQuantity !== undefined && line.lot.currentQuantity > 0) {
+    return 'STORED'
+  }
+
+  if (line.receivedDate) {
+    return 'RECEIVED_NOT_STORED'
+  }
+
+  return 'EN_ROUTE'
+}
+
+function lineStateLabel(state: ReceiveStoreLineState) {
+  switch (state) {
+    case 'STORED':
+      return 'Stored'
+    case 'RECEIVED_NOT_STORED':
+      return 'Received, Not Stored'
+    case 'EN_ROUTE':
+    default:
+      return 'En Route'
+  }
+}
+
+function isReceiveStoreEligible(line: PurchaseLine) {
+  return lineState(line) !== 'STORED'
 }
 
 function cigarName(line: PurchaseLine) {
@@ -559,6 +619,12 @@ function Purchases() {
   const [isOrderDiscountInfoPinned, setIsOrderDiscountInfoPinned] = useState(false)
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
+  const [receiveStorePanel, setReceiveStorePanel] = useState<ReceiveStorePanelState | null>(null)
+  const [humidors, setHumidors] = useState<Humidor[]>([])
+  const [isHumidorsLoading, setIsHumidorsLoading] = useState(false)
+  const [humidorLoadError, setHumidorLoadError] = useState('')
+  const [isReceivingStore, setIsReceivingStore] = useState(false)
+  const [receiveStoreSuccessMessage, setReceiveStoreSuccessMessage] = useState('')
   const [search, setSearch] = useState('')
   const [submittedSearch, setSubmittedSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -697,6 +763,169 @@ function Purchases() {
       setError(detailError instanceof Error ? detailError.message : 'Unable to load purchase.')
     } finally {
       setIsDetailLoading(false)
+    }
+  }
+
+  async function refreshSelectedPurchase(purchaseId: number) {
+    const detail = await getPurchaseById(purchaseId)
+    setSelectedPurchase(detail)
+    return detail
+  }
+
+  async function loadHumidorsForReceiveStore() {
+    setIsHumidorsLoading(true)
+    setHumidorLoadError('')
+
+    try {
+      const data = await getHumidors()
+      setHumidors(data)
+    } catch (loadError) {
+      setHumidorLoadError(
+        loadError instanceof Error ? loadError.message : 'Unable to load humidors.',
+      )
+    } finally {
+      setIsHumidorsLoading(false)
+    }
+  }
+
+  function openReceiveStorePanel(line: PurchaseLine) {
+    const existingReceivedDate = calendarDateValue(line.receivedDate)
+
+    setReceiveStorePanel({
+      line,
+      receivedDate: existingReceivedDate || localDateString(),
+      storageLocationId: '',
+      storageSubLocationId: '',
+      error: '',
+      fieldErrors: {},
+    })
+    void loadHumidorsForReceiveStore()
+  }
+
+  function closeReceiveStorePanel() {
+    if (isReceivingStore) {
+      return
+    }
+
+    setReceiveStorePanel(null)
+  }
+
+  function updateReceiveStorePanel(
+    updates: Partial<Omit<ReceiveStorePanelState, 'line' | 'fieldErrors'>> & {
+      fieldErrors?: ReceiveStorePanelState['fieldErrors']
+    },
+  ) {
+    setReceiveStorePanel((current) => (current ? { ...current, ...updates } : current))
+  }
+
+  function selectedReceiveHumidor() {
+    if (!receiveStorePanel?.storageLocationId) {
+      return null
+    }
+
+    return (
+      humidors.find((humidor) => humidor.id === Number(receiveStorePanel.storageLocationId)) ??
+      null
+    )
+  }
+
+  function activeSubLocationsForReceiveStore() {
+    return selectedReceiveHumidor()?.subLocations.filter((subLocation) => subLocation.isActive) ?? []
+  }
+
+  function handleReceiveHumidorChange(value: string) {
+    const humidor = humidors.find((candidate) => candidate.id === Number(value))
+    const activeSubLocations = humidor?.subLocations.filter((subLocation) => subLocation.isActive) ?? []
+    const defaultSubLocation =
+      activeSubLocations.length === 1 && activeSubLocations[0].kind === 'GENERAL'
+        ? activeSubLocations[0]
+        : null
+
+    updateReceiveStorePanel({
+      storageLocationId: value,
+      storageSubLocationId: defaultSubLocation ? String(defaultSubLocation.id) : '',
+      fieldErrors: {},
+      error: '',
+    })
+  }
+
+  function handleReceiveSubLocationChange(value: string) {
+    updateReceiveStorePanel({
+      storageSubLocationId: value,
+      fieldErrors: {},
+      error: '',
+    })
+  }
+
+  function handleReceiveDateChange(value: string) {
+    updateReceiveStorePanel({
+      receivedDate: value,
+      fieldErrors: {},
+      error: '',
+    })
+  }
+
+  function validateReceiveStore(panel: ReceiveStorePanelState) {
+    const fieldErrors: ReceiveStorePanelState['fieldErrors'] = {}
+    const purchaseDate = calendarDateValue(selectedPurchase?.purchaseDate)
+    const selectedHumidor = humidors.find((humidor) => humidor.id === Number(panel.storageLocationId))
+    const selectedSubLocation = selectedHumidor?.subLocations.find(
+      (subLocation) => subLocation.id === Number(panel.storageSubLocationId),
+    )
+
+    if (!isValidCalendarDate(panel.receivedDate)) {
+      fieldErrors.receivedDate = 'Received date must be a valid date.'
+    } else if (purchaseDate && panel.receivedDate < purchaseDate) {
+      fieldErrors.receivedDate = 'Received date must not be earlier than the purchase date.'
+    }
+
+    if (!selectedHumidor) {
+      fieldErrors.storageLocationId = 'Choose a humidor.'
+    }
+
+    if (!selectedSubLocation || !selectedSubLocation.isActive) {
+      fieldErrors.storageSubLocationId = 'Choose an active storage section.'
+    }
+
+    return fieldErrors
+  }
+
+  async function handleReceiveStoreSubmit() {
+    if (!receiveStorePanel || !selectedPurchase || isReceivingStore) {
+      return
+    }
+
+    const fieldErrors = validateReceiveStore(receiveStorePanel)
+    if (Object.keys(fieldErrors).length > 0) {
+      setReceiveStorePanel((current) =>
+        current ? { ...current, fieldErrors, error: '' } : current,
+      )
+      return
+    }
+
+    setIsReceivingStore(true)
+    setReceiveStorePanel((current) =>
+      current ? { ...current, fieldErrors: {}, error: '' } : current,
+    )
+
+    try {
+      await receiveAndStorePurchaseLine(receiveStorePanel.line.id, {
+        receivedDate: receiveStorePanel.receivedDate,
+        storageLocationId: Number(receiveStorePanel.storageLocationId),
+        storageSubLocationId: Number(receiveStorePanel.storageSubLocationId),
+      })
+      await refreshSelectedPurchase(selectedPurchase.id)
+      await loadPurchases(submittedSearch)
+      setReceiveStorePanel(null)
+      setReceiveStoreSuccessMessage('Cigars received and stored successfully.')
+    } catch (receiveError) {
+      const message =
+        receiveError instanceof Error
+          ? receiveError.message
+          : 'Unable to receive and store cigars.'
+      setReceiveStorePanel((current) => (current ? { ...current, error: message } : current))
+    } finally {
+      setIsReceivingStore(false)
     }
   }
 
@@ -1108,6 +1337,17 @@ function Purchases() {
     : purchaseSubmissionValidation.isValid
       ? 'Save this purchase.'
       : 'Complete the vendor, line items, and balanced invoice before saving.'
+  const receiveStoreLineState = receiveStorePanel ? lineState(receiveStorePanel.line) : null
+  const receiveStorePurchaseDate = calendarDateValue(selectedPurchase?.purchaseDate)
+  const receiveStoreActiveSubLocations = activeSubLocationsForReceiveStore()
+  const receiveStoreValidation = receiveStorePanel
+    ? validateReceiveStore(receiveStorePanel)
+    : {}
+  const canConfirmReceiveStore =
+    Boolean(receiveStorePanel) &&
+    Object.keys(receiveStoreValidation).length === 0 &&
+    !isReceivingStore &&
+    !isHumidorsLoading
 
   useEffect(() => {
     if (saveErrorMessage) {
@@ -1121,12 +1361,13 @@ function Purchases() {
       successMessageTimerRef.current = null
     }
 
-    if (!saveSuccessMessage) {
+    if (!saveSuccessMessage && !receiveStoreSuccessMessage) {
       return
     }
 
     successMessageTimerRef.current = window.setTimeout(() => {
       setSaveSuccessMessage('')
+      setReceiveStoreSuccessMessage('')
       successMessageTimerRef.current = null
     }, 3000)
 
@@ -1136,7 +1377,7 @@ function Purchases() {
         successMessageTimerRef.current = null
       }
     }
-  }, [saveSuccessMessage])
+  }, [saveSuccessMessage, receiveStoreSuccessMessage])
 
   if (pageMode === 'ADD') {
     return (
@@ -2016,7 +2257,7 @@ function Purchases() {
                     <th>Cigars</th>
                     <th>Total Paid</th>
                     <th>Receipt Status</th>
-                    {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
+                    {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -2031,7 +2272,7 @@ function Purchases() {
                       <td>{money(purchase.totalPaid)}</td>
                       <td>{receiptLabel(purchase.receiptState)}</td>
                       <td>
-                        {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
+                        {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
                         <button
                           className="table-action"
                           type="button"
@@ -2074,7 +2315,7 @@ function Purchases() {
                     <p>Receipt Status</p>
                     <strong>{receiptLabel(purchase.receiptState)}</strong>
                   </div>
-                  {/* TODO: Add Edit after Receive & Store locking rules are defined. TODO: Add line-level Receive & Store in a later stage. */}
+                  {/* TODO: Add Edit after Receive & Store locking rules are defined. */}
                   <button
                     className="primary-button purchase-card-action"
                     type="button"
@@ -2135,7 +2376,7 @@ function Purchases() {
                 <strong>{money(selectedPurchase.salesTax)}</strong>
               </div>
               <div>
-                <p>Discount</p>
+                <p>Order Discount</p>
                 <strong>{money(selectedPurchase.discount)}</strong>
               </div>
               <div>
@@ -2144,92 +2385,283 @@ function Purchases() {
               </div>
             </div>
 
+            {receiveStoreSuccessMessage && (
+              <p className="purchase-save-message" role="status">
+                {receiveStoreSuccessMessage}
+              </p>
+            )}
+
             <div className="table-scroll desktop-line-table">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Cigar</th>
-                    <th>Quantity</th>
+                    <th>Qty</th>
                     <th>Unit Price</th>
                     <th>Line Subtotal</th>
                     <th>MSRP Each</th>
                     <th>Received Date</th>
-                    <th>Allocated Shipping</th>
-                    <th>Allocated Excise Tax</th>
-                    <th>Allocated Sales Tax</th>
-                    <th>Allocated Discount</th>
-                    <th>True Cost Each</th>
+                    <th className="purchase-line-true-cost-column">True Cost Each</th>
+                    <th className="purchase-line-state-column">Line State</th>
+                    <th className="purchase-line-actions-column">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedPurchase.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>{cigarName(line)}</td>
-                      <td>{line.quantity}</td>
-                      <td>{money(line.unitPrice)}</td>
-                      <td>{money(line.lineSubtotal)}</td>
-                      <td>{money(line.msrpPerCigar)}</td>
-                      <td>{dateLabel(line.receivedDate)}</td>
-                      <td>{money(line.allocatedShipping)}</td>
-                      <td>{money(line.allocatedExciseTax)}</td>
-                      <td>{money(line.allocatedSalesTax)}</td>
-                      <td>{money(line.allocatedDiscount)}</td>
-                      <td>{trueCostEach(line)}</td>
-                    </tr>
-                  ))}
+                  {selectedPurchase.lines.map((line) => {
+                    const state = lineState(line)
+
+                    return (
+                      <tr key={line.id}>
+                        <td>{cigarName(line)}</td>
+                        <td>{line.quantity}</td>
+                        <td>{money(line.unitPrice)}</td>
+                        <td>{money(line.lineSubtotal)}</td>
+                        <td>{money(line.msrpPerCigar)}</td>
+                        <td>{dateLabel(line.receivedDate)}</td>
+                        <td className="purchase-line-true-cost-column">{trueCostEach(line)}</td>
+                        <td className="purchase-line-state-column">
+                          <span className={`line-state line-state-${state.toLowerCase()}`}>
+                            {lineStateLabel(state)}
+                          </span>
+                        </td>
+                        <td className="purchase-line-actions-column">
+                          {isReceiveStoreEligible(line) ? (
+                            <button
+                              aria-label="Receive and store this purchase line"
+                              className="table-action receive-store-action"
+                              type="button"
+                              onClick={() => openReceiveStorePanel(line)}
+                            >
+                              Receive
+                            </button>
+                          ) : (
+                            <span className="muted">Stored</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
 
             <div className="purchase-line-card-list">
-              {selectedPurchase.lines.map((line) => (
-                <article className="purchase-line-card" key={line.id}>
-                  <div className="purchase-line-card-title">{cigarName(line)}</div>
-                  <div className="purchase-line-fields">
-                    <div>
-                      <p>Quantity</p>
-                      <strong>{line.quantity}</strong>
+              {selectedPurchase.lines.map((line) => {
+                const state = lineState(line)
+
+                return (
+                  <article className="purchase-line-card" key={line.id}>
+                    <div className="purchase-line-card-title">{cigarName(line)}</div>
+                    <div className="purchase-line-state-row">
+                      <span className={`line-state line-state-${state.toLowerCase()}`}>
+                        {lineStateLabel(state)}
+                      </span>
                     </div>
-                    <div>
-                      <p>Unit Price</p>
-                      <strong>{money(line.unitPrice)}</strong>
+                    <div className="purchase-line-fields">
+                      <div>
+                        <p>Quantity</p>
+                        <strong>{line.quantity}</strong>
+                      </div>
+                      <div>
+                        <p>Unit Price</p>
+                        <strong>{money(line.unitPrice)}</strong>
+                      </div>
+                      <div>
+                        <p>Subtotal</p>
+                        <strong>{money(line.lineSubtotal)}</strong>
+                      </div>
+                      <div>
+                        <p>MSRP Each</p>
+                        <strong>{money(line.msrpPerCigar)}</strong>
+                      </div>
+                      <div>
+                        <p>Received Date</p>
+                        <strong>{dateLabel(line.receivedDate)}</strong>
+                      </div>
+                      <div>
+                        <p>True Cost Each</p>
+                        <strong>{trueCostEach(line)}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <p>Subtotal</p>
-                      <strong>{money(line.lineSubtotal)}</strong>
-                    </div>
-                    <div>
-                      <p>MSRP Each</p>
-                      <strong>{money(line.msrpPerCigar)}</strong>
-                    </div>
-                    <div>
-                      <p>Received Date</p>
-                      <strong>{dateLabel(line.receivedDate)}</strong>
-                    </div>
-                    <div>
-                      <p>Allocated Shipping</p>
-                      <strong>{money(line.allocatedShipping)}</strong>
-                    </div>
-                    <div>
-                      <p>Allocated Excise Tax</p>
-                      <strong>{money(line.allocatedExciseTax)}</strong>
-                    </div>
-                    <div>
-                      <p>Allocated Sales Tax</p>
-                      <strong>{money(line.allocatedSalesTax)}</strong>
-                    </div>
-                    <div>
-                      <p>Allocated Discount</p>
-                      <strong>{money(line.allocatedDiscount)}</strong>
-                    </div>
-                    <div>
-                      <p>True Cost Each</p>
-                      <strong>{trueCostEach(line)}</strong>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                    {isReceiveStoreEligible(line) ? (
+                      <button
+                        aria-label="Receive and store this purchase line"
+                        className="primary-button receive-store-card-action"
+                        type="button"
+                        onClick={() => openReceiveStorePanel(line)}
+                      >
+                        Receive
+                      </button>
+                    ) : (
+                      <p className="muted stored-line-message">Stored</p>
+                    )}
+                  </article>
+                )
+              })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {receiveStorePanel && selectedPurchase && (
+        <div className="modal-backdrop receive-store-backdrop">
+          <div className="modal receive-store-modal">
+            <div className="modal-header">
+              <h3>Receive & Store</h3>
+              <button
+                aria-label="Close Receive and Store"
+                className="icon-button"
+                disabled={isReceivingStore}
+                type="button"
+                onClick={closeReceiveStorePanel}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="receive-store-summary">
+              <div>
+                <p>Manufacturer</p>
+                <strong>{receiveStorePanel.line.catalogCigar.manufacturer}</strong>
+              </div>
+              <div>
+                <p>Series</p>
+                <strong>{receiveStorePanel.line.catalogCigar.series}</strong>
+              </div>
+              <div>
+                <p>Vitola</p>
+                <strong>{receiveStorePanel.line.catalogCigar.vitola}</strong>
+              </div>
+              <div>
+                <p>Quantity</p>
+                <strong>{receiveStorePanel.line.quantity}</strong>
+              </div>
+              <div>
+                <p>Invoice Number</p>
+                <strong>{selectedPurchase.invoiceNumber ?? '-'}</strong>
+              </div>
+              <div>
+                <p>Purchase Date</p>
+                <strong>{dateLabel(selectedPurchase.purchaseDate)}</strong>
+              </div>
+              <div>
+                <p>Current State</p>
+                <strong>
+                  {receiveStoreLineState ? lineStateLabel(receiveStoreLineState) : '-'}
+                </strong>
+              </div>
+              <div>
+                <p>Existing Received Date</p>
+                <strong>{dateLabel(receiveStorePanel.line.receivedDate)}</strong>
+              </div>
+            </div>
+
+            <form
+              className="receive-store-form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleReceiveStoreSubmit()
+              }}
+            >
+              {receiveStorePanel.error && (
+                <p className="error-text receive-store-error" role="alert">
+                  {receiveStorePanel.error}
+                </p>
+              )}
+
+              <label>
+                Received Date
+                <input
+                  type="date"
+                  value={receiveStorePanel.receivedDate}
+                  min={receiveStorePurchaseDate || undefined}
+                  disabled={Boolean(receiveStorePanel.line.receivedDate)}
+                  onChange={(event) => handleReceiveDateChange(event.target.value)}
+                />
+                {receiveStorePanel.line.receivedDate && (
+                  <span className="muted">
+                    Existing received dates are preserved in this workflow.
+                  </span>
+                )}
+                {receiveStorePanel.fieldErrors.receivedDate && (
+                  <p className="error-text line-field-message">
+                    {receiveStorePanel.fieldErrors.receivedDate}
+                  </p>
+                )}
+              </label>
+
+              <label>
+                Humidor
+                <select
+                  value={receiveStorePanel.storageLocationId}
+                  disabled={isHumidorsLoading || isReceivingStore}
+                  onChange={(event) => handleReceiveHumidorChange(event.target.value)}
+                >
+                  <option value="">Choose humidor</option>
+                  {humidors.map((humidor) => (
+                    <option key={humidor.id} value={humidor.id}>
+                      {humidor.name}
+                    </option>
+                  ))}
+                </select>
+                {isHumidorsLoading && <span className="muted">Loading humidors...</span>}
+                {humidorLoadError && <p className="error-text">{humidorLoadError}</p>}
+                {receiveStorePanel.fieldErrors.storageLocationId && (
+                  <p className="error-text line-field-message">
+                    {receiveStorePanel.fieldErrors.storageLocationId}
+                  </p>
+                )}
+              </label>
+
+              <label>
+                Storage Section
+                <select
+                  value={receiveStorePanel.storageSubLocationId}
+                  disabled={
+                    isHumidorsLoading ||
+                    isReceivingStore ||
+                    !receiveStorePanel.storageLocationId
+                  }
+                  onChange={(event) => handleReceiveSubLocationChange(event.target.value)}
+                >
+                  <option value="">Choose section</option>
+                  {receiveStoreActiveSubLocations.map((subLocation: StorageSubLocation) => (
+                    <option key={subLocation.id} value={subLocation.id}>
+                      {subLocation.name}
+                    </option>
+                  ))}
+                </select>
+                {receiveStorePanel.storageLocationId &&
+                  receiveStoreActiveSubLocations.length === 0 && (
+                    <p className="error-text line-field-message">
+                      This humidor has no active storage sections.
+                    </p>
+                  )}
+                {receiveStorePanel.fieldErrors.storageSubLocationId && (
+                  <p className="error-text line-field-message">
+                    {receiveStorePanel.fieldErrors.storageSubLocationId}
+                  </p>
+                )}
+              </label>
+
+              <div className="receive-store-actions">
+                <button
+                  className="secondary-button"
+                  disabled={isReceivingStore}
+                  type="button"
+                  onClick={closeReceiveStorePanel}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={!canConfirmReceiveStore}
+                  type="submit"
+                >
+                  {isReceivingStore ? 'Receiving...' : 'Confirm Receive & Store'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

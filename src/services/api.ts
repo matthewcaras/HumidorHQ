@@ -28,6 +28,8 @@ shelfCount: number | null
 
 export type PurchaseReceiptState = 'EN_ROUTE' | 'PARTIALLY_RECEIVED' | 'RECEIVED'
 
+export type ReceiveStoreLineState = 'EN_ROUTE' | 'RECEIVED_NOT_STORED' | 'STORED'
+
 export type Vendor = {
   id: number
   name: string
@@ -92,6 +94,31 @@ export type PurchaseLot = {
   allocatedCostPerCigar: string | number | null
   costPerCigarSnapshot: string | number | null
   receivedDateSnapshot: string | null
+  locationBalances?: LotLocationBalance[]
+  events?: InventoryEvent[]
+}
+
+export type LotLocationBalance = {
+  id: number
+  lotId: number
+  storageSubLocationId: number
+  quantity: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type InventoryEvent = {
+  id: number
+  lotId: number
+  eventType: string
+  quantity: number
+  eventDate: string
+  notes: string | null
+  fromStorageSubLocationId: number | null
+  toStorageSubLocationId: number | null
+  costPerCigarAtEvent: string | number | null
+  msrpPerCigarAtEvent: string | number | null
+  createdAt: string
 }
 
 export type PurchaseLine = {
@@ -145,6 +172,21 @@ export type CreatePurchaseInput = {
   totalPaid: string
   notes?: string
   lines: CreatePurchaseLineInput[]
+}
+
+export type ReceiveStoreInput = {
+  receivedDate: string
+  storageLocationId: number
+  storageSubLocationId: number
+}
+
+export type ReceiveStoreResult = {
+  purchaseLine: PurchaseLine
+  lot: PurchaseLot
+  locationBalance: LotLocationBalance
+  inventoryEvent: InventoryEvent
+  lineState: ReceiveStoreLineState
+  purchaseReceiptState: PurchaseReceiptState
 }
 
 export type CreateHumidorInput = {
@@ -320,4 +362,19 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
   })
 
   return parseJsonResponse<Purchase>(response, 'Failed to create purchase')
+}
+
+export async function receiveAndStorePurchaseLine(
+  purchaseLineId: number,
+  input: ReceiveStoreInput,
+): Promise<ReceiveStoreResult> {
+  const response = await fetch(`${API_BASE_URL}/purchase-lines/${purchaseLineId}/receive-store`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<ReceiveStoreResult>(response, 'Failed to receive and store cigars')
 }
