@@ -30,6 +30,11 @@ import {
   purchaseIdParam,
   PurchaseServiceError,
 } from './services/purchaseService.ts'
+import {
+  receiveAndStorePurchaseLine,
+  ReceiveStoreServiceError,
+  purchaseLineIdParam,
+} from './services/receiveStoreService.ts'
 
 const app = express()
 
@@ -126,6 +131,25 @@ function handlePurchaseError(error: unknown, res: express.Response) {
     error: {
       code: 'PURCHASE_UNEXPECTED_ERROR',
       message: 'The purchase request could not be completed.',
+    },
+  })
+}
+
+function handleReceiveStoreError(error: unknown, res: express.Response) {
+  if (error instanceof ReceiveStoreServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'RECEIVE_STORE_UNEXPECTED_ERROR',
+      message: 'The receive and store request could not be completed.',
     },
   })
 }
@@ -241,6 +265,18 @@ app.post('/api/purchases', async (req, res) => {
     res.status(201).json({ data: purchase })
   } catch (error) {
     handlePurchaseError(error, res)
+  }
+})
+
+app.post('/api/purchase-lines/:id/receive-store', async (req, res) => {
+  try {
+    const result = await receiveAndStorePurchaseLine(
+      purchaseLineIdParam(req.params.id),
+      req.body,
+    )
+    res.json({ data: result })
+  } catch (error) {
+    handleReceiveStoreError(error, res)
   }
 })
 
