@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import CatalogFormPanel from '../components/catalog/CatalogFormPanel'
 import {
   ApiError,
+  archiveCatalogCigar,
   createCatalogCigar,
   getManagedCatalog,
   getManagedCatalogDetails,
+  restoreCatalogCigar,
   updateCatalogCigar,
   type CatalogManagementCigar,
   type CatalogManagementDetails,
@@ -18,6 +20,7 @@ import {
 
 type PageSize = 50 | 100 | 'all'
 type CatalogFormMode = 'ADD' | 'EDIT'
+type CatalogStatusMode = 'ARCHIVE' | 'RESTORE'
 
 const DEFAULT_PAGE_SIZE: PageSize = 50
 const DEFAULT_SORT_BY: CatalogManagementSortBy = 'CIGAR'
@@ -198,12 +201,215 @@ function CatalogStatusBadge({ isActive }: { isActive: boolean }) {
   return <span className={statusClass(isActive)}>{statusLabel(isActive)}</span>
 }
 
+function catalogUsageExists(details: CatalogManagementDetails) {
+  return (
+    details.usage.currentQuantity > 0 ||
+    details.usage.lotCount > 0 ||
+    details.usage.purchaseLineCount > 0 ||
+    details.usage.inventoryEventCount > 0 ||
+    details.usage.currentLocationCount > 0
+  )
+}
+
+function statusActionLabel(isActive: boolean) {
+  return isActive ? 'Archive' : 'Restore'
+}
+
+type CatalogStatusPanelProps = {
+  mode: CatalogStatusMode
+  details: CatalogManagementDetails | null
+  isLoading: boolean
+  loadError: string
+  actionError: string
+  isSaving: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function CatalogStatusPanel({
+  mode,
+  details,
+  isLoading,
+  loadError,
+  actionError,
+  isSaving,
+  onCancel,
+  onConfirm,
+}: CatalogStatusPanelProps) {
+  const title = mode === 'ARCHIVE' ? 'Archive Catalog Cigar' : 'Restore Catalog Cigar'
+  const actionLabel = mode === 'ARCHIVE' ? 'Archive Cigar' : 'Restore Cigar'
+  const pendingLabel = mode === 'ARCHIVE' ? 'Archiving...' : 'Restoring...'
+  const cigar = details?.catalogCigar
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    window.setTimeout(() => cancelButtonRef.current?.focus(), 0)
+  }, [])
+
+  useEffect(() => {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape' || isSaving) {
+        return
+      }
+
+      event.preventDefault()
+      onCancel()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isSaving, onCancel])
+
+  return (
+    <div
+      className="modal-backdrop catalog-status-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSaving) {
+          onCancel()
+        }
+      }}
+    >
+      <section
+        className="modal catalog-status-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="catalog-status-title"
+      >
+        <div className="modal-header catalog-status-header">
+          <div>
+            <p className="modal-kicker">Catalog</p>
+            <h3 id="catalog-status-title">{title}</h3>
+          </div>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={`Close ${title}`}
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            &times;
+          </button>
+        </div>
+
+        {isLoading ? (
+          <section className="catalog-status-loading" aria-live="polite">
+            <p>Loading Catalog cigar...</p>
+          </section>
+        ) : null}
+
+        {loadError ? (
+          <section className="catalog-status-alert catalog-status-alert-error" role="alert">
+            <strong>Catalog cigar could not be loaded.</strong>
+            <p>{loadError}</p>
+          </section>
+        ) : null}
+
+        {details && cigar ? (
+          <div className="catalog-status-content">
+            <section className="catalog-status-identity">
+              <div>
+                <p>{cigar.manufacturer}</p>
+                <h4>{cigarSubtitle(cigar)}</h4>
+                {cigar.wrapper ? <span>{cigar.wrapper}</span> : null}
+              </div>
+              <CatalogStatusBadge isActive={cigar.isActive} />
+            </section>
+
+            <section className="catalog-status-usage" aria-label="Catalog usage">
+              <article>
+                <span>Current Quantity</span>
+                <strong>{details.usage.currentQuantity}</strong>
+              </article>
+              <article>
+                <span>Lots</span>
+                <strong>{details.usage.lotCount}</strong>
+              </article>
+              <article>
+                <span>Purchase Lines</span>
+                <strong>{details.usage.purchaseLineCount}</strong>
+              </article>
+              <article>
+                <span>Inventory Events</span>
+                <strong>{details.usage.inventoryEventCount}</strong>
+              </article>
+              <article>
+                <span>Current Locations</span>
+                <strong>{details.usage.currentLocationCount}</strong>
+              </article>
+            </section>
+
+            {mode === 'ARCHIVE' ? (
+              <section className="catalog-status-message">
+                <p>
+                  {catalogUsageExists(details)
+                    ? 'This cigar is used by purchases or inventory. Archiving removes it from new-purchase selection, but existing purchases, Lots, inventory, and activity history will remain available.'
+                    : 'This Catalog cigar will no longer be available for new purchases. Existing records will remain unchanged.'}
+                </p>
+                {details.usage.currentQuantity > 0 ? (
+                  <p className="catalog-status-inventory-warning">
+                    This cigar currently has {details.usage.currentQuantity}{' '}
+                    {pluralize(details.usage.currentQuantity, 'cigar')} in inventory. It will remain
+                    visible in Collection and historical records after archiving.
+                  </p>
+                ) : null}
+              </section>
+            ) : (
+              <section className="catalog-status-message">
+                <p>Restoring this Catalog cigar makes it available for new purchases again.</p>
+              </section>
+            )}
+
+            {actionError ? (
+              <section className="catalog-status-alert catalog-status-alert-error" role="alert">
+                <strong>{mode === 'ARCHIVE' ? 'Archive failed.' : 'Restore failed.'}</strong>
+                <p>{actionError}</p>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="catalog-status-actions">
+          <button
+            ref={cancelButtonRef}
+            className="secondary-button"
+            type="button"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className={
+              mode === 'ARCHIVE'
+                ? 'primary-button catalog-destructive-button'
+                : 'primary-button catalog-restore-button'
+            }
+            type="button"
+            disabled={isSaving || isLoading || Boolean(loadError) || !details}
+            onClick={onConfirm}
+          >
+            {isSaving ? pendingLabel : actionLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 type CatalogDetailsPanelProps = {
   details: CatalogManagementDetails | null
   isLoading: boolean
   error: string
   onClose: () => void
   onEdit: (catalogCigarId: number, opener: HTMLElement) => void
+  onStatusAction: (
+    mode: CatalogStatusMode,
+    catalogCigarId: number,
+    opener: HTMLElement,
+  ) => void
 }
 
 function CatalogDetailsPanel({
@@ -212,6 +418,7 @@ function CatalogDetailsPanel({
   error,
   onClose,
   onEdit,
+  onStatusAction,
 }: CatalogDetailsPanelProps) {
   const cigar = details?.catalogCigar
   const title = cigar ? cigar.manufacturer : 'Catalog Details'
@@ -247,6 +454,21 @@ function CatalogDetailsPanel({
                 Edit
               </button>
             ) : null}
+            {cigar ? (
+              <button
+                className={
+                  cigar.isActive
+                    ? 'secondary-button danger-button'
+                    : 'secondary-button catalog-restore-outline-button'
+                }
+                type="button"
+                onClick={(event) =>
+                  onStatusAction(cigar.isActive ? 'ARCHIVE' : 'RESTORE', cigar.id, event.currentTarget)
+                }
+              >
+                {statusActionLabel(cigar.isActive)}
+              </button>
+            ) : null}
             <button
               className="icon-button"
               type="button"
@@ -270,6 +492,12 @@ function CatalogDetailsPanel({
               </div>
               <CatalogStatusBadge isActive={cigar.isActive} />
             </section>
+
+            {!cigar.isActive && details.usage.currentQuantity > 0 ? (
+              <p className="catalog-archived-inventory-note">
+                Archived Catalog cigar with current inventory.
+              </p>
+            ) : null}
 
             <section className="catalog-details-section">
               <div className="catalog-section-heading">
@@ -409,12 +637,20 @@ function Catalog() {
   const [isFormSaving, setIsFormSaving] = useState(false)
   const [formSaveError, setFormSaveError] = useState('')
   const [formIdentityError, setFormIdentityError] = useState('')
+  const [statusMode, setStatusMode] = useState<CatalogStatusMode | null>(null)
+  const [statusDetails, setStatusDetails] = useState<CatalogManagementDetails | null>(null)
+  const [isStatusLoading, setIsStatusLoading] = useState(false)
+  const [statusLoadError, setStatusLoadError] = useState('')
+  const [statusActionError, setStatusActionError] = useState('')
+  const [isStatusSaving, setIsStatusSaving] = useState(false)
   const [catalogSuccessMessage, setCatalogSuccessMessage] = useState('')
   const listRequestIdRef = useRef(0)
   const detailsRequestIdRef = useRef(0)
   const formRequestIdRef = useRef(0)
+  const statusRequestIdRef = useRef(0)
   const detailsOpenerRef = useRef<HTMLElement | null>(null)
   const formOpenerRef = useRef<HTMLElement | null>(null)
+  const statusOpenerRef = useRef<HTMLElement | null>(null)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
   async function loadCatalog(
@@ -519,6 +755,14 @@ function Catalog() {
 
     if (error.code === 'CATALOG_DUPLICATE_ARCHIVED_RECORD') {
       return 'An archived Catalog cigar already uses this identity. Restore the archived record instead of creating a duplicate.'
+    }
+
+    return ''
+  }
+
+  function duplicateRestoreMessage(error: unknown) {
+    if (error instanceof ApiError && error.code === 'CATALOG_DUPLICATE_ACTIVE_RECORD') {
+      return 'An active Catalog cigar already uses this manufacturer, series, vitola, and wrapper. Resolve the duplicate before restoring this record.'
     }
 
     return ''
@@ -650,6 +894,114 @@ function Catalog() {
     }, 0)
   }
 
+  function focusStatusReturnTarget() {
+    window.setTimeout(() => {
+      const returnTarget = [
+        statusOpenerRef.current,
+        detailsOpenerRef.current,
+        headingRef.current,
+      ].find((element): element is HTMLElement => Boolean(element?.isConnected))
+
+      returnTarget?.focus()
+    }, 0)
+  }
+
+  async function openCatalogStatusPanel(
+    mode: CatalogStatusMode,
+    catalogCigarId: number,
+    opener: HTMLElement,
+  ) {
+    if (formMode !== null) {
+      return
+    }
+
+    const requestId = statusRequestIdRef.current + 1
+    statusRequestIdRef.current = requestId
+    clearCatalogDetails(false)
+    statusOpenerRef.current = opener
+    setCatalogSuccessMessage('')
+    setStatusMode(mode)
+    setStatusDetails(null)
+    setStatusLoadError('')
+    setStatusActionError('')
+    setIsStatusSaving(false)
+    setIsStatusLoading(true)
+
+    try {
+      const data = await getManagedCatalogDetails(catalogCigarId)
+
+      if (requestId !== statusRequestIdRef.current) {
+        return
+      }
+
+      setStatusDetails(data)
+    } catch (loadError) {
+      if (requestId !== statusRequestIdRef.current) {
+        return
+      }
+
+      setStatusLoadError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Catalog cigar.',
+      )
+    } finally {
+      if (requestId === statusRequestIdRef.current) {
+        setIsStatusLoading(false)
+      }
+    }
+  }
+
+  function closeCatalogStatusPanel(restoreFocus = true) {
+    statusRequestIdRef.current += 1
+    setStatusMode(null)
+    setStatusDetails(null)
+    setIsStatusLoading(false)
+    setStatusLoadError('')
+    setStatusActionError('')
+    setIsStatusSaving(false)
+
+    if (restoreFocus) {
+      focusStatusReturnTarget()
+    }
+  }
+
+  async function handleCatalogStatusConfirm() {
+    if (!statusMode || !statusDetails || isStatusSaving) {
+      return
+    }
+
+    setIsStatusSaving(true)
+    setStatusActionError('')
+
+    try {
+      if (statusMode === 'ARCHIVE') {
+        await archiveCatalogCigar(statusDetails.catalogCigar.id)
+      } else {
+        await restoreCatalogCigar(statusDetails.catalogCigar.id)
+      }
+
+      setCatalogSuccessMessage(
+        statusMode === 'ARCHIVE'
+          ? 'Catalog cigar archived successfully.'
+          : 'Catalog cigar restored successfully.',
+      )
+      closeCatalogStatusPanel(false)
+      clearCatalogDetails(false)
+      await refreshCatalogAfterWrite()
+      focusStatusReturnTarget()
+    } catch (statusError) {
+      const duplicateMessage =
+        statusMode === 'RESTORE' ? duplicateRestoreMessage(statusError) : ''
+      setStatusActionError(
+        duplicateMessage ||
+          (statusError instanceof Error
+            ? statusError.message
+            : 'Catalog status could not be changed.'),
+      )
+    } finally {
+      setIsStatusSaving(false)
+    }
+  }
+
   async function handleCatalogFormSave(input: CatalogWriteInput) {
     if (!formMode || isFormSaving) {
       return
@@ -699,6 +1051,7 @@ function Catalog() {
       listRequestIdRef.current += 1
       detailsRequestIdRef.current += 1
       formRequestIdRef.current += 1
+      statusRequestIdRef.current += 1
     }
   }, [])
 
@@ -791,6 +1144,14 @@ function Catalog() {
     void openEditCatalogForm(catalogCigarId, opener)
   }
 
+  function handleStatusAction(
+    mode: CatalogStatusMode,
+    catalogCigarId: number,
+    opener: HTMLElement,
+  ) {
+    void openCatalogStatusPanel(mode, catalogCigarId, opener)
+  }
+
   function renderSortHeader(headerSortBy: CatalogManagementSortBy, label: string) {
     const isActive = sortBy === headerSortBy
 
@@ -852,6 +1213,7 @@ function Catalog() {
             <button
               className="table-action catalog-edit-button"
               type="button"
+              disabled={formMode !== null}
               onClick={(event) => {
                 event.stopPropagation()
                 handleEditAction(cigar.id, event.currentTarget)
@@ -859,6 +1221,26 @@ function Catalog() {
               onKeyDown={(event) => event.stopPropagation()}
             >
               Edit
+            </button>
+            <button
+              className={
+                cigar.isActive
+                  ? 'table-action danger catalog-status-action-button'
+                  : 'table-action catalog-status-action-button'
+              }
+              type="button"
+              disabled={formMode !== null}
+              onClick={(event) => {
+                event.stopPropagation()
+                handleStatusAction(
+                  cigar.isActive ? 'ARCHIVE' : 'RESTORE',
+                  cigar.id,
+                  event.currentTarget,
+                )
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              {statusActionLabel(cigar.isActive)}
             </button>
           </div>
         </td>
@@ -923,6 +1305,7 @@ function Catalog() {
           <button
             className="primary-button"
             type="button"
+            disabled={formMode !== null}
             onClick={(event) => {
               event.stopPropagation()
               handleEditAction(cigar.id, event.currentTarget)
@@ -930,6 +1313,26 @@ function Catalog() {
             onKeyDown={(event) => event.stopPropagation()}
           >
             Edit
+          </button>
+          <button
+            className={
+              cigar.isActive
+                ? 'secondary-button danger-button'
+                : 'secondary-button catalog-restore-outline-button'
+            }
+            type="button"
+            disabled={formMode !== null}
+            onClick={(event) => {
+              event.stopPropagation()
+              handleStatusAction(
+                cigar.isActive ? 'ARCHIVE' : 'RESTORE',
+                cigar.id,
+                event.currentTarget,
+              )
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {statusActionLabel(cigar.isActive)}
           </button>
         </div>
       </article>
@@ -955,7 +1358,7 @@ function Catalog() {
     <div className="catalog-page">
       <header className="page-header">
         <div className="page-header-copy">
-          <h2 ref={headingRef}>Catalog</h2>
+          <h2 ref={headingRef} tabIndex={-1}>Catalog</h2>
           <p className="page-subtitle">
             Manage the master cigar records used by purchases and your collection.
           </p>
@@ -1230,6 +1633,7 @@ function Catalog() {
           error={detailsError}
           onClose={closeCatalogDetails}
           onEdit={handleEditAction}
+          onStatusAction={handleStatusAction}
         />
       ) : null}
 
@@ -1244,6 +1648,19 @@ function Catalog() {
           isSaving={isFormSaving}
           onSave={handleCatalogFormSave}
           onClose={closeCatalogForm}
+        />
+      ) : null}
+
+      {statusMode !== null ? (
+        <CatalogStatusPanel
+          mode={statusMode}
+          details={statusDetails}
+          isLoading={isStatusLoading}
+          loadError={statusLoadError}
+          actionError={statusActionError}
+          isSaving={isStatusSaving}
+          onCancel={closeCatalogStatusPanel}
+          onConfirm={handleCatalogStatusConfirm}
         />
       ) : null}
     </div>

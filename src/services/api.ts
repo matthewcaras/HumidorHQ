@@ -989,6 +989,22 @@ export async function updateCatalogCigar(
   return parseJsonResponse<CatalogCigar>(response, 'Failed to update catalog cigar')
 }
 
+export async function archiveCatalogCigar(id: number): Promise<CatalogCigar> {
+  const response = await fetch(`${API_BASE_URL}/catalog/${id}/archive`, {
+    method: 'PATCH',
+  })
+
+  return parseJsonResponse<CatalogCigar>(response, 'Failed to archive catalog cigar')
+}
+
+export async function restoreCatalogCigar(id: number): Promise<CatalogCigar> {
+  const response = await fetch(`${API_BASE_URL}/catalog/${id}/restore`, {
+    method: 'PATCH',
+  })
+
+  return parseJsonResponse<CatalogCigar>(response, 'Failed to restore catalog cigar')
+}
+
 export async function getPurchases(search?: string): Promise<Purchase[]> {
   const params = new URLSearchParams()
 
