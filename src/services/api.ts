@@ -439,6 +439,100 @@ export type DashboardResponse = {
   issues: DashboardInventoryIssue[]
 }
 
+export type RemovalReportType = 'ALL' | 'SMOKED' | 'GIFTED' | 'DISCARDED'
+
+export type RemovalReportPeriod = 'LIFETIME' | 'CURRENT_YEAR' | 'PRIOR_YEAR' | 'CUSTOM'
+
+export type RemovalReportSortBy =
+  | 'EVENT_DATE'
+  | 'RECORDED_DATE'
+  | 'CIGAR'
+  | 'QUANTITY'
+  | 'COST'
+  | 'MSRP'
+
+export type RemovalReportSortDirection = 'ASC' | 'DESC'
+
+export type RemovalReportLimit = number | 'all'
+
+export type RemovalReportMetric = {
+  quantity: number
+  totalCost: string | null
+  totalMsrp: string | null
+  totalSavings: string | null
+  averageCostPerCigar: string | null
+  averageMsrpPerCigar: string | null
+  quantityWithKnownCost: number
+  quantityMissingCost: number
+  quantityWithKnownMsrp: number
+  quantityMissingMsrp: number
+}
+
+export type RemovalReportCatalogCigar = {
+  id: number
+  manufacturer: string
+  series: string
+  vitola: string
+  wrapper: string | null
+  isActive: boolean
+}
+
+export type RemovalReportSourceLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  storageSubLocationIsActive: boolean
+  isArchived: boolean
+}
+
+export type RemovalReportItem = {
+  id: number
+  removalType: Exclude<RemovalReportType, 'ALL'>
+  quantity: number
+  eventDate: string
+  createdAt: string
+  lotId: number
+  catalogCigar: RemovalReportCatalogCigar | null
+  sourceLocation: RemovalReportSourceLocation | null
+  costPerCigarAtEvent: string | null
+  msrpPerCigarAtEvent: string | null
+  totalEventCost: string | null
+  totalEventMsrp: string | null
+  eventSavings: string | null
+  notes: string | null
+}
+
+export type RemovalReportFilters = {
+  removalType: RemovalReportType
+  period: RemovalReportPeriod
+  startDate: string | null
+  endDate: string | null
+  search: string
+}
+
+export type RemovalReportSummary = {
+  combined: RemovalReportMetric
+  smoking: RemovalReportMetric
+  gifted: RemovalReportMetric
+  discarded: RemovalReportMetric
+}
+
+export type RemovalReportResponse = {
+  filters: RemovalReportFilters
+  summary: RemovalReportSummary
+  items: RemovalReportItem[]
+  total: number
+  limit: RemovalReportLimit
+  offset: number
+  sort: {
+    sortBy: RemovalReportSortBy
+    sortDirection: RemovalReportSortDirection
+  }
+}
+
 export type CollectionInventoryIssue = {
   code: string
   message: string
@@ -760,6 +854,68 @@ export async function getDashboard(): Promise<DashboardResponse> {
   const response = await fetch(`${API_BASE_URL}/dashboard`)
 
   return parseJsonResponse<DashboardResponse>(response, 'Failed to load Dashboard')
+}
+
+export async function getRemovalReport(
+  options: {
+    removalType?: RemovalReportType
+    period?: RemovalReportPeriod
+    startDate?: string
+    endDate?: string
+    search?: string
+    sortBy?: RemovalReportSortBy
+    sortDirection?: RemovalReportSortDirection
+    limit?: RemovalReportLimit
+    offset?: number
+  } = {},
+): Promise<RemovalReportResponse> {
+  const params = new URLSearchParams()
+
+  if (options.removalType !== undefined) {
+    params.set('removalType', options.removalType)
+  }
+
+  if (options.period !== undefined) {
+    params.set('period', options.period)
+  }
+
+  if (options.period !== 'LIFETIME') {
+    if (options.startDate !== undefined) {
+      params.set('startDate', options.startDate)
+    }
+
+    if (options.endDate !== undefined) {
+      params.set('endDate', options.endDate)
+    }
+  }
+
+  if (options.search?.trim()) {
+    params.set('search', options.search.trim())
+  }
+
+  if (options.sortBy !== undefined) {
+    params.set('sortBy', options.sortBy)
+  }
+
+  if (options.sortDirection !== undefined) {
+    params.set('sortDirection', options.sortDirection)
+  }
+
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/reports/removals${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<RemovalReportResponse>(
+    response,
+    'Failed to load removal report',
+  )
 }
 
 export async function getCollection(
