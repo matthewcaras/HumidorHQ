@@ -5,6 +5,7 @@ import {
   CatalogServiceError,
   createCatalogCigar,
   getCatalogCigars,
+  restoreCatalogCigar,
   updateCatalogCigar,
 } from './services/catalogService.ts'
 import {
@@ -404,6 +405,24 @@ app.post('/api/catalog', async (req, res) => {
 app.put('/api/catalog/:id', async (req, res) => {
   try {
     const catalogCigar = await updateCatalogCigar(catalogIdParam(req.params.id), req.body)
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogError(error, res)
+  }
+})
+
+app.patch('/api/catalog/:id/archive', async (req, res) => {
+  try {
+    const catalogCigar = await archiveCatalogCigar(catalogIdParam(req.params.id))
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogError(error, res)
+  }
+})
+
+app.patch('/api/catalog/:id/restore', async (req, res) => {
+  try {
+    const catalogCigar = await restoreCatalogCigar(catalogIdParam(req.params.id))
     res.json({ data: catalogCigar })
   } catch (error) {
     handleCatalogError(error, res)
