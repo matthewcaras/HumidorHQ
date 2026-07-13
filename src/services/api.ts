@@ -533,6 +533,108 @@ export type RemovalReportResponse = {
   }
 }
 
+export type ActivityReportEventType =
+  | 'ALL'
+  | 'INITIAL_PLACEMENT'
+  | 'MOVE'
+  | 'SMOKED'
+  | 'GIFTED'
+  | 'DISCARDED'
+
+export type ActivityReportPeriod = 'LIFETIME' | 'CURRENT_YEAR' | 'PRIOR_YEAR' | 'CUSTOM'
+
+export type ActivityReportSortBy =
+  | 'EVENT_DATE'
+  | 'RECORDED_DATE'
+  | 'EVENT_TYPE'
+  | 'CIGAR'
+  | 'QUANTITY'
+
+export type ActivityReportSortDirection = 'ASC' | 'DESC'
+
+export type ActivityReportLimit = number | 'all'
+
+export type ActivityReportIssueSeverity = 'INFO' | 'WARNING'
+
+export type ActivityReportIssue = {
+  code: string
+  message: string
+  severity: ActivityReportIssueSeverity
+}
+
+export type ActivityReportCatalogCigar = {
+  id: number
+  manufacturer: string
+  series: string
+  vitola: string
+  wrapper: string | null
+  isActive: boolean
+}
+
+export type ActivityReportLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  storageSubLocationIsActive: boolean
+  isArchived: boolean
+}
+
+export type ActivityReportItem = {
+  id: number
+  eventType: Exclude<ActivityReportEventType, 'ALL'>
+  quantity: number
+  eventDate: string
+  createdAt: string
+  lotId: number
+  catalogCigar: ActivityReportCatalogCigar | null
+  sourceLocation: ActivityReportLocation | null
+  destinationLocation: ActivityReportLocation | null
+  costPerCigarAtEvent: string | null
+  msrpPerCigarAtEvent: string | null
+  totalEventCost: string | null
+  totalEventMsrp: string | null
+  eventSavings: string | null
+  notes: string | null
+  issues: ActivityReportIssue[]
+}
+
+export type ActivityReportSummaryMetric = {
+  eventCount: number
+  quantity: number
+}
+
+export type ActivityReportSummary = {
+  totalEvents: number
+  initialPlacement: ActivityReportSummaryMetric
+  moved: ActivityReportSummaryMetric
+  smoked: ActivityReportSummaryMetric
+  gifted: ActivityReportSummaryMetric
+  discarded: ActivityReportSummaryMetric
+  removed: ActivityReportSummaryMetric
+}
+
+export type ActivityReportResponse = {
+  filters: {
+    eventType: ActivityReportEventType
+    period: ActivityReportPeriod
+    startDate: string | null
+    endDate: string | null
+    search: string
+  }
+  summary: ActivityReportSummary
+  items: ActivityReportItem[]
+  total: number
+  limit: ActivityReportLimit
+  offset: number
+  sort: {
+    sortBy: ActivityReportSortBy
+    sortDirection: ActivityReportSortDirection
+  }
+}
+
 export type CollectionInventoryIssue = {
   code: string
   message: string
@@ -915,6 +1017,68 @@ export async function getRemovalReport(
   return parseJsonResponse<RemovalReportResponse>(
     response,
     'Failed to load removal report',
+  )
+}
+
+export async function getActivityReport(
+  options: {
+    eventType?: ActivityReportEventType
+    period?: ActivityReportPeriod
+    startDate?: string
+    endDate?: string
+    search?: string
+    sortBy?: ActivityReportSortBy
+    sortDirection?: ActivityReportSortDirection
+    limit?: ActivityReportLimit
+    offset?: number
+  } = {},
+): Promise<ActivityReportResponse> {
+  const params = new URLSearchParams()
+
+  if (options.eventType !== undefined) {
+    params.set('eventType', options.eventType)
+  }
+
+  if (options.period !== undefined) {
+    params.set('period', options.period)
+  }
+
+  if (options.period !== 'LIFETIME') {
+    if (options.startDate !== undefined) {
+      params.set('startDate', options.startDate)
+    }
+
+    if (options.endDate !== undefined) {
+      params.set('endDate', options.endDate)
+    }
+  }
+
+  if (options.search?.trim()) {
+    params.set('search', options.search.trim())
+  }
+
+  if (options.sortBy !== undefined) {
+    params.set('sortBy', options.sortBy)
+  }
+
+  if (options.sortDirection !== undefined) {
+    params.set('sortDirection', options.sortDirection)
+  }
+
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/reports/activity${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<ActivityReportResponse>(
+    response,
+    'Failed to load activity report',
   )
 }
 
