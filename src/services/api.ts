@@ -83,6 +83,84 @@ export type CreateCatalogCigarInput = {
   msrp?: string | number | null
 }
 
+export type CatalogManagementStatus = 'ACTIVE' | 'ARCHIVED' | 'ALL'
+
+export type CatalogManagementSortBy = 'CIGAR' | 'MSRP' | 'UPDATED'
+
+export type CatalogManagementSortDirection = 'ASC' | 'DESC'
+
+export type CatalogManagementUsage = {
+  currentQuantity: number
+  lotCount: number
+  purchaseLineCount: number
+  currentLocationCount: number
+}
+
+export type CatalogManagementCigar = {
+  id: number
+  manufacturer: string
+  series: string
+  vitola: string
+  shape: string | null
+  length: string | number | null
+  ringGauge: number | null
+  wrapper: string | null
+  binder: string | null
+  filler: string | null
+  country: string | null
+  strength: string | null
+  msrp: string | number | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type CatalogManagementListItem = {
+  catalogCigar: CatalogManagementCigar
+  usage: CatalogManagementUsage
+}
+
+export type CatalogManagementSummary = {
+  totalCatalogCount: number
+  activeCount: number
+  archivedCount: number
+}
+
+export type CatalogManagementResponse = {
+  summary: CatalogManagementSummary
+  items: CatalogManagementListItem[]
+  total: number
+  limit: number | 'all'
+  offset: number
+  sort: {
+    sortBy: CatalogManagementSortBy
+    sortDirection: CatalogManagementSortDirection
+  }
+  status: CatalogManagementStatus
+  search: string
+}
+
+export type CatalogManagementLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: StorageSubLocationKind
+  storageSubLocationIsActive: boolean
+  quantity: number
+}
+
+export type CatalogManagementDetailsUsage = CatalogManagementUsage & {
+  inventoryEventCount: number
+}
+
+export type CatalogManagementDetails = {
+  catalogCigar: CatalogManagementCigar
+  usage: CatalogManagementDetailsUsage
+  currentLocations: CatalogManagementLocation[]
+}
+
 export type PurchaseVendor = Vendor
 
 export type PurchaseCatalogCigar = CatalogCigar
@@ -792,6 +870,62 @@ export async function getCatalogCigars(
   const response = await fetch(`${API_BASE_URL}/catalog${query ? `?${query}` : ''}`)
 
   return parseJsonResponse<CatalogCigar[]>(response, 'Failed to load catalog cigars')
+}
+
+export async function getManagedCatalog(
+  options: {
+    search?: string
+    status?: CatalogManagementStatus
+    sortBy?: CatalogManagementSortBy
+    sortDirection?: CatalogManagementSortDirection
+    limit?: number | 'all'
+    offset?: number
+  } = {},
+): Promise<CatalogManagementResponse> {
+  const params = new URLSearchParams()
+
+  if (options.search?.trim()) {
+    params.set('search', options.search.trim())
+  }
+
+  if (options.status !== undefined) {
+    params.set('status', options.status)
+  }
+
+  if (options.sortBy !== undefined) {
+    params.set('sortBy', options.sortBy)
+  }
+
+  if (options.sortDirection !== undefined) {
+    params.set('sortDirection', options.sortDirection)
+  }
+
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit))
+  }
+
+  if (options.offset !== undefined) {
+    params.set('offset', String(options.offset))
+  }
+
+  const query = params.toString()
+  const response = await fetch(`${API_BASE_URL}/catalog/manage${query ? `?${query}` : ''}`)
+
+  return parseJsonResponse<CatalogManagementResponse>(
+    response,
+    'Failed to load Catalog',
+  )
+}
+
+export async function getManagedCatalogDetails(
+  catalogCigarId: number,
+): Promise<CatalogManagementDetails> {
+  const response = await fetch(`${API_BASE_URL}/catalog/${catalogCigarId}`)
+
+  return parseJsonResponse<CatalogManagementDetails>(
+    response,
+    'Failed to load Catalog details',
+  )
 }
 
 export async function createCatalogCigar(

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Dashboard from './pages/Dashboard'
+import Catalog from './pages/Catalog'
 import Collection from './pages/Collection'
 import Humidors from './pages/Humidors'
 import Purchases from './pages/Purchases'
@@ -34,6 +35,10 @@ function App() {
 
     if (activePage === 'Humidors') {
       return <Humidors />
+    }
+
+    if (activePage === 'Catalog') {
+      return <Catalog />
     }
 
     return (
