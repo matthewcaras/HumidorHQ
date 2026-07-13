@@ -43,6 +43,11 @@ import {
   moveLotIdParam,
 } from './services/moveService.ts'
 import {
+  removeFromLot,
+  RemovalServiceError,
+  removalLotIdParam,
+} from './services/removalService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -187,6 +192,25 @@ function handleMoveError(error: unknown, res: express.Response) {
     error: {
       code: 'MOVE_UNEXPECTED_ERROR',
       message: 'The Move request could not be completed.',
+    },
+  })
+}
+
+function handleRemovalError(error: unknown, res: express.Response) {
+  if (error instanceof RemovalServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'REMOVAL_UNEXPECTED_ERROR',
+      message: 'The removal request could not be completed.',
     },
   })
 }
@@ -412,6 +436,15 @@ app.post('/api/lots/:lotId/move', async (req, res) => {
     res.json({ data: result })
   } catch (error) {
     handleMoveError(error, res)
+  }
+})
+
+app.post('/api/lots/:lotId/remove', async (req, res) => {
+  try {
+    const result = await removeFromLot(removalLotIdParam(req.params.lotId), req.body)
+    res.json({ data: result })
+  } catch (error) {
+    handleRemovalError(error, res)
   }
 })
 
