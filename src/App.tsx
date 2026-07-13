@@ -17,7 +17,7 @@ const navItems = [
 ]
 
 function App() {
-  const [activePage, setActivePage] = useState('Purchases')
+  const [activePage, setActivePage] = useState('Dashboard')
 
   function renderPage() {
     if (activePage === 'Dashboard') {
