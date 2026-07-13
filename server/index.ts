@@ -48,6 +48,10 @@ import {
   removalLotIdParam,
 } from './services/removalService.ts'
 import {
+  DashboardServiceError,
+  getDashboard,
+} from './services/dashboardService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -215,6 +219,25 @@ function handleRemovalError(error: unknown, res: express.Response) {
   })
 }
 
+function handleDashboardError(error: unknown, res: express.Response) {
+  if (error instanceof DashboardServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'DASHBOARD_UNEXPECTED_ERROR',
+      message: 'The Dashboard could not be loaded.',
+    },
+  })
+}
+
 function handleCollectionError(error: unknown, res: express.Response) {
   if (error instanceof CollectionServiceError) {
     res.status(error.statusCode).json({
@@ -233,6 +256,16 @@ function handleCollectionError(error: unknown, res: express.Response) {
     },
   })
 }
+
+app.get('/api/dashboard', async (_req, res) => {
+  try {
+    const dashboard = await getDashboard()
+
+    res.json({ data: dashboard })
+  } catch (error) {
+    handleDashboardError(error, res)
+  }
+})
 
 app.get('/api/collection', async (req, res) => {
   try {

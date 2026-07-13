@@ -1,6 +1,14 @@
 import { PrismaClient } from '../../src/generated/prisma/client.ts'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { normalizeSearchKey } from '../utils/searchKeys.ts'
+import {
+  divideMillionthsHalfUp,
+  formatMillionths,
+  multiplyQuantityByMillionths,
+  resolveLotCostPerCigar,
+  resolveLotMsrpPerCigar,
+  subtractMillionths,
+} from '../utils/inventoryAccounting.ts'
 
 type CollectionPrismaClient = any
 
@@ -390,49 +398,6 @@ export function collectionCatalogCigarIdParam(value: string) {
   return id
 }
 
-function decimalToMillionths(value: unknown): bigint | null {
-  if (value === undefined || value === null || value === '') {
-    return null
-  }
-
-  const text = String(value).trim()
-  const match = text.match(/^(\d+)(?:\.(\d+))?$/)
-
-  if (!match) {
-    return null
-  }
-
-  const fraction = match[2] ?? ''
-  const millionthsText = fraction.slice(0, 6).padEnd(6, '0')
-  const roundingDigit = Number(fraction[6] ?? '0')
-
-  return (
-    BigInt(match[1]) * 1_000_000n +
-    BigInt(Number(millionthsText)) +
-    BigInt(roundingDigit >= 5 ? 1 : 0)
-  )
-}
-
-function formatMillionths(value: bigint) {
-  const sign = value < 0n ? '-' : ''
-  const absoluteValue = value < 0n ? -value : value
-  const dollars = absoluteValue / 1_000_000n
-  const fraction = String(absoluteValue % 1_000_000n).padStart(6, '0')
-
-  return `${sign}${dollars}.${fraction}`
-}
-
-function divideRoundHalfUp(numerator: bigint, denominator: number) {
-  const denominatorBigInt = BigInt(denominator)
-
-  if (numerator >= 0n) {
-    return (numerator * 2n + denominatorBigInt) / (2n * denominatorBigInt)
-  }
-
-  const absoluteRounded = ((-numerator) * 2n + denominatorBigInt) / (2n * denominatorBigInt)
-  return -absoluteRounded
-}
-
 function effectiveDate(lot: LotRecord) {
   return lot.receivedDateSnapshot ?? lot.purchaseDateSnapshot
 }
@@ -506,18 +471,9 @@ function resolveCostPerCigar(
   catalogCigar: CatalogCigarRecord,
   issueTarget: IssueTarget,
 ) {
-  const snapshotCost = decimalToMillionths(lot.costPerCigarSnapshot)
-  if (snapshotCost !== null) {
-    return { value: snapshotCost, source: 'SNAPSHOT' as const }
-  }
+  const cost = resolveLotCostPerCigar(lot)
 
-  const allocatedCost = decimalToMillionths(lot.allocatedCostPerCigar)
-  if (allocatedCost !== null) {
-    return { value: allocatedCost, source: 'ALLOCATED' as const }
-  }
-
-  const actualCost = decimalToMillionths(lot.actualCostPerCigar)
-  if (actualCost !== null) {
+  if (cost.source === 'ACTUAL_FALLBACK') {
     addIssue(issueTarget, {
       code: 'COST_FALLBACK_USED',
       message:
@@ -526,17 +482,19 @@ function resolveCostPerCigar(
       lotId: lot.id,
       catalogCigarId: catalogCigar.id,
     })
-    return { value: actualCost, source: 'ACTUAL_FALLBACK' as const }
   }
 
-  addIssue(issueTarget, {
-    code: 'COST_DATA_MISSING',
-    message: 'Cost data is missing for this lot, so cost metrics cannot be fully calculated.',
-    severity: 'WARNING',
-    lotId: lot.id,
-    catalogCigarId: catalogCigar.id,
-  })
-  return { value: null, source: null }
+  if (cost.value === null) {
+    addIssue(issueTarget, {
+      code: 'COST_DATA_MISSING',
+      message: 'Cost data is missing for this lot, so cost metrics cannot be fully calculated.',
+      severity: 'WARNING',
+      lotId: lot.id,
+      catalogCigarId: catalogCigar.id,
+    })
+  }
+
+  return cost
 }
 
 function resolveMsrpPerCigar(
@@ -544,18 +502,11 @@ function resolveMsrpPerCigar(
   catalogCigar: CatalogCigarRecord,
   issueTarget: IssueTarget,
 ) {
-  const snapshotMsrp = decimalToMillionths(lot.msrpPerCigarSnapshot)
-  if (snapshotMsrp !== null) {
-    return { value: snapshotMsrp, source: 'SNAPSHOT' as const }
-  }
+  const msrp = resolveLotMsrpPerCigar(lot, catalogCigar, {
+    allowCatalogFallback: true,
+  })
 
-  const lotMsrp = decimalToMillionths(lot.msrpPerCigar)
-  if (lotMsrp !== null) {
-    return { value: lotMsrp, source: 'LOT' as const }
-  }
-
-  const catalogMsrp = decimalToMillionths(catalogCigar.msrp)
-  if (catalogMsrp !== null) {
+  if (msrp.source === 'CATALOG_FALLBACK') {
     addIssue(issueTarget, {
       code: 'MSRP_CATALOG_FALLBACK_USED',
       message: 'Catalog MSRP was used because Lot snapshot MSRP fields were unavailable.',
@@ -563,18 +514,20 @@ function resolveMsrpPerCigar(
       lotId: lot.id,
       catalogCigarId: catalogCigar.id,
     })
-    return { value: catalogMsrp, source: 'CATALOG_FALLBACK' as const }
   }
 
-  addIssue(issueTarget, {
-    code: 'MSRP_DATA_MISSING',
-    message:
-      'MSRP data is missing for this lot, so MSRP and savings metrics cannot be fully calculated.',
-    severity: 'WARNING',
-    lotId: lot.id,
-    catalogCigarId: catalogCigar.id,
-  })
-  return { value: null, source: null }
+  if (msrp.value === null) {
+    addIssue(issueTarget, {
+      code: 'MSRP_DATA_MISSING',
+      message:
+        'MSRP data is missing for this lot, so MSRP and savings metrics cannot be fully calculated.',
+      severity: 'WARNING',
+      lotId: lot.id,
+      catalogCigarId: catalogCigar.id,
+    })
+  }
+
+  return msrp
 }
 
 function costPerCigarMillionths(
@@ -867,17 +820,17 @@ function locationSummaries(item: CollectionItemInternal): LocationSummary[] {
 
 function itemSummary(item: CollectionItemInternal) {
   const weightedAverageCostPerCigar = item.hasCompleteCostData
-    ? divideRoundHalfUp(item.costBasisMillionths, item.totalQuantity)
+    ? divideMillionthsHalfUp(item.costBasisMillionths, item.totalQuantity)
     : null
   const averageMsrpPerCigar = item.hasCompleteMsrpData
-    ? divideRoundHalfUp(item.msrpValueMillionths, item.totalQuantity)
+    ? divideMillionthsHalfUp(item.msrpValueMillionths, item.totalQuantity)
     : null
   const totalSavings =
     item.hasCompleteCostData && item.hasCompleteMsrpData
-      ? item.msrpValueMillionths - item.costBasisMillionths
+      ? subtractMillionths(item.msrpValueMillionths, item.costBasisMillionths)
       : null
   const savingsPerCigar =
-    totalSavings === null ? null : divideRoundHalfUp(totalSavings, item.totalQuantity)
+    totalSavings === null ? null : divideMillionthsHalfUp(totalSavings, item.totalQuantity)
 
   return {
     totalQuantity: item.totalQuantity,
@@ -938,14 +891,14 @@ function addBalanceToItem(item: CollectionItemInternal, balance: PositiveBalance
   if (cost === null) {
     item.hasCompleteCostData = false
   } else {
-    item.costBasisMillionths += BigInt(balance.quantity) * cost
+    item.costBasisMillionths += multiplyQuantityByMillionths(balance.quantity, cost) ?? 0n
   }
 
   const msrp = msrpPerCigarMillionths(lot, item)
   if (msrp === null) {
     item.hasCompleteMsrpData = false
   } else {
-    item.msrpValueMillionths += BigInt(balance.quantity) * msrp
+    item.msrpValueMillionths += multiplyQuantityByMillionths(balance.quantity, msrp) ?? 0n
   }
 
   const subLocation = balance.storageSubLocation
@@ -1100,13 +1053,11 @@ function lotSummaries(
       const cost = resolveCostPerCigar(lot, catalogCigar, issueTarget)
       const msrp = resolveMsrpPerCigar(lot, catalogCigar, issueTarget)
       const currentCostBasis =
-        cost.value === null ? null : BigInt(visibleCurrentQuantity) * cost.value
+        multiplyQuantityByMillionths(visibleCurrentQuantity, cost.value)
       const currentMsrpValue =
-        msrp.value === null ? null : BigInt(visibleCurrentQuantity) * msrp.value
+        multiplyQuantityByMillionths(visibleCurrentQuantity, msrp.value)
       const totalSavings =
-        currentCostBasis === null || currentMsrpValue === null
-          ? null
-          : currentMsrpValue - currentCostBasis
+        subtractMillionths(currentMsrpValue, currentCostBasis)
 
       if (lot.currentQuantity !== visibleCurrentQuantity) {
         addIssue(issueTarget, {
