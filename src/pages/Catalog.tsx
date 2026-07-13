@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import CatalogFormPanel from '../components/catalog/CatalogFormPanel'
 import {
+  ApiError,
+  createCatalogCigar,
   getManagedCatalog,
   getManagedCatalogDetails,
+  updateCatalogCigar,
   type CatalogManagementCigar,
   type CatalogManagementDetails,
   type CatalogManagementListItem,
@@ -9,9 +13,11 @@ import {
   type CatalogManagementSortBy,
   type CatalogManagementSortDirection,
   type CatalogManagementStatus,
+  type CatalogWriteInput,
 } from '../services/api'
 
 type PageSize = 50 | 100 | 'all'
+type CatalogFormMode = 'ADD' | 'EDIT'
 
 const DEFAULT_PAGE_SIZE: PageSize = 50
 const DEFAULT_SORT_BY: CatalogManagementSortBy = 'CIGAR'
@@ -197,6 +203,7 @@ type CatalogDetailsPanelProps = {
   isLoading: boolean
   error: string
   onClose: () => void
+  onEdit: (catalogCigarId: number, opener: HTMLElement) => void
 }
 
 function CatalogDetailsPanel({
@@ -204,6 +211,7 @@ function CatalogDetailsPanel({
   isLoading,
   error,
   onClose,
+  onEdit,
 }: CatalogDetailsPanelProps) {
   const cigar = details?.catalogCigar
   const title = cigar ? cigar.manufacturer : 'Catalog Details'
@@ -229,14 +237,25 @@ function CatalogDetailsPanel({
             <h3 id="catalog-details-title">{title}</h3>
             {cigar ? <span>{cigarSubtitle(cigar)}</span> : null}
           </div>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Close Catalog details"
-            onClick={onClose}
-          >
-            &times;
-          </button>
+          <div className="modal-header-actions">
+            {cigar ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={(event) => onEdit(cigar.id, event.currentTarget)}
+              >
+                Edit
+              </button>
+            ) : null}
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Close Catalog details"
+              onClick={onClose}
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         {isLoading ? <p className="muted">Loading Catalog details...</p> : null}
@@ -383,9 +402,19 @@ function Catalog() {
   const [details, setDetails] = useState<CatalogManagementDetails | null>(null)
   const [isDetailsLoading, setIsDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
+  const [formMode, setFormMode] = useState<CatalogFormMode | null>(null)
+  const [formDetails, setFormDetails] = useState<CatalogManagementDetails | null>(null)
+  const [isFormLoading, setIsFormLoading] = useState(false)
+  const [formLoadError, setFormLoadError] = useState('')
+  const [isFormSaving, setIsFormSaving] = useState(false)
+  const [formSaveError, setFormSaveError] = useState('')
+  const [formIdentityError, setFormIdentityError] = useState('')
+  const [catalogSuccessMessage, setCatalogSuccessMessage] = useState('')
   const listRequestIdRef = useRef(0)
   const detailsRequestIdRef = useRef(0)
+  const formRequestIdRef = useRef(0)
   const detailsOpenerRef = useRef<HTMLElement | null>(null)
+  const formOpenerRef = useRef<HTMLElement | null>(null)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
   async function loadCatalog(
@@ -462,15 +491,205 @@ function Catalog() {
   }
 
   function closeCatalogDetails() {
+    clearCatalogDetails(true)
+  }
+
+  function clearCatalogDetails(restoreFocus: boolean) {
     detailsRequestIdRef.current += 1
     setSelectedCatalogCigarId(null)
     setDetails(null)
     setDetailsError('')
     setIsDetailsLoading(false)
 
+    if (restoreFocus) {
+      window.setTimeout(() => {
+        detailsOpenerRef.current?.focus()
+      }, 0)
+    }
+  }
+
+  function duplicateIdentityMessage(error: unknown) {
+    if (!(error instanceof ApiError)) {
+      return ''
+    }
+
+    if (error.code === 'CATALOG_DUPLICATE_ACTIVE_RECORD') {
+      return 'An active Catalog cigar already uses this manufacturer, series, vitola, and wrapper.'
+    }
+
+    if (error.code === 'CATALOG_DUPLICATE_ARCHIVED_RECORD') {
+      return 'An archived Catalog cigar already uses this identity. Restore the archived record instead of creating a duplicate.'
+    }
+
+    return ''
+  }
+
+  async function refreshCatalogAfterWrite() {
+    const requestId = listRequestIdRef.current + 1
+    listRequestIdRef.current = requestId
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const requestedOffset = pageSize === 'all' ? 0 : offset
+      const data = await getManagedCatalog({
+        search: activeSearch,
+        status,
+        sortBy,
+        sortDirection,
+        limit: pageSize,
+        offset: requestedOffset,
+      })
+
+      if (requestId !== listRequestIdRef.current) {
+        return
+      }
+
+      if (
+        pageSize !== 'all' &&
+        data.total > 0 &&
+        data.items.length === 0 &&
+        requestedOffset >= data.total
+      ) {
+        const adjustedOffset = Math.max(Math.floor((data.total - 1) / pageSize) * pageSize, 0)
+        const adjustedData = await getManagedCatalog({
+          search: activeSearch,
+          status,
+          sortBy,
+          sortDirection,
+          limit: pageSize,
+          offset: adjustedOffset,
+        })
+
+        if (requestId !== listRequestIdRef.current) {
+          return
+        }
+
+        setOffset(adjustedOffset)
+        setCatalog(adjustedData)
+        return
+      }
+
+      setCatalog(data)
+    } catch (loadError) {
+      if (requestId !== listRequestIdRef.current) {
+        return
+      }
+
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load Catalog.')
+    } finally {
+      if (requestId === listRequestIdRef.current) {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  function openAddCatalogForm(opener: HTMLElement) {
+    formRequestIdRef.current += 1
+    clearCatalogDetails(false)
+    formOpenerRef.current = opener
+    setCatalogSuccessMessage('')
+    setFormMode('ADD')
+    setFormDetails(null)
+    setIsFormLoading(false)
+    setFormLoadError('')
+    setFormSaveError('')
+    setFormIdentityError('')
+    setIsFormSaving(false)
+  }
+
+  async function openEditCatalogForm(catalogCigarId: number, opener: HTMLElement) {
+    const requestId = formRequestIdRef.current + 1
+    formRequestIdRef.current = requestId
+    clearCatalogDetails(false)
+    formOpenerRef.current = opener
+    setCatalogSuccessMessage('')
+    setFormMode('EDIT')
+    setFormDetails(null)
+    setFormLoadError('')
+    setFormSaveError('')
+    setFormIdentityError('')
+    setIsFormSaving(false)
+    setIsFormLoading(true)
+
+    try {
+      const data = await getManagedCatalogDetails(catalogCigarId)
+
+      if (requestId !== formRequestIdRef.current) {
+        return
+      }
+
+      setFormDetails(data)
+    } catch (loadError) {
+      if (requestId !== formRequestIdRef.current) {
+        return
+      }
+
+      setFormLoadError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Catalog cigar.',
+      )
+    } finally {
+      if (requestId === formRequestIdRef.current) {
+        setIsFormLoading(false)
+      }
+    }
+  }
+
+  function closeCatalogForm() {
+    formRequestIdRef.current += 1
+    setFormMode(null)
+    setFormDetails(null)
+    setIsFormLoading(false)
+    setFormLoadError('')
+    setFormSaveError('')
+    setFormIdentityError('')
+    setIsFormSaving(false)
+
     window.setTimeout(() => {
-      detailsOpenerRef.current?.focus()
+      formOpenerRef.current?.focus()
     }, 0)
+  }
+
+  async function handleCatalogFormSave(input: CatalogWriteInput) {
+    if (!formMode || isFormSaving) {
+      return
+    }
+
+    const editCatalogCigarId = formDetails?.catalogCigar.id
+
+    if (formMode === 'EDIT' && editCatalogCigarId === undefined) {
+      setFormSaveError('Catalog cigar could not be loaded for editing.')
+      return
+    }
+
+    setIsFormSaving(true)
+    setFormSaveError('')
+    setFormIdentityError('')
+
+    try {
+      if (formMode === 'ADD') {
+        await createCatalogCigar(input)
+      } else {
+        await updateCatalogCigar(editCatalogCigarId, input)
+      }
+
+      setCatalogSuccessMessage(
+        formMode === 'ADD'
+          ? 'Catalog cigar added successfully.'
+          : 'Catalog cigar updated successfully.',
+      )
+      closeCatalogForm()
+      await refreshCatalogAfterWrite()
+    } catch (saveError) {
+      const identityMessage = duplicateIdentityMessage(saveError)
+      const fallbackMessage =
+        saveError instanceof Error ? saveError.message : 'Catalog cigar could not be saved.'
+
+      setFormIdentityError(identityMessage)
+      setFormSaveError(identityMessage || fallbackMessage)
+    } finally {
+      setIsFormSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -479,6 +698,7 @@ function Catalog() {
     return () => {
       listRequestIdRef.current += 1
       detailsRequestIdRef.current += 1
+      formRequestIdRef.current += 1
     }
   }, [])
 
@@ -507,6 +727,7 @@ function Catalog() {
     setSearchInput(submittedSearch)
     setActiveSearch(submittedSearch)
     setOffset(0)
+    setCatalogSuccessMessage('')
     void loadCatalog(submittedSearch, status, sortBy, sortDirection, pageSize, 0)
   }
 
@@ -514,12 +735,14 @@ function Catalog() {
     setSearchInput('')
     setActiveSearch('')
     setOffset(0)
+    setCatalogSuccessMessage('')
     void loadCatalog('', status, sortBy, sortDirection, pageSize, 0)
   }
 
   function handleStatusChange(nextStatus: CatalogManagementStatus) {
     setStatus(nextStatus)
     setOffset(0)
+    setCatalogSuccessMessage('')
     void loadCatalog(activeSearch, nextStatus, sortBy, sortDirection, pageSize, 0)
   }
 
@@ -528,6 +751,7 @@ function Catalog() {
 
     setPageSize(nextPageSize)
     setOffset(0)
+    setCatalogSuccessMessage('')
     void loadCatalog(activeSearch, status, sortBy, sortDirection, nextPageSize, 0)
   }
 
@@ -541,12 +765,14 @@ function Catalog() {
     setSortBy(nextSortBy)
     setSortDirection(resolvedDirection)
     setOffset(0)
+    setCatalogSuccessMessage('')
     void loadCatalog(activeSearch, status, nextSortBy, resolvedDirection, pageSize, 0)
     headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function handlePageChange(nextOffset: number) {
     setOffset(nextOffset)
+    setCatalogSuccessMessage('')
     void loadCatalog(activeSearch, status, sortBy, sortDirection, pageSize, nextOffset)
     headingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -559,6 +785,10 @@ function Catalog() {
       event.preventDefault()
       void openCatalogDetails(catalogCigarId, event.currentTarget)
     }
+  }
+
+  function handleEditAction(catalogCigarId: number, opener: HTMLElement) {
+    void openEditCatalogForm(catalogCigarId, opener)
   }
 
   function renderSortHeader(headerSortBy: CatalogManagementSortBy, label: string) {
@@ -607,17 +837,30 @@ function Catalog() {
           <CatalogStatusBadge isActive={cigar.isActive} />
         </td>
         <td className="catalog-action-cell">
-          <button
-            className="table-action catalog-view-button"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              void openCatalogDetails(cigar.id, event.currentTarget)
-            }}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            View
-          </button>
+          <div className="catalog-row-actions">
+            <button
+              className="table-action catalog-view-button"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                void openCatalogDetails(cigar.id, event.currentTarget)
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              View
+            </button>
+            <button
+              className="table-action catalog-edit-button"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                handleEditAction(cigar.id, event.currentTarget)
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              Edit
+            </button>
+          </div>
         </td>
       </tr>
     )
@@ -665,7 +908,30 @@ function Catalog() {
             <dd>{item.usage.lotCount}</dd>
           </div>
         </dl>
-        <span className="catalog-card-details-cue">View Details</span>
+        <div className="catalog-card-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              void openCatalogDetails(cigar.id, event.currentTarget)
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            View Details
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              handleEditAction(cigar.id, event.currentTarget)
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            Edit
+          </button>
+        </div>
       </article>
     )
   }
@@ -772,8 +1038,22 @@ function Catalog() {
                 ))}
               </select>
             </label>
+
+            <button
+              className="primary-button catalog-add-button"
+              type="button"
+              onClick={(event) => openAddCatalogForm(event.currentTarget)}
+            >
+              Add Cigar
+            </button>
           </div>
         </div>
+
+        {catalogSuccessMessage ? (
+          <p className="catalog-success-message" role="status">
+            {catalogSuccessMessage}
+          </p>
+        ) : null}
 
         <div className="catalog-mobile-sort">
           <label>
@@ -885,7 +1165,7 @@ function Catalog() {
                         <th>Current Qty</th>
                         <th>Lots</th>
                         <th>Status</th>
-                        <th className="catalog-action-header">View</th>
+                        <th className="catalog-action-header">Actions</th>
                       </tr>
                     </thead>
                     <tbody>{items.map((item) => renderCatalogRow(item))}</tbody>
@@ -949,6 +1229,21 @@ function Catalog() {
           isLoading={isDetailsLoading}
           error={detailsError}
           onClose={closeCatalogDetails}
+          onEdit={handleEditAction}
+        />
+      ) : null}
+
+      {formMode !== null ? (
+        <CatalogFormPanel
+          mode={formMode}
+          details={formDetails}
+          isLoading={isFormLoading}
+          loadError={formLoadError}
+          saveError={formSaveError}
+          identityError={formIdentityError}
+          isSaving={isFormSaving}
+          onSave={handleCatalogFormSave}
+          onClose={closeCatalogForm}
         />
       ) : null}
     </div>

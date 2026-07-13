@@ -83,6 +83,28 @@ export type CreateCatalogCigarInput = {
   msrp?: string | number | null
 }
 
+export type CatalogStrength =
+  | 'Mild'
+  | 'Mild-Medium'
+  | 'Medium'
+  | 'Medium-Full'
+  | 'Full'
+
+export type CatalogWriteInput = {
+  manufacturer: string
+  series: string
+  vitola: string
+  shape?: string | null
+  length?: string | null
+  ringGauge?: number | null
+  wrapper?: string | null
+  binder?: string | null
+  filler?: string | null
+  country?: string | null
+  strength?: CatalogStrength | null
+  msrp?: string | null
+}
+
 export type CatalogManagementStatus = 'ACTIVE' | 'ARCHIVED' | 'ALL'
 
 export type CatalogManagementSortBy = 'CIGAR' | 'MSRP' | 'UPDATED'
@@ -667,17 +689,27 @@ type ApiErrorResponse = {
   }
 }
 
+export class ApiError extends Error {
+  code?: string
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+  }
+}
+
 async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   let body: ApiResponse<T> & ApiErrorResponse
 
   try {
     body = await response.json()
   } catch {
-    throw new Error(fallbackMessage)
+    throw new ApiError(fallbackMessage)
   }
 
   if (!response.ok) {
-    throw new Error(body.error?.message ?? fallbackMessage)
+    throw new ApiError(body.error?.message ?? fallbackMessage, body.error?.code)
   }
 
   return body.data
@@ -929,7 +961,7 @@ export async function getManagedCatalogDetails(
 }
 
 export async function createCatalogCigar(
-  input: CreateCatalogCigarInput,
+  input: CreateCatalogCigarInput | CatalogWriteInput,
 ): Promise<CatalogCigar> {
   const response = await fetch(`${API_BASE_URL}/catalog`, {
     method: 'POST',
@@ -940,6 +972,21 @@ export async function createCatalogCigar(
   })
 
   return parseJsonResponse<CatalogCigar>(response, 'Failed to create catalog cigar')
+}
+
+export async function updateCatalogCigar(
+  id: number,
+  input: CatalogWriteInput,
+): Promise<CatalogCigar> {
+  const response = await fetch(`${API_BASE_URL}/catalog/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<CatalogCigar>(response, 'Failed to update catalog cigar')
 }
 
 export async function getPurchases(search?: string): Promise<Purchase[]> {
