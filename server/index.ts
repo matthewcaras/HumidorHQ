@@ -59,6 +59,10 @@ import {
   getDashboard,
 } from './services/dashboardService.ts'
 import {
+  getRemovalReport,
+  ReportsServiceError,
+} from './services/reportsService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -264,6 +268,25 @@ function handleDashboardError(error: unknown, res: express.Response) {
   })
 }
 
+function handleReportsError(error: unknown, res: express.Response) {
+  if (error instanceof ReportsServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'REPORTS_UNEXPECTED_ERROR',
+      message: 'The removal report could not be loaded.',
+    },
+  })
+}
+
 function handleCollectionError(error: unknown, res: express.Response) {
   if (error instanceof CollectionServiceError) {
     res.status(error.statusCode).json({
@@ -290,6 +313,26 @@ app.get('/api/dashboard', async (_req, res) => {
     res.json({ data: dashboard })
   } catch (error) {
     handleDashboardError(error, res)
+  }
+})
+
+app.get('/api/reports/removals', async (req, res) => {
+  try {
+    const report = await getRemovalReport({
+      removalType: req.query.removalType,
+      period: req.query.period,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      search: req.query.search,
+      sortBy: req.query.sortBy,
+      sortDirection: req.query.sortDirection,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+
+    res.json({ data: report })
+  } catch (error) {
+    handleReportsError(error, res)
   }
 })
 

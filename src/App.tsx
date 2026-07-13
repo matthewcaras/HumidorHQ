@@ -4,17 +4,16 @@ import Catalog from './pages/Catalog'
 import Collection from './pages/Collection'
 import Humidors from './pages/Humidors'
 import Purchases from './pages/Purchases'
+import Reports from './pages/Reports'
 import './App.css'
 
 const navItems = [
   'Dashboard',
   'Collection',
-  'Purchases',
-  'Consumption',
-  'Humidors',
-  'Catalog',
   'Reports',
-  'Settings',
+  'Catalog',
+  'Purchases',
+  'Humidors',
 ]
 
 function App() {
@@ -31,6 +30,10 @@ function App() {
 
     if (activePage === 'Collection') {
       return <Collection />
+    }
+
+    if (activePage === 'Reports') {
+      return <Reports />
     }
 
     if (activePage === 'Humidors') {
