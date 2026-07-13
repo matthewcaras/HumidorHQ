@@ -8,6 +8,12 @@ import {
   updateCatalogCigar,
 } from './services/catalogService.ts'
 import {
+  catalogManagementIdParam,
+  CatalogManagementServiceError,
+  getManagedCatalog,
+  getManagedCatalogDetails,
+} from './services/catalogManagementService.ts'
+import {
   archiveHumidor,
   createHumidor,
   getHumidors,
@@ -101,6 +107,25 @@ function handleCatalogError(error: unknown, res: express.Response) {
     error: {
       code: 'CATALOG_UNEXPECTED_ERROR',
       message: 'The catalog request could not be completed.',
+    },
+  })
+}
+
+function handleCatalogManagementError(error: unknown, res: express.Response) {
+  if (error instanceof CatalogManagementServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'CATALOG_MANAGEMENT_UNEXPECTED_ERROR',
+      message: 'The Catalog could not be loaded.',
     },
   })
 }
@@ -335,6 +360,35 @@ app.get('/api/catalog', async (req, res) => {
     res.json({ data: catalogCigars })
   } catch (error) {
     handleCatalogError(error, res)
+  }
+})
+
+app.get('/api/catalog/manage', async (req, res) => {
+  try {
+    const catalog = await getManagedCatalog({
+      search: req.query.search,
+      status: req.query.status,
+      sortBy: req.query.sortBy,
+      sortDirection: req.query.sortDirection,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+
+    res.json({ data: catalog })
+  } catch (error) {
+    handleCatalogManagementError(error, res)
+  }
+})
+
+app.get('/api/catalog/:catalogCigarId', async (req, res) => {
+  try {
+    const catalogCigar = await getManagedCatalogDetails(
+      catalogManagementIdParam(req.params.catalogCigarId),
+    )
+
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogManagementError(error, res)
   }
 })
 
