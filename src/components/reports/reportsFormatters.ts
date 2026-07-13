@@ -73,9 +73,20 @@ export function reportsPluralize(count: number, singular: string, plural = `${si
 }
 
 export function reportsDirectionLabel(
-  sortBy: 'EVENT_DATE' | 'RECORDED_DATE' | 'CIGAR' | 'QUANTITY' | 'COST' | 'MSRP',
+  sortBy:
+    | 'EVENT_DATE'
+    | 'RECORDED_DATE'
+    | 'EVENT_TYPE'
+    | 'CIGAR'
+    | 'QUANTITY'
+    | 'COST'
+    | 'MSRP',
   direction: 'ASC' | 'DESC',
 ) {
+  if (sortBy === 'EVENT_TYPE') {
+    return direction === 'ASC' ? 'Received to Discarded' : 'Discarded to Received'
+  }
+
   if (sortBy === 'CIGAR') {
     return direction === 'ASC' ? 'A-Z' : 'Z-A'
   }
