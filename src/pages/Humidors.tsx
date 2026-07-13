@@ -1,12 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
   archiveHumidor,
   createHumidor,
+  getCollectionCigarDetails,
+  getCollectionHumidorDetails,
+  getCollectionHumidors,
   getHumidors,
   updateHumidor,
+  type CollectionCigarDetails,
+  type CollectionHumidorDetails,
+  type CollectionHumidorSummary,
   type Humidor,
   type StorageOrganizationType,
 } from '../services/api'
+import {
+  CigarDetailsPanel,
+  HumidorDetailsPanel,
+} from '../components/collection/CollectionDetailsPanels'
 
 const ORGANIZATION_OPTIONS: {
   value: StorageOrganizationType
@@ -18,6 +28,10 @@ const ORGANIZATION_OPTIONS: {
   { value: 'SHELVES', label: 'Shelves' },
   { value: 'CUSTOM', label: 'Custom - Coming Soon', disabled: true },
 ]
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC',
+})
 
 function organizationLabel(organizationType: StorageOrganizationType) {
   switch (organizationType) {
@@ -77,10 +91,44 @@ function previewSections(organizationType: StorageOrganizationType, sectionCount
   return Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}`)
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return '-'
+  }
+
+  return dateFormatter.format(new Date(value))
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-'
+  }
+
+  return `${value.toFixed(1)}%`
+}
+
+function formatCapacity(capacity: number | null) {
+  return capacity && capacity > 0 ? String(capacity) : 'Not set'
+}
+
+function sortHumidorsByName(a: Humidor, b: Humidor) {
+  return (
+    a.name.localeCompare(b.name, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }) || a.id - b.id
+  )
+}
+
 function Humidors() {
   const [humidors, setHumidors] = useState<Humidor[]>([])
+  const [collectionHumidors, setCollectionHumidors] = useState<
+    CollectionHumidorSummary[]
+  >([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [inventoryWarning, setInventoryWarning] = useState('')
+  const [inventoryLoadFailed, setInventoryLoadFailed] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [name, setName] = useState('')
   const [capacity, setCapacity] = useState('')
@@ -88,11 +136,66 @@ function Humidors() {
     useState<StorageOrganizationType>('GENERAL')
   const [sectionCount, setSectionCount] = useState('')
   const [editingHumidor, setEditingHumidor] = useState<Humidor | null>(null)
+  const [selectedHumidorId, setSelectedHumidorId] = useState<number | null>(null)
+  const [humidorDetails, setHumidorDetails] = useState<CollectionHumidorDetails | null>(
+    null,
+  )
+  const [isHumidorDetailsLoading, setIsHumidorDetailsLoading] = useState(false)
+  const [humidorDetailsError, setHumidorDetailsError] = useState('')
+  const [selectedCigarId, setSelectedCigarId] = useState<number | null>(null)
+  const [cigarDetailsData, setCigarDetailsData] =
+    useState<CollectionCigarDetails | null>(null)
+  const [isCigarDetailsLoading, setIsCigarDetailsLoading] = useState(false)
+  const [cigarDetailsError, setCigarDetailsError] = useState('')
+  const [inventoryMessage, setInventoryMessage] = useState('')
+  const humidorDetailsRequestIdRef = useRef(0)
+  const cigarDetailsRequestIdRef = useRef(0)
+  const humidorDetailsOpenerRef = useRef<HTMLElement | null>(null)
+  const cigarDetailsOpenerRef = useRef<HTMLElement | null>(null)
+
+  async function refreshInventorySummaries() {
+    try {
+      const data = await getCollectionHumidors()
+      setCollectionHumidors(data.humidors)
+      setInventoryLoadFailed(false)
+      setInventoryWarning('')
+    } catch {
+      setCollectionHumidors([])
+      setInventoryLoadFailed(true)
+      setInventoryWarning(
+        'Current inventory totals could not be loaded. Humidor management actions remain available.',
+      )
+    }
+  }
 
   async function loadHumidors() {
+    setIsLoading(true)
+    setError('')
+
     try {
-      const data = await getHumidors()
-      setHumidors(data)
+      const [humidorResult, collectionResult] = await Promise.allSettled([
+        getHumidors(),
+        getCollectionHumidors(),
+      ])
+
+      if (humidorResult.status === 'rejected') {
+        setError('Unable to load humidors.')
+        setHumidors([])
+      } else {
+        setHumidors(humidorResult.value)
+      }
+
+      if (collectionResult.status === 'rejected') {
+        setCollectionHumidors([])
+        setInventoryLoadFailed(true)
+        setInventoryWarning(
+          'Current inventory totals could not be loaded. Humidor management actions remain available.',
+        )
+      } else {
+        setCollectionHumidors(collectionResult.value.humidors)
+        setInventoryLoadFailed(false)
+        setInventoryWarning('')
+      }
     } catch {
       setError('Unable to load humidors.')
     } finally {
@@ -103,6 +206,228 @@ function Humidors() {
   useEffect(() => {
     loadHumidors()
   }, [])
+
+  useEffect(() => {
+    if (selectedCigarId === null) {
+      return
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        closeCigarDetails()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedCigarId])
+
+  useEffect(() => {
+    if (selectedHumidorId === null) {
+      return
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape' && selectedCigarId === null) {
+        closeHumidorDetails()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedHumidorId, selectedCigarId])
+
+  async function openHumidorDetails(storageLocationId: number, opener: HTMLElement) {
+    const requestId = humidorDetailsRequestIdRef.current + 1
+    humidorDetailsRequestIdRef.current = requestId
+    humidorDetailsOpenerRef.current = opener
+    setSelectedHumidorId(storageLocationId)
+    setHumidorDetails(null)
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(true)
+
+    try {
+      const data = await getCollectionHumidorDetails(storageLocationId)
+
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetails(data)
+    } catch (loadError) {
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Humidor details.',
+      )
+    } finally {
+      if (requestId === humidorDetailsRequestIdRef.current) {
+        setIsHumidorDetailsLoading(false)
+      }
+    }
+  }
+
+  async function reloadOpenHumidorDetails() {
+    if (selectedHumidorId === null) {
+      return
+    }
+
+    const requestId = humidorDetailsRequestIdRef.current + 1
+    humidorDetailsRequestIdRef.current = requestId
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(true)
+
+    try {
+      const data = await getCollectionHumidorDetails(selectedHumidorId)
+
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetails(data)
+    } catch (loadError) {
+      if (requestId !== humidorDetailsRequestIdRef.current) {
+        return
+      }
+
+      setHumidorDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load Humidor details.',
+      )
+    } finally {
+      if (requestId === humidorDetailsRequestIdRef.current) {
+        setIsHumidorDetailsLoading(false)
+      }
+    }
+  }
+
+  async function openCigarDetails(catalogCigarId: number, opener: HTMLElement) {
+    const requestId = cigarDetailsRequestIdRef.current + 1
+    cigarDetailsRequestIdRef.current = requestId
+    cigarDetailsOpenerRef.current = opener
+    setInventoryMessage('')
+    setSelectedCigarId(catalogCigarId)
+    setCigarDetailsData(null)
+    setCigarDetailsError('')
+    setIsCigarDetailsLoading(true)
+
+    try {
+      const data = await getCollectionCigarDetails(catalogCigarId)
+
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsData(data)
+    } catch (loadError) {
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsError(
+        loadError instanceof Error ? loadError.message : 'Unable to load cigar details.',
+      )
+    } finally {
+      if (requestId === cigarDetailsRequestIdRef.current) {
+        setIsCigarDetailsLoading(false)
+      }
+    }
+  }
+
+  async function reloadOpenCigarDetails() {
+    if (selectedCigarId === null) {
+      return false
+    }
+
+    const requestId = cigarDetailsRequestIdRef.current + 1
+    cigarDetailsRequestIdRef.current = requestId
+    setCigarDetailsError('')
+    setIsCigarDetailsLoading(true)
+
+    try {
+      const data = await getCollectionCigarDetails(selectedCigarId)
+
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      setCigarDetailsData(data)
+      return true
+    } catch (loadError) {
+      if (requestId !== cigarDetailsRequestIdRef.current) {
+        return
+      }
+
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load cigar details.'
+      setCigarDetailsError(message)
+      return !message.toLowerCase().includes('not found')
+    } finally {
+      if (requestId === cigarDetailsRequestIdRef.current) {
+        setIsCigarDetailsLoading(false)
+      }
+    }
+  }
+
+  async function handleInventoryChanged() {
+    await Promise.all([
+      refreshInventorySummaries(),
+      selectedHumidorId !== null ? reloadOpenHumidorDetails() : Promise.resolve(),
+    ])
+  }
+
+  function closeCigarDetails() {
+    cigarDetailsRequestIdRef.current += 1
+    setSelectedCigarId(null)
+    setCigarDetailsData(null)
+    setCigarDetailsError('')
+    setIsCigarDetailsLoading(false)
+
+    window.setTimeout(() => {
+      cigarDetailsOpenerRef.current?.focus()
+    }, 0)
+  }
+
+  function closeHumidorDetails() {
+    humidorDetailsRequestIdRef.current += 1
+    setSelectedHumidorId(null)
+    setHumidorDetails(null)
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(false)
+
+    window.setTimeout(() => {
+      humidorDetailsOpenerRef.current?.focus()
+    }, 0)
+  }
+
+  function clearDetailsPanels() {
+    humidorDetailsRequestIdRef.current += 1
+    cigarDetailsRequestIdRef.current += 1
+    setSelectedHumidorId(null)
+    setHumidorDetails(null)
+    setHumidorDetailsError('')
+    setIsHumidorDetailsLoading(false)
+    setSelectedCigarId(null)
+    setCigarDetailsData(null)
+    setCigarDetailsError('')
+    setIsCigarDetailsLoading(false)
+  }
+
+  function handleOpenHumidorDetailsKeyDown(
+    event: KeyboardEvent<HTMLElement>,
+    humidorId: number,
+  ) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      void openHumidorDetails(humidorId, event.currentTarget)
+    }
+  }
 
   async function handleSaveHumidor(event: React.FormEvent) {
     event.preventDefault()
@@ -149,6 +474,8 @@ function Humidors() {
         setHumidors((current) => [...current, createdHumidor])
       }
 
+      await refreshInventorySummaries()
+
       setName('')
       setCapacity('')
       setOrganizationType('GENERAL')
@@ -162,6 +489,7 @@ function Humidors() {
   }
 
   function openAddModal() {
+    clearDetailsPanels()
     setEditingHumidor(null)
     setName('')
     setCapacity('')
@@ -172,6 +500,7 @@ function Humidors() {
   }
 
   function openEditModal(humidor: Humidor) {
+    clearDetailsPanels()
     setEditingHumidor(humidor)
     setName(humidor.name)
     setCapacity(humidor.capacity ? String(humidor.capacity) : '')
@@ -192,6 +521,7 @@ function Humidors() {
       await archiveHumidor(humidor.id)
 
       setHumidors((current) => current.filter((item) => item.id !== humidor.id))
+      await refreshInventorySummaries()
 
       setEditingHumidor(null)
       setIsModalOpen(false)
@@ -203,12 +533,62 @@ function Humidors() {
   const sectionPreview = previewSections(organizationType, sectionCount)
   const sectionCountLabel =
     organizationType === 'DRAWERS' ? 'Number of Drawers' : 'Number of Shelves'
+  const collectionHumidorsById = useMemo(
+    () =>
+      new Map(
+        collectionHumidors.map((collectionHumidor) => [
+          collectionHumidor.storageLocation.id,
+          collectionHumidor,
+        ]),
+      ),
+    [collectionHumidors],
+  )
+  const humidorViews = useMemo(
+    () =>
+      [...humidors].sort(sortHumidorsByName).map((humidor) => {
+        const inventorySummary = collectionHumidorsById.get(humidor.id)
+
+        return {
+          humidor,
+          inventorySummary,
+          currentCount: inventorySummary?.totalQuantity,
+          occupancyPercent: inventorySummary?.capacityUsedPercent,
+          oldestLotDate: inventorySummary?.oldestReceivedDate,
+          configuredSectionCount: visibleSectionCount(humidor),
+        }
+      }),
+    [collectionHumidorsById, humidors],
+  )
+  const hasMissingInventorySummaries =
+    !inventoryLoadFailed &&
+    humidorViews.some(({ inventorySummary }) => inventorySummary === undefined)
+  const displayedInventoryWarning =
+    inventoryWarning ||
+    (hasMissingInventorySummaries
+      ? 'Current inventory totals could not be matched for one or more humidors.'
+      : '')
+  const totalCapacity = humidorViews.reduce((total, { humidor }) => {
+    if (!humidor.capacity || humidor.capacity <= 0) {
+      return total
+    }
+
+    return total + humidor.capacity
+  }, 0)
+  const totalCurrentCount = inventoryLoadFailed
+    ? null
+    : humidorViews.reduce(
+        (total, { currentCount }) => total + (currentCount ?? 0),
+        0,
+      )
+  const summaryOccupancy =
+    totalCapacity > 0 && totalCurrentCount !== null && !hasMissingInventorySummaries
+      ? `${((totalCurrentCount / totalCapacity) * 100).toFixed(1)}%`
+      : '-'
 
   return (
     <>
       <header className="page-header">
-        <div>
-          <p className="eyebrow">Humidors</p>
+        <div className="page-header-copy">
           <h2>Humidors</h2>
           <p className="page-subtitle">
             Manage your storage locations, capacity, shelves, and occupancy.
@@ -219,75 +599,206 @@ function Humidors() {
         </button>
       </header>
 
-      <section className="summary-grid">
+      <section className="summary-grid humidor-summary-grid">
         <div className="card">
           <p>Humidors</p>
-          <strong>{humidors.length}</strong>
+          <strong>{humidorViews.length}</strong>
         </div>
         <div className="card">
           <p>Capacity</p>
-          <strong>
-            {humidors.reduce((total, humidor) => total + (humidor.capacity ?? 0), 0)}
-          </strong>
+          <strong>{totalCapacity}</strong>
         </div>
         <div className="card">
           <p>Current Count</p>
-          <strong>0</strong>
+          <strong>{totalCurrentCount ?? '-'}</strong>
         </div>
         <div className="card">
           <p>Occupancy</p>
-          <strong>0%</strong>
+          <strong>{summaryOccupancy}</strong>
         </div>
       </section>
 
-      <section className="panel">
+      {inventoryMessage ? (
+        <p className="collection-detail-success collection-page-inventory-message" role="status">
+          {inventoryMessage}
+        </p>
+      ) : null}
+
+      <section className="panel humidor-management-panel">
         <h3>Your Humidors</h3>
 
         {isLoading && <p className="muted">Loading humidors...</p>}
 
         {error && <p className="error-text">{error}</p>}
 
-        {!isLoading && !error && humidors.length === 0 && (
+        {!isLoading && !error && displayedInventoryWarning && (
+          <div className="inventory-warning" role="status">
+            {displayedInventoryWarning}
+          </div>
+        )}
+
+        {!isLoading && !error && humidorViews.length === 0 && (
           <p className="muted">
             You have not created any humidors yet. Click "Add Humidor" to create your first one.
           </p>
         )}
 
-        {!isLoading && humidors.length > 0 && (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Capacity</th>
-                <th>Organization</th>
-                <th>Sections</th>
-                <th>Current Count</th>
-                <th>Occupancy</th>
-                <th>Oldest Lot</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {humidors.map((humidor) => (
-                <tr key={humidor.id}>
-                  <td>{humidor.name}</td>
-                  <td>{humidor.capacity ?? 'Not set'}</td>
-                  <td>{organizationLabel(humidor.organizationType)}</td>
-                  <td>{visibleSectionCount(humidor)}</td>
-                  <td>0</td>
-                  <td>0%</td>
-                  <td>-</td>
-                  <td>
-                    <button className="table-action" onClick={() => openEditModal(humidor)}>
-                      Edit
-                    </button>
-                  </td>
+        {!isLoading && humidorViews.length > 0 && (
+          <>
+            <table className="data-table humidor-management-table desktop-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Capacity</th>
+                  <th>Organization</th>
+                  <th>Sections</th>
+                  <th>Current Count</th>
+                  <th>Occupancy</th>
+                  <th>Oldest Lot</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {humidorViews.map(
+                  ({
+                    humidor,
+                    currentCount,
+                    occupancyPercent,
+                    oldestLotDate,
+                    configuredSectionCount,
+                  }) => (
+                    <tr
+                      className="humidor-management-row"
+                      key={humidor.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open ${humidor.name} Humidor details`}
+                      onClick={(event) =>
+                        void openHumidorDetails(humidor.id, event.currentTarget)
+                      }
+                      onKeyDown={(event) =>
+                        handleOpenHumidorDetailsKeyDown(event, humidor.id)
+                      }
+                    >
+                      <td>{humidor.name}</td>
+                      <td>{formatCapacity(humidor.capacity)}</td>
+                      <td>{organizationLabel(humidor.organizationType)}</td>
+                      <td>{configuredSectionCount}</td>
+                      <td>{currentCount ?? '-'}</td>
+                      <td>{formatPercent(occupancyPercent)}</td>
+                      <td>{formatDate(oldestLotDate)}</td>
+                      <td>
+                        <button
+                          className="table-action"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEditModal(humidor)
+                          }}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+
+            <div className="humidor-management-card-list">
+              {humidorViews.map(
+                ({
+                  humidor,
+                  currentCount,
+                  occupancyPercent,
+                  oldestLotDate,
+                  configuredSectionCount,
+                }) => (
+                  <article
+                    className="humidor-management-card humidor-management-card-interactive"
+                    key={humidor.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open ${humidor.name} Humidor details`}
+                    onClick={(event) =>
+                      void openHumidorDetails(humidor.id, event.currentTarget)
+                    }
+                    onKeyDown={(event) =>
+                      handleOpenHumidorDetailsKeyDown(event, humidor.id)
+                    }
+                  >
+                    <div className="humidor-management-card-header">
+                      <h4>{humidor.name}</h4>
+                      <button
+                        className="table-action"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openEditModal(humidor)
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        Edit
+                      </button>
+                    </div>
+
+                    <dl>
+                      <div>
+                        <dt>Capacity</dt>
+                        <dd>{formatCapacity(humidor.capacity)}</dd>
+                      </div>
+                      <div>
+                        <dt>Organization</dt>
+                        <dd>{organizationLabel(humidor.organizationType)}</dd>
+                      </div>
+                      <div>
+                        <dt>Sections</dt>
+                        <dd>{configuredSectionCount}</dd>
+                      </div>
+                      <div>
+                        <dt>Current Count</dt>
+                        <dd>{currentCount ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt>Occupancy</dt>
+                        <dd>{formatPercent(occupancyPercent)}</dd>
+                      </div>
+                      <div>
+                        <dt>Oldest Lot</dt>
+                        <dd>{formatDate(oldestLotDate)}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ),
+              )}
+            </div>
+          </>
         )}
       </section>
+
+      {selectedHumidorId !== null ? (
+        <HumidorDetailsPanel
+          details={humidorDetails}
+          isLoading={isHumidorDetailsLoading}
+          error={humidorDetailsError}
+          isNestedPanelOpen={selectedCigarId !== null}
+          onClose={closeHumidorDetails}
+          onOpenCigarDetails={(catalogCigarId, opener) =>
+            void openCigarDetails(catalogCigarId, opener)
+          }
+        />
+      ) : null}
+
+      {selectedCigarId !== null ? (
+        <CigarDetailsPanel
+          details={cigarDetailsData}
+          isLoading={isCigarDetailsLoading}
+          error={cigarDetailsError}
+          onClose={closeCigarDetails}
+          onReloadDetails={reloadOpenCigarDetails}
+          onInventoryChanged={handleInventoryChanged}
+          onInventoryMessage={setInventoryMessage}
+        />
+      ) : null}
 
       {isModalOpen && (
         <div className="modal-backdrop">

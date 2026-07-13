@@ -50,6 +50,33 @@ This follows the principle of minimizing ongoing maintenance by deriving state r
 
 ---
 
+## Line-Level Receiving and Storage
+
+Decision:
+Receiving and storage are tracked at the purchase-line level.
+
+- One purchase may contain multiple purchase lines that arrive on different dates.
+- receivedDate belongs to PurchaseLine rather than only to the purchase header.
+- Each PurchaseLine creates one Lot.
+- The Lot preserves the PurchaseLine received date as its received-date snapshot.
+- Each line may be received and stored independently from the other lines in the same purchase.
+- Different lines from the same purchase may be assigned to different humidors, drawers, or shelves.
+- Receiving and storing one line does not affect the en-route state of other lines.
+- A purchase's overall operational state is derived from its lines:
+  - En Route: no lines have been received.
+  - Partially Received: some but not all lines have received dates.
+  - Received: all lines have received dates.
+  - Fully Stored: all lots have positive location balances.
+- These operational states are inferred and are not manually maintained.
+- The UI should eventually allow a received date to be applied to all lines when the entire order arrives together.
+- A Receive and Store workflow should eventually set the line received date, update the lot snapshot, create the initial placement event, and create the location balance atomically.
+- This design supports split shipments without requiring a separate shipment model in Version 1.
+
+Reason:
+Line-level receiving supports split shipments while preserving the principle that operational state should be derived from facts already recorded.
+
+---
+
 ## Collection Views and Location Search
 
 Decision:
@@ -82,6 +109,96 @@ Trading and loss tracking are intentionally out of scope.
 
 Reason:
 The application is optimized around the owner's collecting workflow.
+
+---
+
+## Desktop and Mobile Workflow Strategy
+
+Decision:
+HumidorHQ is one responsive web application used on both computers and iPhones.
+
+- A separate mobile application is not required.
+- The application will eventually support installation on the iPhone Home Screen as a Progressive Web App.
+- Desktop and mobile use the same API, database, business rules, and historical records.
+
+Desktop-primary workflows:
+
+- Entering current and historical purchases.
+- Managing purchases with multiple lines.
+- Reviewing weighted cost allocations.
+- Catalog maintenance and duplicate merging.
+- Vendor administration.
+- Reports, analytics, and other detailed administrative tasks.
+
+iPhone-primary workflows:
+
+- Receiving and storing a purchase line.
+- Searching for a cigar and locating its humidor, drawer, or shelf.
+- Moving selected quantities between locations.
+- Recording cigars as smoked, gifted/shared, or damaged.
+- Browsing Collection and Humidor contents.
+- Opening Cigar Details.
+
+Interface principles:
+
+- Purchase entry may use desktop-friendly tables and multi-column forms, but it must remain usable on a phone.
+- Collection, Search, Receive and Store, Move, and Consumption workflows should be designed mobile-first.
+- Mobile actions should use large touch targets, minimal typing, and short full-screen or near-full-screen workflows.
+- Essential actions must not depend on mouse hover.
+- Desktop may use persistent sidebar navigation.
+- Mobile may eventually use compact navigation or bottom navigation.
+- Responsive presentation may use tables on desktop and cards or compact layouts on mobile.
+- Device-specific presentation must not create separate or inconsistent data workflows.
+
+Reason:
+This strategy reflects actual expected usage: purchases will primarily be entered on a computer, while receiving, moving, searching, and consuming cigars will primarily occur on an iPhone near the physical humidors.
+
+---
+
+## Catalog Attribute Suggestions
+
+Decision:
+Catalog creation fields should increasingly suggest existing values as the Catalog grows.
+
+- Suggestions should reduce duplicate spellings and improve filtering and reporting.
+- Most fields should use editable autocomplete rather than strict dropdowns.
+- The user may select an existing value or enter a legitimate new value.
+
+Field behavior:
+
+- Manufacturer:
+  - Autocomplete from existing manufacturers.
+  - Use normalized matching so punctuation and capitalization differences do not create duplicate identities.
+
+- Series:
+  - Suggest existing series values.
+  - Filter suggestions by the selected manufacturer when possible.
+
+- Vitola:
+  - Suggest existing vitolas.
+  - Filter suggestions by selected manufacturer and series when possible.
+  - Allow entry of a new vitola.
+
+- Shape:
+  - Suggest standardized values such as Robusto, Toro, Churchill, Gordo, Perfecto, Torpedo, Lancero, and similar shapes.
+  - Allow new values when needed.
+
+- Wrapper:
+  - Autocomplete from wrapper values already used in the Catalog.
+  - Preserve canonical display capitalization and punctuation.
+
+- Strength:
+  - Use a controlled selection such as Mild, Mild-Medium, Medium, Medium-Full, and Full.
+
+- Length and Ring Gauge:
+  - Remain numeric inputs.
+  - May offer common-value suggestions but must not restrict unusual sizes.
+
+- Binder, Filler, and Country:
+  - May use editable autocomplete from existing Catalog values when those fields are exposed.
+
+Principle:
+Reuse known values whenever possible without preventing entry of legitimate new cigar attributes.
 
 ---
 

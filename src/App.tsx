@@ -1,19 +1,54 @@
+import { useState } from 'react'
+import Dashboard from './pages/Dashboard'
+import Catalog from './pages/Catalog'
+import Collection from './pages/Collection'
 import Humidors from './pages/Humidors'
+import Purchases from './pages/Purchases'
 import './App.css'
 
 const navItems = [
-  'Collection',
   'Dashboard',
+  'Collection',
   'Purchases',
+  'Consumption',
   'Humidors',
   'Catalog',
-  'Vendors',
-  'Consumption',
   'Reports',
   'Settings',
 ]
 
 function App() {
+  const [activePage, setActivePage] = useState('Dashboard')
+
+  function renderPage() {
+    if (activePage === 'Dashboard') {
+      return <Dashboard />
+    }
+
+    if (activePage === 'Purchases') {
+      return <Purchases />
+    }
+
+    if (activePage === 'Collection') {
+      return <Collection />
+    }
+
+    if (activePage === 'Humidors') {
+      return <Humidors />
+    }
+
+    if (activePage === 'Catalog') {
+      return <Catalog />
+    }
+
+    return (
+      <section className="panel">
+        <h3>{activePage}</h3>
+        <p className="muted">This section is not implemented yet.</p>
+      </section>
+    )
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -26,7 +61,8 @@ function App() {
           {navItems.map((item) => (
             <button
               key={item}
-              className={item === 'Humidors' ? 'nav-item active' : 'nav-item'}
+              className={item === activePage ? 'nav-item active' : 'nav-item'}
+              onClick={() => setActivePage(item)}
             >
               {item}
             </button>
@@ -35,7 +71,7 @@ function App() {
       </aside>
 
       <main className="main-content">
-        <Humidors />
+        {renderPage()}
       </main>
     </div>
   )

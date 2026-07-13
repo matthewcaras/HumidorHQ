@@ -5,8 +5,15 @@ import {
   CatalogServiceError,
   createCatalogCigar,
   getCatalogCigars,
+  restoreCatalogCigar,
   updateCatalogCigar,
 } from './services/catalogService.ts'
+import {
+  catalogManagementIdParam,
+  CatalogManagementServiceError,
+  getManagedCatalog,
+  getManagedCatalogDetails,
+} from './services/catalogManagementService.ts'
 import {
   archiveHumidor,
   createHumidor,
@@ -23,6 +30,45 @@ import {
   VendorServiceError,
   vendorIdParam,
 } from './services/vendorService.ts'
+import {
+  createPurchase,
+  getPurchaseById,
+  getPurchases,
+  purchaseIdParam,
+  PurchaseServiceError,
+  updatePurchase,
+  updatePurchaseNotes,
+} from './services/purchaseService.ts'
+import {
+  receiveAndStorePurchaseLine,
+  ReceiveStoreServiceError,
+  purchaseLineIdParam,
+} from './services/receiveStoreService.ts'
+import {
+  moveLot,
+  MoveServiceError,
+  moveLotIdParam,
+} from './services/moveService.ts'
+import {
+  removeFromLot,
+  RemovalServiceError,
+  removalLotIdParam,
+} from './services/removalService.ts'
+import {
+  DashboardServiceError,
+  getDashboard,
+} from './services/dashboardService.ts'
+import {
+  collectionCatalogCigarIdParam,
+  CollectionServiceError,
+  getCollection,
+  getCollectionCigarDetails,
+} from './services/collectionService.ts'
+import {
+  collectionStorageLocationIdParam,
+  getCollectionHumidorDetails,
+  getCollectionHumidors,
+} from './services/collectionHumidorService.ts'
 
 const app = express()
 
@@ -66,6 +112,25 @@ function handleCatalogError(error: unknown, res: express.Response) {
   })
 }
 
+function handleCatalogManagementError(error: unknown, res: express.Response) {
+  if (error instanceof CatalogManagementServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'CATALOG_MANAGEMENT_UNEXPECTED_ERROR',
+      message: 'The Catalog could not be loaded.',
+    },
+  })
+}
+
 function handleHumidorError(error: unknown, res: express.Response) {
   if (error instanceof HumidorServiceError) {
     res.status(error.statusCode).json({
@@ -104,6 +169,182 @@ function handleVendorError(error: unknown, res: express.Response) {
   })
 }
 
+function handlePurchaseError(error: unknown, res: express.Response) {
+  if (error instanceof PurchaseServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'PURCHASE_UNEXPECTED_ERROR',
+      message: 'The purchase request could not be completed.',
+    },
+  })
+}
+
+function handleReceiveStoreError(error: unknown, res: express.Response) {
+  if (error instanceof ReceiveStoreServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'RECEIVE_STORE_UNEXPECTED_ERROR',
+      message: 'The receive and store request could not be completed.',
+    },
+  })
+}
+
+function handleMoveError(error: unknown, res: express.Response) {
+  if (error instanceof MoveServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'MOVE_UNEXPECTED_ERROR',
+      message: 'The Move request could not be completed.',
+    },
+  })
+}
+
+function handleRemovalError(error: unknown, res: express.Response) {
+  if (error instanceof RemovalServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'REMOVAL_UNEXPECTED_ERROR',
+      message: 'The removal request could not be completed.',
+    },
+  })
+}
+
+function handleDashboardError(error: unknown, res: express.Response) {
+  if (error instanceof DashboardServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'DASHBOARD_UNEXPECTED_ERROR',
+      message: 'The Dashboard could not be loaded.',
+    },
+  })
+}
+
+function handleCollectionError(error: unknown, res: express.Response) {
+  if (error instanceof CollectionServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'COLLECTION_UNEXPECTED_ERROR',
+      message: 'The collection request could not be completed.',
+    },
+  })
+}
+
+app.get('/api/dashboard', async (_req, res) => {
+  try {
+    const dashboard = await getDashboard()
+
+    res.json({ data: dashboard })
+  } catch (error) {
+    handleDashboardError(error, res)
+  }
+})
+
+app.get('/api/collection', async (req, res) => {
+  try {
+    const collection = await getCollection({
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      limit: typeof req.query.limit === 'string' ? req.query.limit : undefined,
+      offset: typeof req.query.offset === 'string' ? req.query.offset : undefined,
+      sortBy: typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined,
+      sortDirection:
+        typeof req.query.sortDirection === 'string' ? req.query.sortDirection : undefined,
+    })
+
+    res.json({ data: collection })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+app.get('/api/collection/humidors', async (_req, res) => {
+  try {
+    const humidors = await getCollectionHumidors()
+
+    res.json({ data: humidors })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+app.get('/api/collection/humidors/:storageLocationId', async (req, res) => {
+  try {
+    const humidor = await getCollectionHumidorDetails(
+      collectionStorageLocationIdParam(req.params.storageLocationId),
+    )
+
+    res.json({ data: humidor })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
+// Static Collection routes, including /api/collection/humidors, must be registered before this parameter route.
+app.get('/api/collection/:catalogCigarId', async (req, res) => {
+  try {
+    const details = await getCollectionCigarDetails(
+      collectionCatalogCigarIdParam(req.params.catalogCigarId),
+    )
+
+    res.json({ data: details })
+  } catch (error) {
+    handleCollectionError(error, res)
+  }
+})
+
 app.get('/api/catalog', async (req, res) => {
   try {
     const catalogCigars = await getCatalogCigars({
@@ -123,6 +364,35 @@ app.get('/api/catalog', async (req, res) => {
   }
 })
 
+app.get('/api/catalog/manage', async (req, res) => {
+  try {
+    const catalog = await getManagedCatalog({
+      search: req.query.search,
+      status: req.query.status,
+      sortBy: req.query.sortBy,
+      sortDirection: req.query.sortDirection,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+
+    res.json({ data: catalog })
+  } catch (error) {
+    handleCatalogManagementError(error, res)
+  }
+})
+
+app.get('/api/catalog/:catalogCigarId', async (req, res) => {
+  try {
+    const catalogCigar = await getManagedCatalogDetails(
+      catalogManagementIdParam(req.params.catalogCigarId),
+    )
+
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogManagementError(error, res)
+  }
+})
+
 app.post('/api/catalog', async (req, res) => {
   try {
     const catalogCigar = await createCatalogCigar(req.body)
@@ -135,6 +405,24 @@ app.post('/api/catalog', async (req, res) => {
 app.put('/api/catalog/:id', async (req, res) => {
   try {
     const catalogCigar = await updateCatalogCigar(catalogIdParam(req.params.id), req.body)
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogError(error, res)
+  }
+})
+
+app.patch('/api/catalog/:id/archive', async (req, res) => {
+  try {
+    const catalogCigar = await archiveCatalogCigar(catalogIdParam(req.params.id))
+    res.json({ data: catalogCigar })
+  } catch (error) {
+    handleCatalogError(error, res)
+  }
+})
+
+app.patch('/api/catalog/:id/restore', async (req, res) => {
+  try {
+    const catalogCigar = await restoreCatalogCigar(catalogIdParam(req.params.id))
     res.json({ data: catalogCigar })
   } catch (error) {
     handleCatalogError(error, res)
@@ -185,6 +473,84 @@ app.patch('/api/vendors/:id/archive', async (req, res) => {
     res.json({ data: vendor })
   } catch (error) {
     handleVendorError(error, res)
+  }
+})
+
+app.get('/api/purchases', async (req, res) => {
+  try {
+    const purchases = await getPurchases({
+      vendorId: typeof req.query.vendorId === 'string' ? req.query.vendorId : undefined,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    })
+    res.json({ data: purchases })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.get('/api/purchases/:id', async (req, res) => {
+  try {
+    const purchase = await getPurchaseById(purchaseIdParam(req.params.id))
+    res.json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.post('/api/purchases', async (req, res) => {
+  try {
+    const purchase = await createPurchase(req.body)
+    res.status(201).json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.put('/api/purchases/:id', async (req, res) => {
+  try {
+    const purchase = await updatePurchase(purchaseIdParam(req.params.id), req.body)
+    res.json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.patch('/api/purchases/:id/notes', async (req, res) => {
+  try {
+    const purchase = await updatePurchaseNotes(purchaseIdParam(req.params.id), req.body)
+    res.json({ data: purchase })
+  } catch (error) {
+    handlePurchaseError(error, res)
+  }
+})
+
+app.post('/api/purchase-lines/:id/receive-store', async (req, res) => {
+  try {
+    const result = await receiveAndStorePurchaseLine(
+      purchaseLineIdParam(req.params.id),
+      req.body,
+    )
+    res.json({ data: result })
+  } catch (error) {
+    handleReceiveStoreError(error, res)
+  }
+})
+
+app.post('/api/lots/:lotId/move', async (req, res) => {
+  try {
+    const result = await moveLot(moveLotIdParam(req.params.lotId), req.body)
+    res.json({ data: result })
+  } catch (error) {
+    handleMoveError(error, res)
+  }
+})
+
+app.post('/api/lots/:lotId/remove', async (req, res) => {
+  try {
+    const result = await removeFromLot(removalLotIdParam(req.params.lotId), req.body)
+    res.json({ data: result })
+  } catch (error) {
+    handleRemovalError(error, res)
   }
 })
 
