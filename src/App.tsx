@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Dashboard from './pages/Dashboard'
 import Collection from './pages/Collection'
 import Humidors from './pages/Humidors'
 import Purchases from './pages/Purchases'
@@ -19,6 +20,10 @@ function App() {
   const [activePage, setActivePage] = useState('Purchases')
 
   function renderPage() {
+    if (activePage === 'Dashboard') {
+      return <Dashboard />
+    }
+
     if (activePage === 'Purchases') {
       return <Purchases />
     }

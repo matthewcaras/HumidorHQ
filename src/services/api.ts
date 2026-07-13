@@ -245,6 +245,100 @@ export type RemoveFromLotResult = {
   lotDepleted: boolean
 }
 
+export type DashboardInventoryIssue = {
+  code: string
+  message: string
+  severity: 'WARNING'
+  lotId?: number
+  catalogCigarId?: number
+  storageLocationId?: number
+  storageSubLocationId?: number
+}
+
+export type DashboardCurrentCollection = {
+  totalQuantity: number
+  uniqueCigarCount: number
+  lotCount: number
+  currentCostBasis: string | null
+  currentMsrpValue: string | null
+  totalSavings: string | null
+  averageCostPerCigar: string | null
+  averageMsrpPerCigar: string | null
+  quantityMissingCost: number
+  quantityMissingMsrp: number
+  issues: DashboardInventoryIssue[]
+}
+
+export type DashboardRemovalMetric = {
+  quantity: number
+  totalCost: string | null
+  totalMsrp: string | null
+  totalSavings: string | null
+  averageCostPerCigar: string | null
+  averageMsrpPerCigar: string | null
+  quantityWithKnownCost: number
+  quantityMissingCost: number
+  quantityWithKnownMsrp: number
+  quantityMissingMsrp: number
+}
+
+export type DashboardStorageLocation = {
+  id: number
+  name: string
+  capacity: number | null
+  isActive: boolean
+}
+
+export type DashboardHumidor = {
+  storageLocation: DashboardStorageLocation
+  totalQuantity: number
+  uniqueCigarCount: number
+  oldestReceivedDate: string | null
+  capacityUsedPercent: number | null
+  averageMsrpPerCigar: string | null
+  quantityMissingMsrp: number
+  issues: DashboardInventoryIssue[]
+}
+
+export type DashboardCatalogCigar = Pick<
+  CatalogCigar,
+  'id' | 'manufacturer' | 'series' | 'vitola' | 'shape' | 'length' | 'ringGauge' | 'wrapper'
+>
+
+export type DashboardActivityLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: string
+  isArchived: boolean
+}
+
+export type DashboardActivity = {
+  id: number
+  eventType: string
+  quantity: number
+  eventDate: string
+  createdAt: string
+  lotId: number
+  catalogCigar: DashboardCatalogCigar | null
+  sourceLocation: DashboardActivityLocation | null
+  destinationLocation: DashboardActivityLocation | null
+  costPerCigarAtEvent: string | null
+  msrpPerCigarAtEvent: string | null
+  notes: string | null
+}
+
+export type DashboardResponse = {
+  currentCollection: DashboardCurrentCollection
+  smoking: DashboardRemovalMetric
+  gifted: DashboardRemovalMetric
+  discarded: DashboardRemovalMetric
+  humidors: DashboardHumidor[]
+  recentActivity: DashboardActivity[]
+  issues: DashboardInventoryIssue[]
+}
+
 export type CollectionInventoryIssue = {
   code: string
   message: string
@@ -550,6 +644,12 @@ export async function archiveHumidor(id: number): Promise<Humidor> {
   })
 
   return parseJsonResponse<Humidor>(response, 'Failed to archive humidor')
+}
+
+export async function getDashboard(): Promise<DashboardResponse> {
+  const response = await fetch(`${API_BASE_URL}/dashboard`)
+
+  return parseJsonResponse<DashboardResponse>(response, 'Failed to load Dashboard')
 }
 
 export async function getCollection(
