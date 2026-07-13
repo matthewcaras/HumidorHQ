@@ -63,6 +63,10 @@ import {
   ReportsServiceError,
 } from './services/reportsService.ts'
 import {
+  ActivityReportsServiceError,
+  getActivityReport,
+} from './services/activityReportsService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -287,6 +291,25 @@ function handleReportsError(error: unknown, res: express.Response) {
   })
 }
 
+function handleActivityReportsError(error: unknown, res: express.Response) {
+  if (error instanceof ActivityReportsServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'REPORTS_UNEXPECTED_ERROR',
+      message: 'The activity report could not be loaded.',
+    },
+  })
+}
+
 function handleCollectionError(error: unknown, res: express.Response) {
   if (error instanceof CollectionServiceError) {
     res.status(error.statusCode).json({
@@ -333,6 +356,26 @@ app.get('/api/reports/removals', async (req, res) => {
     res.json({ data: report })
   } catch (error) {
     handleReportsError(error, res)
+  }
+})
+
+app.get('/api/reports/activity', async (req, res) => {
+  try {
+    const report = await getActivityReport({
+      eventType: req.query.eventType,
+      period: req.query.period,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      search: req.query.search,
+      sortBy: req.query.sortBy,
+      sortDirection: req.query.sortDirection,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+
+    res.json({ data: report })
+  } catch (error) {
+    handleActivityReportsError(error, res)
   }
 })
 
