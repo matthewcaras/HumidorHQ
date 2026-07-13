@@ -147,6 +147,7 @@ function Humidors() {
     useState<CollectionCigarDetails | null>(null)
   const [isCigarDetailsLoading, setIsCigarDetailsLoading] = useState(false)
   const [cigarDetailsError, setCigarDetailsError] = useState('')
+  const [inventoryMessage, setInventoryMessage] = useState('')
   const humidorDetailsRequestIdRef = useRef(0)
   const cigarDetailsRequestIdRef = useRef(0)
   const humidorDetailsOpenerRef = useRef<HTMLElement | null>(null)
@@ -311,6 +312,7 @@ function Humidors() {
     const requestId = cigarDetailsRequestIdRef.current + 1
     cigarDetailsRequestIdRef.current = requestId
     cigarDetailsOpenerRef.current = opener
+    setInventoryMessage('')
     setSelectedCigarId(catalogCigarId)
     setCigarDetailsData(null)
     setCigarDetailsError('')
@@ -341,7 +343,7 @@ function Humidors() {
 
   async function reloadOpenCigarDetails() {
     if (selectedCigarId === null) {
-      return
+      return false
     }
 
     const requestId = cigarDetailsRequestIdRef.current + 1
@@ -357,14 +359,15 @@ function Humidors() {
       }
 
       setCigarDetailsData(data)
+      return true
     } catch (loadError) {
       if (requestId !== cigarDetailsRequestIdRef.current) {
         return
       }
 
-      setCigarDetailsError(
-        loadError instanceof Error ? loadError.message : 'Unable to load cigar details.',
-      )
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load cigar details.'
+      setCigarDetailsError(message)
+      return !message.toLowerCase().includes('not found')
     } finally {
       if (requestId === cigarDetailsRequestIdRef.current) {
         setIsCigarDetailsLoading(false)
@@ -615,6 +618,12 @@ function Humidors() {
         </div>
       </section>
 
+      {inventoryMessage ? (
+        <p className="collection-detail-success collection-page-inventory-message" role="status">
+          {inventoryMessage}
+        </p>
+      ) : null}
+
       <section className="panel humidor-management-panel">
         <h3>Your Humidors</h3>
 
@@ -787,6 +796,7 @@ function Humidors() {
           onClose={closeCigarDetails}
           onReloadDetails={reloadOpenCigarDetails}
           onInventoryChanged={handleInventoryChanged}
+          onInventoryMessage={setInventoryMessage}
         />
       ) : null}
 

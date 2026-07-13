@@ -8,8 +8,10 @@ import type {
   CollectionLotLocation,
   CollectionLotSummary,
   MoveLotResult,
+  RemoveFromLotResult,
 } from '../../services/api'
 import { MoveLotPanel } from './MoveLotPanel'
+import { RemoveLotPanel, removalSuccessMessage } from './RemoveLotPanel'
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
@@ -197,8 +199,9 @@ type CigarDetailsPanelProps = {
   isLoading: boolean
   error: string
   onClose: () => void
-  onReloadDetails?: () => Promise<void>
+  onReloadDetails?: () => Promise<boolean>
   onInventoryChanged?: () => void | Promise<void>
+  onInventoryMessage?: (message: string) => void
 }
 
 export function CigarDetailsPanel({
@@ -208,8 +211,13 @@ export function CigarDetailsPanel({
   onClose,
   onReloadDetails,
   onInventoryChanged,
+  onInventoryMessage,
 }: CigarDetailsPanelProps) {
   const [moveTarget, setMoveTarget] = useState<{
+    lot: CollectionLotSummary
+    placement: CollectionLotLocation
+  } | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<{
     lot: CollectionLotSummary
     placement: CollectionLotLocation
   } | null>(null)
@@ -227,6 +235,22 @@ export function CigarDetailsPanel({
     } catch {
       setSuccessMessage('Cigars moved successfully. Refresh the page if the updated placement is not visible.')
     }
+  }
+
+  async function handleRemoveSuccess(result: RemoveFromLotResult, quantity: number) {
+    const message = removalSuccessMessage(result.removalType, quantity)
+    setRemoveTarget(null)
+
+    const detailsReloaded = (await onReloadDetails?.()) ?? true
+    await onInventoryChanged?.()
+
+    if (!detailsReloaded) {
+      onInventoryMessage?.(`${message} This cigar is no longer in the active Collection.`)
+      onClose()
+      return
+    }
+
+    setSuccessMessage(message)
   }
 
   return (
@@ -497,16 +521,28 @@ export function CigarDetailsPanel({
                             {location.storageLocationName} / {location.storageSubLocationName}{' '}
                             &mdash; Qty {location.quantity}
                           </p>
-                          <button
-                            className="secondary-button collection-placement-move-button"
-                            type="button"
-                            onClick={() => {
-                              setSuccessMessage('')
-                              setMoveTarget({ lot, placement: location })
-                            }}
-                          >
-                            Move
-                          </button>
+                          <div className="collection-placement-actions">
+                            <button
+                              className="secondary-button collection-placement-move-button"
+                              type="button"
+                              onClick={() => {
+                                setSuccessMessage('')
+                                setMoveTarget({ lot, placement: location })
+                              }}
+                            >
+                              Move
+                            </button>
+                            <button
+                              className="secondary-button collection-placement-remove-button"
+                              type="button"
+                              onClick={() => {
+                                setSuccessMessage('')
+                                setRemoveTarget({ lot, placement: location })
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -524,6 +560,16 @@ export function CigarDetailsPanel({
             placement={moveTarget.placement}
             onClose={() => setMoveTarget(null)}
             onSuccess={handleMoveSuccess}
+          />
+        ) : null}
+
+        {removeTarget && cigar ? (
+          <RemoveLotPanel
+            cigar={cigar}
+            lot={removeTarget.lot}
+            placement={removeTarget.placement}
+            onClose={() => setRemoveTarget(null)}
+            onSuccess={handleRemoveSuccess}
           />
         ) : null}
       </section>

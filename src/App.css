@@ -1777,7 +1777,15 @@ button:disabled {
   text-align: left;
 }
 
-.collection-placement-move-button {
+.collection-placement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.collection-placement-move-button,
+.collection-placement-remove-button {
   min-height: 36px;
   padding: 8px 12px;
   white-space: nowrap;
@@ -1793,8 +1801,16 @@ button:disabled {
   padding: 11px 13px;
 }
 
+.collection-page-inventory-message {
+  margin-bottom: 20px;
+}
+
 .move-panel-backdrop {
   z-index: 35;
+}
+
+.removal-panel-backdrop {
+  z-index: 36;
 }
 
 .move-panel-modal {
@@ -1803,34 +1819,50 @@ button:disabled {
   overflow: auto;
 }
 
+.removal-panel-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
 .move-panel-header {
   align-items: flex-start;
 }
 
+.removal-panel-header {
+  align-items: flex-start;
+}
+
 .move-panel-header h3,
-.move-panel-header span {
+.move-panel-header span,
+.removal-panel-header h3,
+.removal-panel-header span {
   overflow-wrap: anywhere;
 }
 
-.move-panel-header span {
+.move-panel-header span,
+.removal-panel-header span {
   color: #d7c8ba;
   display: block;
   margin-top: 4px;
 }
 
-.move-panel-content {
+.move-panel-content,
+.removal-panel-content {
   display: grid;
   gap: 16px;
   min-width: 0;
 }
 
-.move-context-grid {
+.move-context-grid,
+.removal-context-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.move-context-card {
+.move-context-card,
+.removal-context-card {
   display: grid;
   align-content: center;
   gap: 5px;
@@ -1843,32 +1875,38 @@ button:disabled {
 }
 
 .move-context-card span,
-.move-form-grid label > span {
+.move-form-grid label > span,
+.removal-context-card span,
+.removal-form-grid label > span {
   color: #b9a89a;
   font-size: 12px;
   font-weight: 800;
 }
 
-.move-context-card strong {
+.move-context-card strong,
+.removal-context-card strong {
   color: #ffffff;
   font-size: 20px;
   overflow-wrap: anywhere;
 }
 
-.move-context-card small {
+.move-context-card small,
+.removal-context-card small {
   color: #f1c982;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
-.move-form-grid {
+.move-form-grid,
+.removal-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   min-width: 0;
 }
 
-.move-form-grid label {
+.move-form-grid label,
+.removal-form-grid label {
   display: grid;
   gap: 7px;
   min-width: 0;
@@ -1876,17 +1914,21 @@ button:disabled {
 
 .move-form-grid input,
 .move-form-grid select,
-.move-form-grid textarea {
+.move-form-grid textarea,
+.removal-form-grid input,
+.removal-form-grid textarea {
   width: 100%;
 }
 
-.move-quantity-control {
+.move-quantity-control,
+.removal-quantity-control {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
   gap: 8px;
 }
 
-.move-quantity-control button {
+.move-quantity-control button,
+.removal-quantity-control button {
   min-height: 44px;
   border: 1px solid #5a412c;
   border-radius: 10px;
@@ -1896,27 +1938,97 @@ button:disabled {
   font-weight: 900;
 }
 
-.move-quantity-control button:disabled {
+.move-quantity-control button:disabled,
+.removal-quantity-control button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.move-quantity-control input {
+.move-quantity-control input,
+.removal-quantity-control input {
   text-align: center;
 }
 
-.move-notes-field {
+.move-notes-field,
+.removal-notes-field {
   grid-column: 1 / -1;
 }
 
-.move-panel-server-error {
+.move-panel-server-error,
+.removal-panel-server-error {
   margin: 0;
 }
 
-.move-panel-actions {
+.removal-panel-server-error {
+  border: 1px solid #6b3434;
+  border-radius: 12px;
+  background: #2a1515;
+  font-weight: 800;
+  line-height: 1.4;
+  padding: 12px 14px;
+}
+
+.move-panel-actions,
+.removal-panel-actions {
   align-items: center;
   justify-content: flex-end;
   margin-top: 2px;
+}
+
+.removal-type-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #1c1511;
+  margin: 0;
+  padding: 13px;
+}
+
+.removal-type-group legend {
+  color: #b9a89a;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.removal-type-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.removal-type-option {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #17120f;
+  cursor: pointer;
+  padding: 11px;
+  text-align: center;
+}
+
+.removal-type-option input {
+  justify-self: center;
+}
+
+.removal-type-option span {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.removal-type-option small {
+  color: #b9a89a;
+  line-height: 1.3;
+}
+
+.removal-type-option.selected {
+  border-color: #c99b63;
+  background: #2a201a;
+  box-shadow: 0 0 0 2px rgba(201, 155, 99, 0.18);
 }
 
 .collection-humidor-modal-header {
@@ -3292,25 +3404,35 @@ button:disabled {
     text-align: center;
   }
 
-  .collection-placement-move-button {
+  .collection-placement-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .collection-placement-move-button,
+  .collection-placement-remove-button {
     width: 100%;
     min-height: 44px;
   }
 
-  .move-panel-backdrop {
+  .move-panel-backdrop,
+  .removal-panel-backdrop {
     align-items: stretch;
     place-items: stretch;
     padding: 8px;
   }
 
-  .move-panel-modal {
+  .move-panel-modal,
+  .removal-panel-modal {
     width: 100%;
     max-height: calc(100vh - 16px);
     border-radius: 14px;
     overflow-x: hidden;
   }
 
-  .move-panel-header {
+  .move-panel-header,
+  .removal-panel-header {
     position: sticky;
     top: 0;
     z-index: 2;
@@ -3319,16 +3441,21 @@ button:disabled {
   }
 
   .move-context-grid,
-  .move-form-grid {
+  .move-form-grid,
+  .removal-context-grid,
+  .removal-form-grid,
+  .removal-type-options {
     grid-template-columns: 1fr;
   }
 
-  .move-panel-actions {
+  .move-panel-actions,
+  .removal-panel-actions {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .move-panel-actions button {
+  .move-panel-actions button,
+  .removal-panel-actions button {
     width: 100%;
     min-height: 46px;
   }

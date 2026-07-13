@@ -200,6 +200,16 @@ export type MoveLotInput = {
   notes?: string
 }
 
+export type RemovalType = 'SMOKED' | 'GIFTED' | 'DISCARDED'
+
+export type RemoveFromLotInput = {
+  fromStorageSubLocationId: number
+  quantity: number
+  removalType: RemovalType
+  eventDate: string
+  notes?: string
+}
+
 export type MoveLocationSnapshot = {
   storageLocationId: number
   storageLocationName: string
@@ -219,6 +229,20 @@ export type MoveLotResult = {
   totalCurrentQuantity: number
   sourceLocation: MoveLocationSnapshot
   destinationLocation: MoveLocationSnapshot
+}
+
+export type RemovalLocationSnapshot = MoveLocationSnapshot
+
+export type RemoveFromLotResult = {
+  lot: PurchaseLot
+  inventoryEvent: InventoryEvent
+  sourceBalance: LotLocationBalance | null
+  balances: LotLocationBalance[]
+  totalCurrentQuantity: number
+  sourceLocation: RemovalLocationSnapshot
+  removalType: RemovalType
+  placementDepleted: boolean
+  lotDepleted: boolean
 }
 
 export type CollectionInventoryIssue = {
@@ -609,6 +633,21 @@ export async function moveLot(
   })
 
   return parseJsonResponse<MoveLotResult>(response, 'Failed to move cigars')
+}
+
+export async function removeFromLot(
+  lotId: number,
+  input: RemoveFromLotInput,
+): Promise<RemoveFromLotResult> {
+  const response = await fetch(`${API_BASE_URL}/lots/${lotId}/remove`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  return parseJsonResponse<RemoveFromLotResult>(response, 'Failed to remove cigars')
 }
 
 export async function getVendors(search?: string): Promise<Vendor[]> {

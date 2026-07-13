@@ -157,12 +157,13 @@ function Collection() {
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
   const [sortBy, setSortBy] = useState<CollectionSortBy>('CIGAR')
   const [sortDirection, setSortDirection] = useState<CollectionSortDirection>('ASC')
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedCigarId, setSelectedCigarId] = useState<number | null>(null)
   const [cigarDetailsData, setCigarDetailsData] = useState<CollectionCigarDetails | null>(null)
   const [isDetailsLoading, setIsDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
+  const [inventoryMessage, setInventoryMessage] = useState('')
   const [collectionHumidors, setCollectionHumidors] =
     useState<CollectionHumidorsResponse | null>(null)
   const [isHumidorsLoading, setIsHumidorsLoading] = useState(false)
@@ -222,6 +223,7 @@ function Collection() {
     const requestId = detailsRequestIdRef.current + 1
     detailsRequestIdRef.current = requestId
     detailsOpenerRef.current = opener
+    setInventoryMessage('')
     setSelectedCigarId(catalogCigarId)
     setCigarDetailsData(null)
     setDetailsError('')
@@ -250,7 +252,7 @@ function Collection() {
 
   async function reloadOpenCigarDetails() {
     if (selectedCigarId === null) {
-      return
+      return false
     }
 
     const requestId = detailsRequestIdRef.current + 1
@@ -266,12 +268,15 @@ function Collection() {
       }
 
       setCigarDetailsData(data)
+      return true
     } catch (loadError) {
       if (requestId !== detailsRequestIdRef.current) {
         return
       }
 
-      setDetailsError(loadError instanceof Error ? loadError.message : 'Unable to load cigar details.')
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load cigar details.'
+      setDetailsError(message)
+      return !message.toLowerCase().includes('not found')
     } finally {
       if (requestId === detailsRequestIdRef.current) {
         setIsDetailsLoading(false)
@@ -492,6 +497,10 @@ function Collection() {
 
   function handleViewChange(nextView: CollectionView) {
     setActiveView(nextView)
+
+    if (nextView === 'CIGAR' && !collection && !isLoading) {
+      void loadCollection(activeSearch, offset, pageSize, sortBy, sortDirection)
+    }
 
     if (nextView === 'HUMIDOR' && !collectionHumidors && !isHumidorsLoading) {
       void loadCollectionHumidors()
@@ -780,6 +789,12 @@ function Collection() {
           </button>
         </div>
       </header>
+
+      {inventoryMessage ? (
+        <p className="collection-detail-success collection-page-inventory-message" role="status">
+          {inventoryMessage}
+        </p>
+      ) : null}
 
       {activeView === 'CIGAR' ? (
         <>
@@ -1167,6 +1182,7 @@ function Collection() {
           onClose={closeCigarDetails}
           onReloadDetails={reloadOpenCigarDetails}
           onInventoryChanged={handleInventoryChanged}
+          onInventoryMessage={setInventoryMessage}
         />
       ) : null}
     </div>
