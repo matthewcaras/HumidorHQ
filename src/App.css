@@ -2031,6 +2031,242 @@ button:disabled {
   box-shadow: 0 0 0 2px rgba(201, 155, 99, 0.18);
 }
 
+.smoking-journal-backdrop {
+  z-index: 38;
+}
+
+.smoking-journal-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.smoking-journal-modal:focus {
+  outline: none;
+}
+
+.smoking-journal-header {
+  align-items: flex-start;
+}
+
+.smoking-journal-header h3 {
+  overflow-wrap: anywhere;
+}
+
+.smoking-journal-content {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.smoking-journal-loading,
+.smoking-journal-alert,
+.smoking-journal-status,
+.smoking-journal-confirmation {
+  border-radius: 12px;
+  padding: 13px 14px;
+}
+
+.smoking-journal-loading {
+  border: 1px solid #3b2b22;
+  background: #1c1511;
+  color: #d7c8ba;
+  text-align: center;
+}
+
+.smoking-journal-loading p,
+.smoking-journal-alert p,
+.smoking-journal-status,
+.smoking-journal-confirmation p {
+  margin: 0;
+}
+
+.smoking-journal-alert {
+  display: grid;
+  gap: 10px;
+}
+
+.smoking-journal-alert-error {
+  border: 1px solid #6b3434;
+  background: #2a1515;
+  color: #ffd0ca;
+}
+
+.smoking-journal-alert strong,
+.smoking-journal-confirmation strong {
+  color: #ffffff;
+}
+
+.smoking-journal-status {
+  border: 1px solid #356343;
+  background: #142419;
+  color: #bcebc4;
+  font-weight: 800;
+}
+
+.smoking-journal-context {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.smoking-journal-cigar,
+.smoking-journal-context-grid div {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #1c1511;
+  padding: 13px;
+}
+
+.smoking-journal-cigar {
+  text-align: center;
+}
+
+.smoking-journal-context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.smoking-journal-cigar span,
+.smoking-journal-context-grid span,
+.smoking-journal-rating legend,
+.smoking-journal-notes > span {
+  color: #b9a89a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.smoking-journal-cigar strong,
+.smoking-journal-context-grid strong {
+  color: #ffffff;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.smoking-journal-cigar small,
+.smoking-journal-context-grid small {
+  color: #f1c982;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.smoking-journal-cigar em {
+  justify-self: center;
+  border: 1px solid #5a412c;
+  border-radius: 999px;
+  color: #f1c982;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
+.smoking-journal-rating {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #3b2b22;
+  border-radius: 12px;
+  background: #1c1511;
+  margin: 0;
+  padding: 13px;
+}
+
+.smoking-journal-rating legend {
+  padding: 0 6px;
+}
+
+.smoking-journal-rating p {
+  color: #d7c8ba;
+  margin: 0;
+}
+
+.smoking-journal-rating div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(44px, 1fr));
+  gap: 10px;
+}
+
+.smoking-journal-rating button {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #5a412c;
+  border-radius: 10px;
+  background: #17120f;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.smoking-journal-rating button.selected,
+.smoking-journal-rating button[aria-pressed='true'] {
+  border-color: #c99b63;
+  background: #2a201a;
+  box-shadow: 0 0 0 2px rgba(201, 155, 99, 0.22);
+  color: #f1c982;
+}
+
+.smoking-journal-rating button:focus-visible,
+.smoking-journal-actions button:focus-visible,
+.smoking-journal-confirmation button:focus-visible {
+  outline: 3px solid rgba(241, 201, 130, 0.78);
+  outline-offset: 2px;
+}
+
+.smoking-journal-rating button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.smoking-journal-notes {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.smoking-journal-notes textarea {
+  width: 100%;
+  min-height: 128px;
+  resize: vertical;
+}
+
+.smoking-journal-notes small {
+  color: #b9a89a;
+  justify-self: end;
+}
+
+.smoking-journal-confirmation {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #5a412c;
+  background: #1c1511;
+  color: #d7c8ba;
+}
+
+.smoking-journal-confirmation-danger {
+  border-color: #7a352d;
+  background: #2a1515;
+}
+
+.smoking-journal-confirmation div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.smoking-journal-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .collection-humidor-modal-header {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
@@ -5980,14 +6216,16 @@ button:disabled {
   }
 
   .move-panel-backdrop,
-  .removal-panel-backdrop {
+  .removal-panel-backdrop,
+  .smoking-journal-backdrop {
     align-items: stretch;
     place-items: stretch;
     padding: 8px;
   }
 
   .move-panel-modal,
-  .removal-panel-modal {
+  .removal-panel-modal,
+  .smoking-journal-modal {
     width: 100%;
     max-height: calc(100vh - 16px);
     border-radius: 14px;
@@ -5995,7 +6233,8 @@ button:disabled {
   }
 
   .move-panel-header,
-  .removal-panel-header {
+  .removal-panel-header,
+  .smoking-journal-header {
     position: sticky;
     top: 0;
     z-index: 2;
@@ -6007,20 +6246,47 @@ button:disabled {
   .move-form-grid,
   .removal-context-grid,
   .removal-form-grid,
-  .removal-type-options {
+  .removal-type-options,
+  .smoking-journal-context-grid {
     grid-template-columns: 1fr;
   }
 
   .move-panel-actions,
-  .removal-panel-actions {
+  .removal-panel-actions,
+  .smoking-journal-actions {
     display: grid;
     grid-template-columns: 1fr;
   }
 
   .move-panel-actions button,
-  .removal-panel-actions button {
+  .removal-panel-actions button,
+  .smoking-journal-actions button {
     width: 100%;
     min-height: 46px;
+  }
+
+  .smoking-journal-rating div {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .smoking-journal-rating button {
+    min-height: 46px;
+    padding: 0;
+  }
+
+  .smoking-journal-confirmation div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .smoking-journal-confirmation button {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .smoking-journal-notes textarea {
+    min-height: 154px;
   }
 
 }
@@ -6070,6 +6336,17 @@ button:disabled {
 
   .collection-lot-field-wide {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 340px) {
+  .smoking-journal-rating div {
+    gap: 6px;
+  }
+
+  .smoking-journal-rating button {
+    font-size: 16px;
+    min-height: 42px;
   }
 }
 
