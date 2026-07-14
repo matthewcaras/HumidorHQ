@@ -211,6 +211,7 @@ export function SmokingJournalPanel({
       return
     }
 
+    const wasExistingEntry = response !== null && response.journalEntry !== null
     mutationInFlightRef.current = true
     const sequence = requestSequenceRef.current + 1
     requestSequenceRef.current = sequence
@@ -235,8 +236,14 @@ export function SmokingJournalPanel({
       setRating(nextSaved.rating)
       setNotes(nextSaved.notes)
       setSaved(nextSaved)
-      setStatusMessage(response?.journalEntry ? 'Journal entry updated.' : 'Journal entry saved.')
       onSaved?.(data)
+
+      if (!wasExistingEntry) {
+        onClose()
+        return
+      }
+
+      setStatusMessage('Journal entry updated.')
     } catch (error) {
       if (requestSequenceRef.current === sequence) {
         setActionError(errorMessage(error, 'Unable to save Smoking Journal.'))
