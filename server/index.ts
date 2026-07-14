@@ -67,6 +67,13 @@ import {
   getActivityReport,
 } from './services/activityReportsService.ts'
 import {
+  deleteSmokingJournal,
+  getSmokingJournal,
+  SmokingJournalServiceError,
+  smokingJournalInventoryEventIdParam,
+  upsertSmokingJournal,
+} from './services/smokingJournalService.ts'
+import {
   collectionCatalogCigarIdParam,
   CollectionServiceError,
   getCollection,
@@ -310,6 +317,25 @@ function handleActivityReportsError(error: unknown, res: express.Response) {
   })
 }
 
+function handleSmokingJournalError(error: unknown, res: express.Response) {
+  if (error instanceof SmokingJournalServiceError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    })
+    return
+  }
+
+  res.status(500).json({
+    error: {
+      code: 'JOURNAL_UNEXPECTED_ERROR',
+      message: 'The Smoking Journal request could not be completed.',
+    },
+  })
+}
+
 function handleCollectionError(error: unknown, res: express.Response) {
   if (error instanceof CollectionServiceError) {
     res.status(error.statusCode).json({
@@ -376,6 +402,43 @@ app.get('/api/reports/activity', async (req, res) => {
     res.json({ data: report })
   } catch (error) {
     handleActivityReportsError(error, res)
+  }
+})
+
+app.get('/api/inventory-events/:inventoryEventId/smoking-journal', async (req, res) => {
+  try {
+    const result = await getSmokingJournal(
+      smokingJournalInventoryEventIdParam(req.params.inventoryEventId),
+    )
+
+    res.json({ data: result })
+  } catch (error) {
+    handleSmokingJournalError(error, res)
+  }
+})
+
+app.put('/api/inventory-events/:inventoryEventId/smoking-journal', async (req, res) => {
+  try {
+    const result = await upsertSmokingJournal(
+      smokingJournalInventoryEventIdParam(req.params.inventoryEventId),
+      req.body,
+    )
+
+    res.json({ data: result })
+  } catch (error) {
+    handleSmokingJournalError(error, res)
+  }
+})
+
+app.delete('/api/inventory-events/:inventoryEventId/smoking-journal', async (req, res) => {
+  try {
+    const result = await deleteSmokingJournal(
+      smokingJournalInventoryEventIdParam(req.params.inventoryEventId),
+    )
+
+    res.json({ data: result })
+  } catch (error) {
+    handleSmokingJournalError(error, res)
   }
 })
 

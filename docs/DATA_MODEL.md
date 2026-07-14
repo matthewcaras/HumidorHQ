@@ -101,6 +101,29 @@ Consumption reasons:
 
 Events should drive calculated inventory instead of manually maintaining totals.
 
+## Smoking Journal
+
+Smoking Journal entries are optional one-to-one details for Smoked inventory events.
+
+InventoryEvent remains authoritative for:
+- Whether a cigar was smoked
+- Quantity smoked
+- Date Smoked
+- Lot
+- Source humidor or section
+- Cost and MSRP snapshots
+- Inventory reduction
+- Recorded timestamp
+
+SmokingJournalEntry stores only:
+- Rating, as a whole number from 1 to 10
+- Optional journal notes
+- Created and updated timestamps
+
+Date Smoked is not duplicated in the Journal table. Journal notes are separate from InventoryEvent removal notes. Deleting Journal details does not restore inventory or delete the underlying Smoked event.
+
+Version 1 does not include pairing, images, photos, uploads, or image storage.
+
 ## Humidors and Drawers
 
 A humidor is a storage container.

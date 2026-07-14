@@ -227,6 +227,21 @@ Reuse known values whenever possible without preventing entry of legitimate new 
    - Records cigars that have been smoked, gifted, or otherwise removed from inventory.
    - Drives inventory changes through events.
 
+### Smoking Journal Version 1
+
+Decision:
+Smoking Journal entries are optional one-to-one details attached only to SMOKED InventoryEvent rows.
+
+- InventoryEvent remains authoritative for Date Smoked, quantity, Lot, source location, cost and MSRP snapshots, inventory reduction, and recorded timestamp.
+- SmokingJournalEntry stores only rating, optional journal notes, createdAt, and updatedAt.
+- Rating uses a required 1-10 whole-number scale once a Journal entry exists.
+- Journal notes are separate from InventoryEvent removal notes.
+- Deleting Journal details deletes only SmokingJournalEntry and does not restore inventory.
+- Version 1 does not include pairing, images, photos, uploads, or image storage.
+
+Reason:
+The Journal adds optional experiential notes without duplicating or weakening the inventory event ledger.
+
 5. Humidors
    - Administrative management of storage locations.
    - Used occasionally.

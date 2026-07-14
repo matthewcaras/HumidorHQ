@@ -242,10 +242,26 @@ model InventoryEvent {
   lot                    Lot                 @relation(fields: [lotId], references: [id])
   fromStorageSubLocation StorageSubLocation? @relation("InventoryEventFromStorageSubLocation", fields: [fromStorageSubLocationId], references: [id])
   toStorageSubLocation   StorageSubLocation? @relation("InventoryEventToStorageSubLocation", fields: [toStorageSubLocationId], references: [id])
+  smokingJournalEntry    SmokingJournalEntry?
 
   @@index([fromStorageSubLocationId])
   @@index([toStorageSubLocationId])
   @@index([eventType, eventDate])
+}
+
+/// SmokingJournalEntry stores optional experiential notes for a smoked inventory event.
+model SmokingJournalEntry {
+  id               Int     @id @default(autoincrement())
+  inventoryEventId Int     @unique
+  rating           Int
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  inventoryEvent InventoryEvent @relation(fields: [inventoryEventId], references: [id], onDelete: Cascade)
+
+  @@index([rating])
+  @@index([updatedAt])
 }
 
 /// Catalog records describe what a cigar is. They do not store quantity, cost basis, purchase history, or humidor location.
