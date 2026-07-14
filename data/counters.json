@@ -1,0 +1,12 @@
+{
+  "catalog-cigars": 1,
+  "vendors": 1,
+  "storage-locations": 1,
+  "storage-sub-locations": 1,
+  "purchases": 1,
+  "purchase-lines": 1,
+  "lots": 1,
+  "lot-location-balances": 1,
+  "inventory-events": 1,
+  "smoking-journal-entries": 1
+}
