@@ -635,6 +635,58 @@ export type ActivityReportResponse = {
   }
 }
 
+export type SmokingJournalCatalogCigar = {
+  id: number
+  manufacturer: string
+  series: string
+  vitola: string
+  wrapper: string | null
+  isActive: boolean
+}
+
+export type SmokingJournalLocation = {
+  storageLocationId: number
+  storageLocationName: string
+  storageLocationIsActive: boolean
+  storageSubLocationId: number
+  storageSubLocationName: string
+  storageSubLocationKind: string
+  storageSubLocationIsActive: boolean
+  isArchived: boolean
+}
+
+export type SmokingJournalEntry = {
+  id: number
+  inventoryEventId: number
+  rating: number
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type SmokingJournalInventoryEvent = {
+  id: number
+  eventType: 'SMOKED'
+  quantity: number
+  eventDate: string
+  createdAt: string
+  lotId: number
+  catalogCigar: SmokingJournalCatalogCigar | null
+  sourceLocation: SmokingJournalLocation | null
+  costPerCigarAtEvent: string | null
+  msrpPerCigarAtEvent: string | null
+}
+
+export type SmokingJournalResponse = {
+  journalEntry: SmokingJournalEntry | null
+  inventoryEvent: SmokingJournalInventoryEvent
+}
+
+export type SmokingJournalWriteInput = {
+  rating: number
+  notes?: string
+}
+
 export type CollectionInventoryIssue = {
   code: string
   message: string
@@ -911,6 +963,12 @@ async function parseJsonResponse<T>(response: Response, fallbackMessage: string)
   return body.data
 }
 
+function assertPositiveApiId(value: number, label: string) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new ApiError(`${label} must be a positive integer.`)
+  }
+}
+
 export async function getHumidors(): Promise<Humidor[]> {
   const response = await fetch(`${API_BASE_URL}/humidors`)
 
@@ -1079,6 +1137,71 @@ export async function getActivityReport(
   return parseJsonResponse<ActivityReportResponse>(
     response,
     'Failed to load activity report',
+  )
+}
+
+export async function getSmokingJournal(
+  inventoryEventId: number,
+): Promise<SmokingJournalResponse> {
+  assertPositiveApiId(inventoryEventId, 'InventoryEvent id')
+
+  const response = await fetch(
+    `${API_BASE_URL}/inventory-events/${inventoryEventId}/smoking-journal`,
+  )
+
+  return parseJsonResponse<SmokingJournalResponse>(
+    response,
+    'Failed to load Smoking Journal',
+  )
+}
+
+export async function upsertSmokingJournal(
+  inventoryEventId: number,
+  input: SmokingJournalWriteInput,
+): Promise<SmokingJournalResponse> {
+  assertPositiveApiId(inventoryEventId, 'InventoryEvent id')
+
+  const body: SmokingJournalWriteInput = {
+    rating: input.rating,
+  }
+  const trimmedNotes = input.notes?.trim()
+
+  if (trimmedNotes !== undefined) {
+    body.notes = trimmedNotes
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/inventory-events/${inventoryEventId}/smoking-journal`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  return parseJsonResponse<SmokingJournalResponse>(
+    response,
+    'Failed to save Smoking Journal',
+  )
+}
+
+export async function deleteSmokingJournal(
+  inventoryEventId: number,
+): Promise<SmokingJournalResponse> {
+  assertPositiveApiId(inventoryEventId, 'InventoryEvent id')
+
+  const response = await fetch(
+    `${API_BASE_URL}/inventory-events/${inventoryEventId}/smoking-journal`,
+    {
+      method: 'DELETE',
+    },
+  )
+
+  return parseJsonResponse<SmokingJournalResponse>(
+    response,
+    'Failed to delete Smoking Journal',
   )
 }
 

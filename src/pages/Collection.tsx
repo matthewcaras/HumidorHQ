@@ -27,6 +27,7 @@ import {
   issueTitle,
   sectionKindLabel,
 } from '../components/collection/CollectionDetailsPanels'
+import SmokingJournalPanel from '../components/journal/SmokingJournalPanel'
 
 type PageSize = 50 | 100 | 'all'
 type CollectionView = 'CIGAR' | 'HUMIDOR'
@@ -172,6 +173,7 @@ function Collection() {
   const [humidorDetails, setHumidorDetails] = useState<CollectionHumidorDetails | null>(null)
   const [isHumidorDetailsLoading, setIsHumidorDetailsLoading] = useState(false)
   const [humidorDetailsError, setHumidorDetailsError] = useState('')
+  const [smokingJournalEventId, setSmokingJournalEventId] = useState<number | null>(null)
   const requestIdRef = useRef(0)
   const detailsRequestIdRef = useRef(0)
   const humidorsRequestIdRef = useRef(0)
@@ -1183,6 +1185,13 @@ function Collection() {
           onReloadDetails={reloadOpenCigarDetails}
           onInventoryChanged={handleInventoryChanged}
           onInventoryMessage={setInventoryMessage}
+          onOpenSmokingJournal={setSmokingJournalEventId}
+        />
+      ) : null}
+      {smokingJournalEventId !== null ? (
+        <SmokingJournalPanel
+          inventoryEventId={smokingJournalEventId}
+          onClose={() => setSmokingJournalEventId(null)}
         />
       ) : null}
     </div>

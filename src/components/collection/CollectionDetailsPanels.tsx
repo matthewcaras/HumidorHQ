@@ -202,6 +202,7 @@ type CigarDetailsPanelProps = {
   onReloadDetails?: () => Promise<boolean>
   onInventoryChanged?: () => void | Promise<void>
   onInventoryMessage?: (message: string) => void
+  onOpenSmokingJournal?: (inventoryEventId: number) => void
 }
 
 export function CigarDetailsPanel({
@@ -212,6 +213,7 @@ export function CigarDetailsPanel({
   onReloadDetails,
   onInventoryChanged,
   onInventoryMessage,
+  onOpenSmokingJournal,
 }: CigarDetailsPanelProps) {
   const [moveTarget, setMoveTarget] = useState<{
     lot: CollectionLotSummary
@@ -239,7 +241,13 @@ export function CigarDetailsPanel({
 
   async function handleRemoveSuccess(result: RemoveFromLotResult, quantity: number) {
     const message = removalSuccessMessage(result.removalType, quantity)
+    const smokingJournalEventId =
+      result.removalType === 'SMOKED' ? result.inventoryEvent.id : null
     setRemoveTarget(null)
+
+    if (smokingJournalEventId !== null) {
+      onOpenSmokingJournal?.(smokingJournalEventId)
+    }
 
     const detailsReloaded = (await onReloadDetails?.()) ?? true
     await onInventoryChanged?.()

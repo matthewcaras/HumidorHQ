@@ -17,6 +17,7 @@ import {
   CigarDetailsPanel,
   HumidorDetailsPanel,
 } from '../components/collection/CollectionDetailsPanels'
+import SmokingJournalPanel from '../components/journal/SmokingJournalPanel'
 
 const ORGANIZATION_OPTIONS: {
   value: StorageOrganizationType
@@ -148,6 +149,7 @@ function Humidors() {
   const [isCigarDetailsLoading, setIsCigarDetailsLoading] = useState(false)
   const [cigarDetailsError, setCigarDetailsError] = useState('')
   const [inventoryMessage, setInventoryMessage] = useState('')
+  const [smokingJournalEventId, setSmokingJournalEventId] = useState<number | null>(null)
   const humidorDetailsRequestIdRef = useRef(0)
   const cigarDetailsRequestIdRef = useRef(0)
   const humidorDetailsOpenerRef = useRef<HTMLElement | null>(null)
@@ -797,6 +799,14 @@ function Humidors() {
           onReloadDetails={reloadOpenCigarDetails}
           onInventoryChanged={handleInventoryChanged}
           onInventoryMessage={setInventoryMessage}
+          onOpenSmokingJournal={setSmokingJournalEventId}
+        />
+      ) : null}
+
+      {smokingJournalEventId !== null ? (
+        <SmokingJournalPanel
+          inventoryEventId={smokingJournalEventId}
+          onClose={() => setSmokingJournalEventId(null)}
         />
       ) : null}
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type {
   CatalogCigar,
   CollectionLotLocation,
@@ -148,6 +148,7 @@ export function RemoveLotPanel({
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitInFlightRef = useRef(false)
 
   const today = useMemo(() => todayLocalDate(), [])
   const quantityValue = parseQuantity(quantity)
@@ -181,6 +182,14 @@ export function RemoveLotPanel({
     !quantityError &&
     !dateError
 
+  const requestClose = useCallback(() => {
+    if (submitInFlightRef.current || isSubmitting) {
+      return
+    }
+
+    onClose()
+  }, [isSubmitting, onClose])
+
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape') {
@@ -190,7 +199,7 @@ export function RemoveLotPanel({
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      onClose()
+      requestClose()
     }
 
     document.addEventListener('keydown', handleKeyDown, true)
@@ -198,7 +207,7 @@ export function RemoveLotPanel({
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true)
     }
-  }, [onClose])
+  }, [requestClose])
 
   function stepQuantity(delta: number) {
     if (quantityValue === null) {
@@ -220,10 +229,11 @@ export function RemoveLotPanel({
     setSubmitAttempted(true)
     setServerError('')
 
-    if (!canSubmit || quantityValue === null) {
+    if (!canSubmit || quantityValue === null || submitInFlightRef.current) {
       return
     }
 
+    submitInFlightRef.current = true
     setIsSubmitting(true)
 
     try {
@@ -245,6 +255,7 @@ export function RemoveLotPanel({
         ),
       )
     } finally {
+      submitInFlightRef.current = false
       setIsSubmitting(false)
     }
   }
@@ -254,7 +265,7 @@ export function RemoveLotPanel({
       className="modal-backdrop removal-panel-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          onClose()
+          requestClose()
         }
       }}
     >
@@ -277,7 +288,7 @@ export function RemoveLotPanel({
             type="button"
             aria-label="Close removal"
             disabled={isSubmitting}
-            onClick={onClose}
+            onClick={requestClose}
           >
             &times;
           </button>
@@ -419,7 +430,7 @@ export function RemoveLotPanel({
               type="button"
               className="secondary-button"
               disabled={isSubmitting}
-              onClick={onClose}
+              onClick={requestClose}
             >
               Cancel
             </button>
