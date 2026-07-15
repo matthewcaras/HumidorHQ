@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.2.0
+ * Revision: 1.2.1
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-15 11:52 ET
+ * Modified Date: 2026-07-15 12:01 ET
  */
 
 :root {
@@ -226,6 +226,111 @@ h3 {
   margin: 9px 0;
 }
 
+
+.dashboard-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-body {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.85fr);
+}
+
+.dashboard-main-grid,
+.dashboard-side-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 16px;
+}
+
+.compact-heading {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.dashboard-badge {
+  background: var(--accent-soft);
+  border: 1px solid rgba(242, 182, 109, 0.28);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.dashboard-record-list,
+.pipeline-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-record-list > div,
+.pipeline-list > div,
+.health-row {
+  align-items: center;
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 11px 12px;
+}
+
+.dashboard-record-list small {
+  color: #8f7c6d;
+  grid-column: 1 / -1;
+}
+
+.dashboard-record-list span,
+.pipeline-list span,
+.health-row span {
+  color: var(--muted);
+}
+
+.dashboard-record-list strong,
+.pipeline-list strong,
+.health-row strong {
+  color: var(--accent-strong);
+}
+
+.quick-action-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quick-action-list button {
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 38px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.quick-action-list button:hover {
+  background: var(--accent-soft);
+  border-color: rgba(242, 182, 109, 0.36);
+  color: var(--accent-strong);
+}
 .account-bar {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -465,8 +570,13 @@ code {
   }
 
   .metric-grid,
-  .metric-grid.compact {
+  .metric-grid.compact,
+  .dashboard-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-body {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -474,6 +584,8 @@ code {
   .nav,
   .metric-grid,
   .metric-grid.compact,
+  .dashboard-summary,
+  .dashboard-body,
   .form-grid {
     grid-template-columns: 1fr;
   }

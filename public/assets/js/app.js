@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.2.1
+ * Revision: 1.2.2
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-15 11:44 ET
+ * Modified Date: 2026-07-15 12:01 ET
  */
 
 const API_BASE_URL = 'api'
@@ -365,20 +365,110 @@ function metricCard(label, value, detail) {
 }
 
 function renderDashboard(view) {
-  const grid = document.createElement('div')
-  grid.className = 'metric-grid'
-  grid.append(
-    metricCard('Catalog Cigars', collectionCount('catalog-cigars'), 'Loaded from data/catalog-cigars.json'),
-    metricCard('Vendors', collectionCount('vendors'), 'Loaded from data/vendors.json'),
-    metricCard('Humidors', collectionCount('storage-locations'), 'Loaded from data/storage-locations.json'),
-    metricCard('Purchases', collectionCount('purchases'), 'Loaded from data/purchases.json'),
+  const counts = {
+    catalog: collectionCount('catalog-cigars'),
+    vendors: collectionCount('vendors'),
+    humidors: collectionCount('storage-locations'),
+    purchases: collectionCount('purchases'),
+    lines: collectionCount('purchase-lines'),
+    lots: collectionCount('lots'),
+    balances: collectionCount('lot-location-balances'),
+    events: collectionCount('inventory-events'),
+  }
+
+  const shell = document.createElement('div')
+  shell.className = 'dashboard-shell'
+
+  const summary = document.createElement('section')
+  summary.className = 'dashboard-summary'
+  summary.append(
+    metricCard('Catalog', counts.catalog, 'Master cigar records'),
+    metricCard('Humidors', counts.humidors, 'Storage locations'),
+    metricCard('Lots', counts.lots, 'Inventory lots'),
+    metricCard('Events', counts.events, 'Inventory history'),
   )
 
-  const note = document.createElement('p')
-  note.className = 'muted'
-  note.textContent = 'Use Catalog, Vendors, Purchases, and Humidors from the left menu to add or update flat JSON records through the authenticated PHP API.'
+  const inventory = document.createElement('section')
+  inventory.className = 'dashboard-panel dashboard-inventory'
+  inventory.innerHTML = `
+    <div class="section-heading compact-heading">
+      <div>
+        <p class="eyebrow">Inventory Map</p>
+        <h3>Current Flat-File Snapshot</h3>
+      </div>
+      <span class="dashboard-badge">${formatCount(counts.catalog + counts.lots + counts.balances)} linked records</span>
+    </div>
+    <div class="dashboard-record-list">
+      <div><span>Catalog Cigars</span><strong>${formatCount(counts.catalog)}</strong><small>data/catalog-cigars.json</small></div>
+      <div><span>Purchase Lines</span><strong>${formatCount(counts.lines)}</strong><small>data/purchase-lines.json</small></div>
+      <div><span>Lots</span><strong>${formatCount(counts.lots)}</strong><small>data/lots.json</small></div>
+      <div><span>Location Balances</span><strong>${formatCount(counts.balances)}</strong><small>data/lot-location-balances.json</small></div>
+    </div>
+  `
 
-  view.append(grid, note)
+  const activity = document.createElement('section')
+  activity.className = 'dashboard-panel dashboard-activity'
+  activity.innerHTML = `
+    <div class="section-heading compact-heading">
+      <div>
+        <p class="eyebrow">Buying Flow</p>
+        <h3>Purchase Pipeline</h3>
+      </div>
+    </div>
+    <div class="pipeline-list">
+      <div><span>Vendors</span><strong>${formatCount(counts.vendors)}</strong></div>
+      <div><span>Purchase Headers</span><strong>${formatCount(counts.purchases)}</strong></div>
+      <div><span>PO Lines</span><strong>${formatCount(counts.lines)}</strong></div>
+      <div><span>Receipt Events</span><strong>${formatCount(counts.events)}</strong></div>
+    </div>
+  `
+
+  const actions = document.createElement('section')
+  actions.className = 'dashboard-panel dashboard-actions'
+  actions.innerHTML = `
+    <p class="eyebrow">Next Actions</p>
+    <h3>Manage Records</h3>
+    <div class="quick-action-list">
+      <button type="button" data-page="Catalog">Add Catalog Cigar</button>
+      <button type="button" data-page="Purchases">Create Purchase</button>
+      <button type="button" data-page="PurchaseLines">Add PO Line</button>
+      <button type="button" data-page="Humidors">Manage Humidors</button>
+    </div>
+  `
+  actions.querySelectorAll('button[data-page]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.activePage = button.dataset.page
+      state.formError = null
+      render()
+      recordPageView(state.activePage)
+    })
+  })
+
+  const health = document.createElement('section')
+  health.className = 'dashboard-panel dashboard-health'
+  health.innerHTML = `
+    <p class="eyebrow">System</p>
+    <h3>Data Health</h3>
+    <p class="muted">PHP API is reading protected JSON files. Runtime records stay in <code>data/*.json</code>.</p>
+    <div class="health-row"><span>Storage</span><strong>Flat JSON</strong></div>
+    <div class="health-row"><span>Auth</span><strong>Session</strong></div>
+    <div class="health-row"><span>Audit</span><strong>Enabled</strong></div>
+  `
+
+  const main = document.createElement('div')
+  main.className = 'dashboard-main-grid'
+  main.append(inventory, activity)
+
+  const side = document.createElement('aside')
+  side.className = 'dashboard-side-grid'
+  side.append(actions, health)
+
+  const body = document.createElement('div')
+  body.className = 'dashboard-body'
+  body.append(main, side)
+
+  shell.append(summary, body)
+  view.append(shell)
 }
 
 function renderCollectionList(view) {

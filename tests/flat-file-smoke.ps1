@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.6.2
+# Revision : 1.6.3
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 11:52 ET
+# Modified Date : 2026-07-15 12:01 ET
 # Changelog :
+# 1.6.3 verify screenshot-style dashboard shell and asset cache versions
 # 1.6.2 verify warm dark visual theme and CSS cache version
 # 1.6.1 verify TODO.md menu and API access
 # 1.6.0 verify connected PO Lines create lots, balances, and inventory events
@@ -50,8 +51,8 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.4') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.4') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -60,6 +61,7 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
+if ($appJs -notmatch 'dashboard-shell') { throw 'Plain JavaScript app is missing the screenshot-style dashboard shell.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
 foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
