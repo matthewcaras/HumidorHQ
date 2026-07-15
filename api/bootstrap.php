@@ -10,6 +10,7 @@ require_once API_ROOT . '/lib/Response.php';
 require_once API_ROOT . '/lib/Validation.php';
 require_once API_ROOT . '/lib/JsonStore.php';
 require_once API_ROOT . '/lib/DataRepository.php';
+require_once API_ROOT . '/lib/Auth.php';
 require_once API_ROOT . '/lib/utils/InventoryAccounting.php';
 
 function request_method(): string
@@ -55,3 +56,4 @@ function now_iso(): string
 {
     return gmdate('Y-m-d\TH:i:s\Z');
 }
+

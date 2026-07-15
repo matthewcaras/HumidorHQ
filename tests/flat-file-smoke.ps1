@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.0.2
-# Description : Verifies the flat-file HumidorHQ shell uses plain assets and PHP JSON sample data.
+# Revision : 1.1.0
+# Description : Verifies the flat-file HumidorHQ shell uses plain assets, PHP session auth, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-15
 # Changelog :
+# 1.1.0 verify PHP session authentication protects data routes
 # 1.0.2 quote PHP document root paths that contain spaces
 # 1.0.1 use separate PHP server stdout and stderr logs
 # 1.0.0 initial release
@@ -16,6 +17,9 @@ $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
+$authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
+$authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
+$authUsersHadFile = Test-Path -LiteralPath $authUsersPath
 
 if (-not (Test-Path -LiteralPath $indexPath)) {
     throw 'index.html is missing.'
@@ -38,7 +42,6 @@ foreach ($path in @($appJsPath, $appCssPath)) {
     }
 }
 
-
 $trackedFiles = & git -C $repoRoot ls-files
 $disallowedTrackedFiles = $trackedFiles | Where-Object {
     $_ -match '\.(ts|tsx)$' -or
@@ -48,12 +51,33 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) {
     throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')"
 }
+
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
 if ($apiIndex -notmatch '/sample-data') {
     throw 'PHP API is missing the /sample-data route.'
 }
+if ($apiIndex -notmatch '/login') {
+    throw 'PHP API is missing the /login route.'
+}
 
 $php = Get-Command php -ErrorAction Stop
+$hash = & $php.Source -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
+if (-not $hash) {
+    throw 'Could not generate password hash for auth smoke test.'
+}
+
+if ($authUsersHadFile) {
+    Copy-Item -LiteralPath $authUsersPath -Destination $authUsersBackupPath -Force
+}
+@(
+    [pscustomobject]@{
+        username = 'testuser'
+        passwordHash = $hash
+        displayName = 'Test User'
+        isActive = $true
+    }
+) | ConvertTo-Json -Depth 4 -AsArray | Set-Content -LiteralPath $authUsersPath -Encoding UTF8
+
 $port = 8765
 $serverOutLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.out.log'
 $serverErrLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.err.log'
@@ -61,12 +85,30 @@ $phpArgs = "-S 127.0.0.1:$port -t `"$repoRoot`""
 $process = Start-Process -FilePath $php.Source -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
 try {
     Start-Sleep -Milliseconds 700
-    $health = Invoke-RestMethod "http://127.0.0.1:$port/api/health" -Method Get
+    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
+    $health = Invoke-RestMethod "http://127.0.0.1:$port/api/health" -Method Get -WebSession $session
     if ($health.data.status -ne 'ok') {
         throw 'PHP health endpoint did not return ok.'
     }
 
-    $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get
+    $anonymousSession = Invoke-RestMethod "http://127.0.0.1:$port/api/session" -Method Get -WebSession $session
+    if ($anonymousSession.data.authenticated -ne $false) {
+        throw 'Anonymous session should not be authenticated.'
+    }
+
+    $anonymousSample = Invoke-WebRequest "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session -SkipHttpErrorCheck
+    if ($anonymousSample.StatusCode -ne 401) {
+        throw "Sample-data should require authentication. Expected 401, got $($anonymousSample.StatusCode)."
+    }
+
+    $loginBody = @{ username = 'testuser'; password = 'testpass' } | ConvertTo-Json
+    $login = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $session
+    if ($login.data.authenticated -ne $true -or $login.data.user.username -ne 'testuser') {
+        throw 'Login did not return an authenticated test user.'
+    }
+
+    $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session
     if ($null -eq $sample.data.collections) {
         throw 'Sample-data endpoint did not return collection summaries.'
     }
@@ -75,9 +117,20 @@ try {
             throw "Sample-data endpoint is missing $name."
         }
     }
+
+    $logout = Invoke-RestMethod "http://127.0.0.1:$port/api/logout" -Method Post -WebSession $session
+    if ($logout.data.authenticated -ne $false) {
+        throw 'Logout did not clear the authenticated session.'
+    }
 } finally {
     if ($process -and -not $process.HasExited) {
         Stop-Process -Id $process.Id -Force
+    }
+    if ($authUsersHadFile) {
+        Copy-Item -LiteralPath $authUsersBackupPath -Destination $authUsersPath -Force
+        Remove-Item -LiteralPath $authUsersBackupPath -Force -ErrorAction SilentlyContinue
+    } else {
+        Remove-Item -LiteralPath $authUsersPath -Force -ErrorAction SilentlyContinue
     }
 }
 

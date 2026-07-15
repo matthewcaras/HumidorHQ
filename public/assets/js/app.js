@@ -2,8 +2,11 @@ const API_BASE_URL = 'api'
 
 const state = {
   activePage: 'Dashboard',
+  session: null,
   sampleData: null,
   error: null,
+  authError: null,
+  isLoading: true,
 }
 
 const pages = [
@@ -29,16 +32,40 @@ function setStatus(text, mode = 'neutral') {
   status.dataset.mode = mode
 }
 
-async function apiGet(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`)
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  })
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
     const message = body?.error?.message || `Request failed with HTTP ${response.status}`
-    throw new Error(message)
+    const error = new Error(message)
+    error.status = response.status
+    throw error
   }
 
   return body.data
+}
+
+function apiGet(path) {
+  return apiRequest(path)
+}
+
+function apiPost(path, payload = null) {
+  return apiRequest(path, {
+    method: 'POST',
+    body: payload === null ? undefined : JSON.stringify(payload),
+  })
+}
+
+function isAuthenticated() {
+  return state.session?.authenticated === true
 }
 
 function renderNav() {
@@ -49,6 +76,7 @@ function renderNav() {
       button.type = 'button'
       button.className = page.id === state.activePage ? 'nav-item active' : 'nav-item'
       button.textContent = page.label
+      button.disabled = !isAuthenticated()
       button.addEventListener('click', () => {
         state.activePage = page.id
         render()
@@ -56,6 +84,34 @@ function renderNav() {
       return button
     }),
   )
+}
+
+function renderAccountBar(view) {
+  if (!isAuthenticated()) {
+    return
+  }
+
+  const accountBar = document.createElement('div')
+  accountBar.className = 'account-bar'
+  const userName = state.session.user?.displayName || state.session.user?.username || 'Signed in'
+  accountBar.innerHTML = `<span>Signed in as <strong>${userName}</strong></span>`
+
+  const logoutButton = document.createElement('button')
+  logoutButton.type = 'button'
+  logoutButton.className = 'secondary-button'
+  logoutButton.textContent = 'Log out'
+  logoutButton.addEventListener('click', async () => {
+    await apiPost('/logout')
+    state.session = { authenticated: false, user: null }
+    state.sampleData = null
+    state.error = null
+    state.authError = null
+    setStatus('Signed out', 'neutral')
+    render()
+  })
+
+  accountBar.append(logoutButton)
+  view.append(accountBar)
 }
 
 function metricCard(label, value, detail) {
@@ -138,6 +194,52 @@ function renderPlaceholder(view, pageTitle) {
   view.append(message)
 }
 
+function renderLogin(view) {
+  const panel = document.createElement('form')
+  panel.className = 'login-panel'
+  panel.innerHTML = `
+    <h3>Sign In</h3>
+    <p class="muted">Use your HumidorHQ username and password to manage data.</p>
+    <label>
+      <span>Username</span>
+      <input name="username" autocomplete="username" required>
+    </label>
+    <label>
+      <span>Password</span>
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="primary-button">Sign in</button>
+    <p class="form-error" hidden></p>
+  `
+
+  const error = panel.querySelector('.form-error')
+  if (state.authError) {
+    error.textContent = state.authError
+    error.hidden = false
+  }
+
+  panel.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const formData = new FormData(panel)
+    state.authError = null
+    setStatus('Signing in', 'neutral')
+    try {
+      state.session = await apiPost('/login', {
+        username: String(formData.get('username') || ''),
+        password: String(formData.get('password') || ''),
+      })
+      state.sampleData = await apiGet('/sample-data')
+      setStatus('PHP API connected', 'ok')
+    } catch (error) {
+      state.authError = error.message
+      setStatus('Sign in required', 'error')
+    }
+    render()
+  })
+
+  view.append(panel)
+}
+
 function renderError(view) {
   const message = document.createElement('div')
   message.className = 'error-state'
@@ -151,9 +253,21 @@ function renderError(view) {
 function render() {
   renderNav()
 
-  document.querySelector('#page-title').textContent = state.activePage
+  document.querySelector('#page-title').textContent = isAuthenticated() ? state.activePage : 'Sign In'
   const view = document.querySelector('#app-view')
   view.replaceChildren()
+
+  if (state.isLoading) {
+    view.innerHTML = '<p class="muted">Checking session...</p>'
+    return
+  }
+
+  if (!isAuthenticated()) {
+    renderLogin(view)
+    return
+  }
+
+  renderAccountBar(view)
 
   if (state.error) {
     renderError(view)
@@ -181,14 +295,20 @@ function render() {
 async function init() {
   render()
   try {
-    state.sampleData = await apiGet('/sample-data')
-    setStatus('PHP API connected', 'ok')
+    state.session = await apiGet('/session')
+    if (isAuthenticated()) {
+      state.sampleData = await apiGet('/sample-data')
+      setStatus('PHP API connected', 'ok')
+    } else {
+      setStatus('Sign in required', 'neutral')
+    }
   } catch (error) {
     state.error = error
     setStatus('PHP API unavailable', 'error')
+  } finally {
+    state.isLoading = false
+    render()
   }
-  render()
 }
 
 init()
-

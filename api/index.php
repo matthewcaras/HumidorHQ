@@ -42,11 +42,25 @@ try {
         json_success(['status' => 'ok', 'app' => 'Humidor HQ']);
     }
 
+    if ($path === '/session' && $method === 'GET') {
+        json_success(session_payload());
+    }
+
+    if ($path === '/login' && $method === 'POST') {
+        json_success(login_with_credentials(request_json()));
+    }
+
+    if ($path === '/logout' && $method === 'POST') {
+        json_success(logout_current_user());
+    }
+
     if ($path === '/sample-data' && $method === 'GET') {
+        require_auth();
         json_success(sample_data_collections());
     }
 
     if (preg_match('#^/inventory-events/([1-9][0-9]*)/smoking-journal$#', $path, $matches)) {
+        require_auth();
         $inventoryEventId = smoking_journal_inventory_event_id_param($matches[1]);
         if ($method === 'GET') {
             json_success(get_smoking_journal($inventoryEventId));

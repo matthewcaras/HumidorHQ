@@ -35,6 +35,29 @@ Runtime data is stored in JSON files under `data/`. These files also serve as sa
 
 The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger. `GET /api/sample-data` summarizes the current repo JSON files for the flat dashboard shell.
 
+
+## Authentication
+
+Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
+
+`data/auth-users.json` is intentionally ignored by Git. Do not commit real usernames or password hashes.
+
+Create or update a local user with:
+
+```powershell
+php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
+```
+
+That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only.
+
+Public routes:
+
+- `GET /api/health`
+- `GET /api/session`
+- `POST /api/login`
+- `POST /api/logout`
+
+Protected routes include `GET /api/sample-data` and future data-changing endpoints.
 ## Local Development
 
 For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
@@ -73,5 +96,6 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
 
 
