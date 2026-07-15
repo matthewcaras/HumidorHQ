@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.6.1
+# Revision : 1.6.2
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 11:44 ET
+# Modified Date : 2026-07-15 11:52 ET
 # Changelog :
+# 1.6.2 verify warm dark visual theme and CSS cache version
 # 1.6.1 verify TODO.md menu and API access
 # 1.6.0 verify connected PO Lines create lots, balances, and inventory events
 # 1.5.3 verify audit date-time is shown in Eastern Time format
@@ -50,7 +51,7 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
