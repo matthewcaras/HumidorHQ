@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.2.1
+ * Revision: 1.2.2
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-15 12:01 ET
+ * Modified Date: 2026-07-15 14:58 ET
  */
 
 :root {
@@ -280,8 +280,7 @@ h3 {
 }
 
 .dashboard-record-list > div,
-.pipeline-list > div,
-.health-row {
+.pipeline-list > div {
   align-items: center;
   background: #17100d;
   border: 1px solid var(--line);
@@ -298,14 +297,12 @@ h3 {
 }
 
 .dashboard-record-list span,
-.pipeline-list span,
-.health-row span {
+.pipeline-list span span {
   color: var(--muted);
 }
 
 .dashboard-record-list strong,
-.pipeline-list strong,
-.health-row strong {
+.pipeline-list strong strong {
   color: var(--accent-strong);
 }
 

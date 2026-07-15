@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.2.2
+ * Revision: 1.2.3
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-15 12:01 ET
+ * Modified Date: 2026-07-15 14:58 ET
  */
 
 const API_BASE_URL = 'api'
@@ -444,24 +444,13 @@ function renderDashboard(view) {
     })
   })
 
-  const health = document.createElement('section')
-  health.className = 'dashboard-panel dashboard-health'
-  health.innerHTML = `
-    <p class="eyebrow">System</p>
-    <h3>Data Health</h3>
-    <p class="muted">PHP API is reading protected JSON files. Runtime records stay in <code>data/*.json</code>.</p>
-    <div class="health-row"><span>Storage</span><strong>Flat JSON</strong></div>
-    <div class="health-row"><span>Auth</span><strong>Session</strong></div>
-    <div class="health-row"><span>Audit</span><strong>Enabled</strong></div>
-  `
-
   const main = document.createElement('div')
   main.className = 'dashboard-main-grid'
   main.append(inventory, activity)
 
   const side = document.createElement('aside')
   side.className = 'dashboard-side-grid'
-  side.append(actions, health)
+  side.append(actions)
 
   const body = document.createElement('div')
   body.className = 'dashboard-body'
