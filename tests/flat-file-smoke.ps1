@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.3.0
+# Revision : 1.4.0
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15
+# Modified Date : 2026-07-15 00:13 ET
 # Changelog :
+# 1.4.0 verify metadata headers on tracked non-JSON files
 # 1.3.0 verify app metadata revision and Eastern Time modified timestamp
 # 1.2.0 verify audit logging, audit/changelog menu links, and audit placeholder
 # 1.1.1 verify placeholder text is removed and ignored auth file has a tracked placeholder
@@ -49,6 +50,26 @@ $appCss = Get-Content -LiteralPath $appCssPath -Raw
 if ($appCss -match '`r`n') { throw 'CSS contains literal PowerShell newline escape text.' }
 
 $trackedFiles = & git -C $repoRoot ls-files
+$headerFailures = @()
+foreach ($trackedFile in $trackedFiles) {
+    if ($trackedFile -match '\.json$') {
+        continue
+    }
+    $trackedPath = Join-Path $repoRoot $trackedFile
+    if (-not (Test-Path -LiteralPath $trackedPath)) {
+        continue
+    }
+    $head = (Get-Content -LiteralPath $trackedPath -TotalCount 12 -ErrorAction Stop) -join "`n"
+    foreach ($field in @('Filename', 'Revision', 'Description', 'Modified Date')) {
+        if ($head -notmatch [regex]::Escape($field)) {
+            $headerFailures += "$trackedFile missing $field"
+        }
+    }
+}
+if ($headerFailures.Count -gt 0) {
+    throw "Missing file metadata headers: $($headerFailures -join '; ')"
+}
+
 $disallowedTrackedFiles = $trackedFiles | Where-Object {
     $_ -match '\.(ts|tsx)$' -or
     $_ -in @('package.json', 'package-lock.json', 'eslint.config.js', 'vite.config.ts', 'prisma.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json') -or
@@ -133,3 +154,5 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
+
+

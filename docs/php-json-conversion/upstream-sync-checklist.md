@@ -1,3 +1,10 @@
+<!--
+Filename: upstream-sync-checklist.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # Upstream Sync Checklist
 
 Use this checklist every time the original author updates `upstream/main` and the PHP/JSON conversion branch needs to catch up.
@@ -45,3 +52,4 @@ git log --oneline <last-reviewed-upstream-ref>..upstream/main
 - Last reviewed upstream ref: `upstream/main@37df9a0`
 - Newest upstream feature included in tracking: Smoking Journal
 - Next conversion targets from this baseline: `SmokingJournalService.php`, `data/smoking-journal-entries.json`, `GET|PUT|DELETE /api/inventory-events/:inventoryEventId/smoking-journal`, and SQLite-to-JSON export support for `SmokingJournalEntry`
+

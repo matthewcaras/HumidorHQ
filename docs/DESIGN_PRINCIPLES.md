@@ -1,3 +1,10 @@
+<!--
+Filename: DESIGN_PRINCIPLES.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Design Principles
 
 HumidorHQ should feel like a practical collection tool, not a spreadsheet with nicer colors. The app should preserve accurate history while reducing the amount of manual entry required from the collector.
@@ -43,3 +50,4 @@ HumidorHQ should prioritize information that remains accurate over time. Before 
 - Build reports from real collection history instead of manually maintained summary fields.
 
 Humidor HQ records what happened, not just what exists.
+

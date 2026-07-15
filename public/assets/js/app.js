@@ -1,3 +1,10 @@
+/*
+ * Filename: app.js
+ * Revision: 1.0.0
+ * Description: Plain JavaScript browser source for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
+
 const API_BASE_URL = 'api'
 
 const state = {
@@ -447,4 +454,5 @@ async function init() {
 }
 
 init()
+
 

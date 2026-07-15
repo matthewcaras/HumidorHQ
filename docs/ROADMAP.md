@@ -1,3 +1,10 @@
+<!--
+Filename: ROADMAP.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Roadmap
 
 HumidorHQ is being built around cigar collecting workflows: Catalog, Purchases, Lots, Humidors, Collection, and Consumption. The roadmap prioritizes a reliable data model first, then import and reporting features once there is enough meaningful history to analyze.
@@ -51,3 +58,4 @@ HumidorHQ is being built around cigar collecting workflows: Catalog, Purchases, 
 - Show cigars on hand, cost basis, MSRP value, savings, and average age.
 - Report spending, savings, inventory by humidor, aging, and consumption history.
 - Use calculated values from stored facts and transactions.
+

@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: InventoryAccounting.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 function decimal_to_string(mixed $value): ?string
 {
@@ -12,3 +18,5 @@ function decimal_to_string(mixed $value): ?string
     $formatted = number_format((float) $value, 6, '.', '');
     return rtrim(rtrim($formatted, '0'), '.');
 }
+
+

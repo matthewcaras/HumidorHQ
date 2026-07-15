@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: Auth.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 function start_api_session(): void
 {
@@ -114,3 +120,5 @@ function require_auth(): void
 }
 
 start_api_session();
+
+

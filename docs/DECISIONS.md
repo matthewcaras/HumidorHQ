@@ -1,3 +1,10 @@
+<!--
+Filename: DECISIONS.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Project Decisions
 
 This document records important architectural and product decisions made during development. It explains why a decision was made so it does not need to be rediscovered later.
@@ -283,3 +290,4 @@ HumidorHQ follows these principles:
 - Reduce friction.
 
 Additional decisions should be documented here whenever they affect the long-term architecture or user experience.
+

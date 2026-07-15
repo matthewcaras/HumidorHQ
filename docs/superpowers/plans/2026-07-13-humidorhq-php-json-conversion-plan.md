@@ -1,3 +1,10 @@
+<!--
+Filename: 2026-07-13-humidorhq-php-json-conversion-plan.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ PHP/JSON Conversion Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -750,3 +757,4 @@ git commit -m "docs: finalize php json parity and deployment guidance"
 - API responses consistently use `{ data: ... }` and `{ error: { code, message } }`.
 - PHP helper names referenced by later tasks are introduced in earlier tasks.
 - Conversion tracking file names remain consistent across all tasks.
+

@@ -1,3 +1,10 @@
+<!--
+Filename: PHP_JSON_MIGRATION.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # Humidor HQ PHP + JSON Migration Map
 
 ## Goal
@@ -474,3 +481,4 @@ For this repo, the cleanest near-term implementation path is:
 3. start with JSON files
 4. keep the endpoint contract stable
 5. leave room to swap JSON for SQLite later
+

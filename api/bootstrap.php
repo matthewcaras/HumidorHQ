@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: bootstrap.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 define('APP_ROOT', dirname(__DIR__));
 define('API_ROOT', __DIR__);
@@ -57,5 +63,7 @@ function now_iso(): string
 {
     return gmdate('Y-m-d\TH:i:s\Z');
 }
+
+
 
 

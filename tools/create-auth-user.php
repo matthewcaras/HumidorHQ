@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: create-auth-user.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 $script = basename(__FILE__);
 $args = $_SERVER['argv'] ?? [];
@@ -62,3 +68,5 @@ if (!is_string($json) || file_put_contents($dataPath, $json . PHP_EOL) === false
 
 fwrite(STDOUT, ($updated ? 'Updated' : 'Created') . " auth user '$username' in data/auth-users.json.\n");
 fwrite(STDOUT, "Keep data/auth-users.json out of Git and upload it securely to Hostinger.\n");
+
+

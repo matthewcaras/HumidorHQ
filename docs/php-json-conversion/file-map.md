@@ -1,3 +1,10 @@
+<!--
+Filename: file-map.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # PHP/JSON Conversion File Map
 
 ## Acceptance Checklist
@@ -34,3 +41,4 @@
 | `src/pages/Collection.tsx` | `api/lib/services/CollectionService.php`, `api/lib/services/SmokingJournalService.php` | Collection page state integration for journal panel | Planned | Review whenever journal modal state or API response dependencies change. |
 | `src/pages/Humidors.tsx` | `api/lib/services/CollectionHumidorService.php`, `api/lib/services/SmokingJournalService.php` | Humidor page state integration for journal panel | Planned | Review whenever journal modal state or humidor detail response dependencies change. |
 | `src/App.css` | `src/App.css` | Styling for Smoking Journal panel and existing app surfaces | Planned | No PHP target, but visual behavior must remain intact after API conversion. |
+

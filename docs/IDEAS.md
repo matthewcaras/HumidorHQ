@@ -1,3 +1,10 @@
+<!--
+Filename: IDEAS.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Ideas
 
 This document is a living backlog of ideas for HumidorHQ. It is not a roadmap or requirements document. It is simply a place to capture ideas so they are not forgotten.
@@ -82,3 +89,4 @@ Choose master record:
 
 Then move purchase history, lots, consumption, and reports to the master record.
 Archive the duplicate.
+

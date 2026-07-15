@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: Validation.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 function positive_int_param(mixed $value, string $label, string $code = 'VALIDATION_ERROR'): int
 {
@@ -15,3 +21,5 @@ function positive_int_param(mixed $value, string $label, string $code = 'VALIDAT
     }
     return $id;
 }
+
+

@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: JsonStore.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 function data_file_path(string $collection): string
 {
@@ -79,3 +85,5 @@ function next_id(string $collection): int
         fclose($lock);
     }
 }
+
+
