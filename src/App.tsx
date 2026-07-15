@@ -1,48 +1,82 @@
+import { useState } from 'react'
+import Dashboard from './pages/Dashboard'
+import Catalog from './pages/Catalog'
+import Collection from './pages/Collection'
+import Humidors from './pages/Humidors'
+import Purchases from './pages/Purchases'
+import Reports from './pages/Reports'
 import './App.css'
 
+const navItems = [
+  'Dashboard',
+  'Collection',
+  'Reports',
+  'Catalog',
+  'Purchases',
+  'Humidors',
+]
+
 function App() {
+  const [activePage, setActivePage] = useState('Dashboard')
+
+  function renderPage() {
+    if (activePage === 'Dashboard') {
+      return <Dashboard />
+    }
+
+    if (activePage === 'Purchases') {
+      return <Purchases />
+    }
+
+    if (activePage === 'Collection') {
+      return <Collection />
+    }
+
+    if (activePage === 'Reports') {
+      return <Reports />
+    }
+
+    if (activePage === 'Humidors') {
+      return <Humidors />
+    }
+
+    if (activePage === 'Catalog') {
+      return <Catalog />
+    }
+
+    return (
+      <section className="panel">
+        <h3>{activePage}</h3>
+        <p className="muted">This section is not implemented yet.</p>
+      </section>
+    )
+  }
+
   return (
-    <main className="app">
-      <section className="hero">
-        <p className="eyebrow">Personal Cigar Inventory</p>
-        <h1>Humidor HQ</h1>
-        <p className="subtitle">
-          Track inventory, MSRP, actual cost, savings, humidors, purchases, and smoking history.
-        </p>
-      </section>
-
-      <section className="dashboard-grid">
-        <div className="card">
-          <p>Total Cigars</p>
-          <h2>500</h2>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <h1>Humidor HQ</h1>
+          <p>Collection Management</p>
         </div>
 
-        <div className="card">
-          <p>Humidors</p>
-          <h2>7</h2>
-        </div>
+        <nav className="nav">
+          {navItems.map((item) => (
+            <button
+              key={item}
+              className={item === activePage ? 'nav-item active' : 'nav-item'}
+              onClick={() => setActivePage(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </nav>
+      </aside>
 
-        <div className="card">
-          <p>MSRP Value</p>
-          <h2>$0.00</h2>
-        </div>
-
-        <div className="card">
-          <p>Actual Cost</p>
-          <h2>$0.00</h2>
-        </div>
-
-        <div className="card">
-          <p>Total Savings</p>
-          <h2>$0.00</h2>
-        </div>
-
-        <div className="card">
-          <p>Average Discount</p>
-          <h2>0%</h2>
-        </div>
-      </section>
-    </main>
+      <main className="main-content">
+        {renderPage()}
+      </main>
+    </div>
   )
 }
 
