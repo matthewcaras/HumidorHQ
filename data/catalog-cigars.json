@@ -1,1 +1,20 @@
-[]
+[
+    {
+        "manufacturer": "test",
+        "series": "test",
+        "vitola": "test",
+        "shape": "test",
+        "length": "test",
+        "wrapper": "test",
+        "binder": "test",
+        "filler": "test",
+        "country": "test",
+        "strength": "test",
+        "notes": "test",
+        "ringGauge": 1,
+        "msrp": 1,
+        "updatedAt": "2026-07-15T12:48:30Z",
+        "createdAt": "2026-07-15T12:48:30Z",
+        "id": 1
+    }
+]
