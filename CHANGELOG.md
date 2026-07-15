@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.5.3
+Revision: 1.5.4
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:52 ET
+Modified Date: 2026-07-15 12:01 ET
 -->
 
 # Changelog
@@ -15,6 +15,10 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.5.4 - 2026-07-15
+
+- Reworked the Dashboard into a screenshot-style operational layout with summary cards, inventory map, pipeline, quick actions, and data health panels.
+- Bumped CSS and JavaScript asset versions so deployed browsers load the Dashboard visual update.
 ## 1.5.3 - 2026-07-15
 
 - Restyled the flat-file app to match the warm dark brown screenshot palette and denser layout.
