@@ -1,3 +1,10 @@
+<!--
+Filename: DATA_MODEL.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Data Model
 
 ## Core Philosophy
@@ -156,3 +163,4 @@ The application should calculate:
 - Consumption totals
 - Cost consumed
 - MSRP consumed
+

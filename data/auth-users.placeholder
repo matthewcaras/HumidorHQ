@@ -1,0 +1,15 @@
+# Filename: auth-users.placeholder
+# Revision: 1.0.0
+# Description: Tracked placeholder documenting an ignored runtime file.
+# Modified Date: 2026-07-15 00:13 ET
+
+This placeholder marks the intentionally ignored runtime credential file:
+
+  data/auth-users.json
+
+Create the real file with:
+
+  php tools/create-auth-user.php "username" "password" "Display Name"
+
+Do not commit real usernames, password hashes, or production credentials.
+

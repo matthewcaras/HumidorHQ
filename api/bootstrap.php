@@ -1,5 +1,11 @@
 <?php
 declare(strict_types=1);
+/*
+ * Filename: bootstrap.php
+ * Revision: 1.0.0
+ * Description: PHP application source file for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 00:13 ET
+ */
 
 define('APP_ROOT', dirname(__DIR__));
 define('API_ROOT', __DIR__);
@@ -10,6 +16,8 @@ require_once API_ROOT . '/lib/Response.php';
 require_once API_ROOT . '/lib/Validation.php';
 require_once API_ROOT . '/lib/JsonStore.php';
 require_once API_ROOT . '/lib/DataRepository.php';
+require_once API_ROOT . '/lib/Auth.php';
+require_once API_ROOT . '/lib/Audit.php';
 require_once API_ROOT . '/lib/utils/InventoryAccounting.php';
 
 function request_method(): string
@@ -55,3 +63,7 @@ function now_iso(): string
 {
     return gmdate('Y-m-d\TH:i:s\Z');
 }
+
+
+
+

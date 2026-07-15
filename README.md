@@ -1,75 +1,119 @@
-# React + TypeScript + Vite
+<!--
+Filename: README.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# HumidorHQ
 
-Currently, two official plugins are available:
+HumidorHQ is a cigar collection and humidor management app using a flat-file hosting model for GitHub-driven deployment to Hostinger.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Current Target
 
-## React Compiler
+The target runtime is:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- PHP for API endpoints
+- JSON files for persistent data and sample data
+- Plain JavaScript for browser behavior
+- HTML and CSS for the frontend
+- No TypeScript
+- No React runtime
+- No Vite or build/compile step
+- No Node server process
+- No Prisma runtime
 
-## Expanding the ESLint configuration
+The app should be deployable as normal files to Hostinger, with GitHub used as the source repo and webhook/deployment flow.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Project Layout
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- `index.html` - browser entry point
+- `public/` - static assets
+- `api/` - PHP API front controller and supporting libraries
+- `data/` - JSON data files used by the PHP API
+- `docs/` - design notes, migration notes, and conversion tracking
+- `CHANGELOG.md` - revisioned project change history
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Legacy TypeScript, React, Vite, Node, and Prisma runtime files have been removed from the deployable app. Historical conversion notes may still reference those technologies for migration context only.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Data Model
 
+Runtime data is stored in JSON files under `data/`. These files also serve as sample data for local and deployed testing.
+
+The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger. `GET /api/sample-data` summarizes the current repo JSON files for the flat dashboard shell.
+
+
+## Authentication
+
+Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
+
+`data/auth-users.json` is intentionally ignored by Git. Do not commit real usernames or password hashes.
+
+Create or update a local user with:
+
+```powershell
+php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only. The committed `data/auth-users.placeholder` file documents the ignored runtime credential file that must exist in deployed environments.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Public routes:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- `GET /api/health`
+- `GET /api/session`
+- `POST /api/login`
+- `POST /api/logout`
 
+Protected routes include `GET /api/sample-data` and future data-changing endpoints.
+
+## Audit Trail
+
+HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
+
+The left menu includes an Audit page for recent activity and a Changelog page that reads `CHANGELOG.md` through the protected PHP API.
+
+The committed `data/audit-log.placeholder` file documents the ignored runtime audit file.
+## Local Development
+
+For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
+
+Example:
+
+```powershell
+php -S localhost:8000
 ```
+
+Then open:
+
+```text
+http://localhost:8000/
+```
+
+## Deployment
+
+The intended deployment flow is:
+
+1. Push changes to GitHub.
+2. GitHub webhook or deployment automation sends the flat files to Hostinger.
+3. Hostinger serves `index.html`, static assets, PHP API files, and protected JSON data files.
+4. The frontend calls relative PHP API paths.
+
+No build artifact is required for deployment.
+
+## Revision Policy
+
+Project revisions start at `1.0.0`.
+
+Use `major.minor.feature` numbering:
+
+- `major` - breaking architecture or data changes
+- `minor` - new workflow, page, API, or significant enhancement
+- `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
+
+
+
+
+

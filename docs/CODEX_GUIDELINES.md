@@ -1,3 +1,10 @@
+<!--
+Filename: CODEX_GUIDELINES.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ Codex Guidelines
 
 ## Purpose
@@ -51,3 +58,4 @@ After making changes:
 2. Explain why each file changed.
 3. Mention anything that should be manually tested.
 4. Do not commit changes.
+

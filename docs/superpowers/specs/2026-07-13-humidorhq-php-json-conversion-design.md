@@ -1,3 +1,10 @@
+<!--
+Filename: 2026-07-13-humidorhq-php-json-conversion-design.md
+Revision: 1.0.0
+Description: Project documentation and implementation notes.
+Modified Date: 2026-07-15 00:13 ET
+-->
+
 # HumidorHQ PHP/JSON Conversion Design
 
 ## Goal
@@ -390,3 +397,4 @@ The project is successful when:
 - key workflows and summaries behave equivalently to the current Node/Prisma version
 - deployment does not expose raw data files publicly
 - the conversion can be maintained as upstream changes land, using explicit file mapping and change review artifacts
+

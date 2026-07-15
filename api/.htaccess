@@ -1,6 +1,12 @@
+# Filename: .htaccess
+# Revision: 1.0.0
+# Description: Apache hosting rules for the HumidorHQ flat-file app.
+# Modified Date: 2026-07-15 00:13 ET
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.php [QSA,L]
 </IfModule>
+

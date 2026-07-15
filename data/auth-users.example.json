@@ -1,0 +1,8 @@
+[
+  {
+    "username": "example-user",
+    "passwordHash": "$2y$10$replace-this-with-a-real-password-hash-from-tools-create-auth-user",
+    "displayName": "Example User",
+    "isActive": true
+  }
+]
