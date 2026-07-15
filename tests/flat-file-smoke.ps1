@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.5.3
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, CRUD endpoints, and PHP JSON sample data.
+# Revision : 1.6.0
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 11:18 ET
+# Modified Date : 2026-07-15 11:34 ET
 # Changelog :
+# 1.6.0 verify connected PO Lines create lots, balances, and inventory events
 # 1.5.3 verify audit date-time is shown in Eastern Time format
 # 1.5.2 verify managed records render before add/edit forms
 # 1.5.1 verify cache-busted static asset URLs
@@ -30,20 +31,24 @@ $authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
 $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
 $authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
-$vendorsPath = Join-Path $repoRoot 'data\vendors.json'
-$vendorsBackupPath = Join-Path $env:TEMP 'humidorhq-vendors.backup.json'
-$countersPath = Join-Path $repoRoot 'data\counters.json'
-$countersBackupPath = Join-Path $env:TEMP 'humidorhq-counters.backup.json'
 $auditLogPath = Join-Path $repoRoot 'data\audit-log.jsonl'
+$runtimeCollections = @('vendors', 'catalog-cigars', 'storage-locations', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'counters')
+$runtimeBackups = @{}
+foreach ($collection in $runtimeCollections) {
+    $runtimePath = Join-Path $repoRoot "data\$collection.json"
+    $runtimeBackups[$collection] = [pscustomobject]@{
+        Path = $runtimePath
+        BackupPath = Join-Path $env:TEMP "humidorhq-$collection.backup.json"
+        HadFile = Test-Path -LiteralPath $runtimePath
+    }
+}
 $authUsersHadFile = Test-Path -LiteralPath $authUsersPath
-$vendorsHadFile = Test-Path -LiteralPath $vendorsPath
-$countersHadFile = Test-Path -LiteralPath $countersPath
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -54,11 +59,11 @@ $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
-foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
+foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }
 if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
-foreach ($menuText in @('Audit', 'Changelog', 'Vendors')) {
+foreach ($menuText in @('Audit', 'Changelog', 'Vendors', 'PO Lines')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
 
@@ -94,7 +99,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta', '/records/')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta', '/records/', 'purchase-lines')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -103,8 +108,9 @@ $hash = & $php.Source -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 
 if ($authUsersHadFile) { Copy-Item -LiteralPath $authUsersPath -Destination $authUsersBackupPath -Force }
-if ($vendorsHadFile) { Copy-Item -LiteralPath $vendorsPath -Destination $vendorsBackupPath -Force }
-if ($countersHadFile) { Copy-Item -LiteralPath $countersPath -Destination $countersBackupPath -Force }
+foreach ($backup in $runtimeBackups.Values) {
+    if ($backup.HadFile) { Copy-Item -LiteralPath $backup.Path -Destination $backup.BackupPath -Force }
+}
 if (Test-Path -LiteralPath $auditLogPath) { Remove-Item -LiteralPath $auditLogPath -Force }
 
 @(
@@ -139,13 +145,13 @@ try {
 
     $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session
     if ($null -eq $sample.data.collections) { throw 'Sample-data endpoint did not return collection summaries.' }
-    foreach ($name in @('catalog-cigars', 'vendors', 'storage-locations', 'inventory-events')) {
+    foreach ($name in @('catalog-cigars', 'vendors', 'storage-locations', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events')) {
         if (-not $sample.data.collections.PSObject.Properties.Name.Contains($name)) { throw "Sample-data endpoint is missing $name." }
     }
 
     $vendorBody = @{ name = 'Smoke Test Vendor'; website = 'https://example.com'; phone = '555-0100'; notes = 'temporary smoke test record' } | ConvertTo-Json
     $createdVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Post -ContentType 'application/json' -Body $vendorBody -WebSession $session
-    if ($createdVendor.data.name -ne 'Smoke Test Vendor' -or -not $createdVendor.data.id) { throw 'Vendor create endpoint did not return the created record.' }
+    if ($createdVendor.data.name -ne 'Smoke Test Vendor' -or (-not $createdVendor.data.id)) { throw 'Vendor create endpoint did not return the created record.' }
 
     $vendorList = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Get -WebSession $session
     $listedVendor = $vendorList.data.records | Where-Object { $_.id -eq $createdVendor.data.id } | Select-Object -First 1
@@ -158,6 +164,33 @@ try {
     $deletedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Delete -WebSession $session
     if ($deletedVendor.data.id -ne $createdVendor.data.id) { throw 'Vendor delete endpoint did not return the deleted record.' }
 
+    $linkedVendorBody = @{ name = 'Linked Smoke Vendor'; website = 'https://example.com'; phone = '555-0200'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $linkedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Post -ContentType 'application/json' -Body $linkedVendorBody -WebSession $session
+
+    $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+
+    $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Test'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $createdHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $humidorBody -WebSession $session
+
+    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; receivedDate = '2026-07-15'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
+
+    $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; quantity = '5'; unitCost = '10'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $createdLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body $lineBody -WebSession $session
+    if ((-not $createdLine.data.id) -or (-not $createdLine.data.createdLotId) -or (-not $createdLine.data.createdInventoryEventId)) { throw 'Purchase line create endpoint did not return linked inventory ids.' }
+
+    $lots = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lots.json') -Raw | ConvertFrom-Json
+    $linkedLot = $lots | Where-Object { $_.id -eq $createdLine.data.createdLotId -and $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
+    if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id) { throw 'Purchase line did not create the expected linked lot.' }
+
+    $balances = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $linkedBalance = $balances | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id } | Select-Object -First 1
+    if (-not $linkedBalance -or $linkedBalance.quantity -ne 5) { throw 'Purchase line did not create the expected lot-location balance.' }
+
+    $events = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $linkedEvent = $events | Where-Object { $_.id -eq $createdLine.data.createdInventoryEventId -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
+    if (-not $linkedEvent -or $linkedEvent.quantity -ne 5) { throw 'Purchase line did not create the expected purchase-receipt inventory event.' }
     $pageAuditBody = @{ page = 'Dashboard'; action = 'view' } | ConvertTo-Json
     $pageAudit = Invoke-RestMethod "http://127.0.0.1:$port/api/audit/page" -Method Post -ContentType 'application/json' -Body $pageAuditBody -WebSession $session
     if ($pageAudit.data.logged -ne $true) { throw 'Page audit endpoint did not confirm logging.' }
@@ -181,13 +214,13 @@ try {
     } else {
         Remove-Item -LiteralPath $authUsersPath -Force -ErrorAction SilentlyContinue
     }
-    if ($vendorsHadFile) {
-        Copy-Item -LiteralPath $vendorsBackupPath -Destination $vendorsPath -Force
-        if ([System.IO.File]::Exists($vendorsBackupPath)) { [System.IO.File]::Delete($vendorsBackupPath) }
-    }
-    if ($countersHadFile) {
-        Copy-Item -LiteralPath $countersBackupPath -Destination $countersPath -Force
-        if ([System.IO.File]::Exists($countersBackupPath)) { [System.IO.File]::Delete($countersBackupPath) }
+    foreach ($backup in $runtimeBackups.Values) {
+        if ($backup.HadFile) {
+            Copy-Item -LiteralPath $backup.BackupPath -Destination $backup.Path -Force
+            if ([System.IO.File]::Exists($backup.BackupPath)) { [System.IO.File]::Delete($backup.BackupPath) }
+        } else {
+            Remove-Item -LiteralPath $backup.Path -Force -ErrorAction SilentlyContinue
+        }
     }
     Remove-Item -LiteralPath $auditLogPath -Force -ErrorAction SilentlyContinue
 }

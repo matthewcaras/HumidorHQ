@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.4.3
+Revision: 1.5.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:18 ET
+Modified Date: 2026-07-15 11:34 ET
 -->
 
 # Changelog
@@ -14,6 +14,12 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.5.0 - 2026-07-15
+
+- Added PO Lines as a connected record workflow linking purchases, catalog cigars, and humidors.
+- Creating a purchase line now creates the related lot, starting lot-location balance, and purchase-receipt inventory event.
+- Added validation so purchase lines cannot reference missing purchases, catalog cigars, or humidors.
 
 ## 1.4.3 - 2026-07-15
 

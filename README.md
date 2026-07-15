@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.1.0
+Revision: 1.2.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 01:14 ET
+Modified Date: 2026-07-15 11:34 ET
 -->
 
 # HumidorHQ
@@ -75,8 +75,16 @@ Signed-in users can add, edit, and delete records from the left menu:
 - `Vendors` manages `data/vendors.json`.
 - `Humidors` manages `data/storage-locations.json`.
 - `Purchases` manages purchase headers in `data/purchases.json`.
+- `PO Lines` links a purchase, catalog cigar, and humidor in `data/purchase-lines.json`.
 
-The first CRUD pass intentionally keeps purchase lines, lot creation, and inventory event automation out of scope. Those workflows affect cost basis and inventory accounting and should be added as a separate pass.
+Creating a PO Line automatically creates the related inventory records:
+
+- `data/lots.json` receives the lot tied to the purchase line and catalog cigar.
+- `data/lot-location-balances.json` receives the starting humidor balance.
+- `data/inventory-events.json` receives a `purchase-receipt` event.
+
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, or humidor. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
+
 ## Audit Trail
 
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
@@ -84,6 +92,7 @@ HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes d
 The left menu includes an Audit page for recent activity and a Changelog page that reads `CHANGELOG.md` through the protected PHP API.
 
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
+
 ## Local Development
 
 For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
