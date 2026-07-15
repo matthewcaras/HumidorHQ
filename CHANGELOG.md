@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.4.1
+Revision: 1.4.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 10:59 ET
+Modified Date: 2026-07-15 11:08 ET
 -->
 
 # Changelog
@@ -15,6 +15,10 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.4.2 - 2026-07-15
+
+- Moved add/edit forms below the current records tables on Catalog, Vendors, Purchases, and Humidors pages.
+- Bumped static asset query strings so deployed browsers load the reordered management screens.
 ## 1.4.1 - 2026-07-15
 
 - Added version query strings to the flat CSS and JavaScript asset URLs so Hostinger and browser caches load the current deployed files.
@@ -81,6 +85,7 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
 
 
 

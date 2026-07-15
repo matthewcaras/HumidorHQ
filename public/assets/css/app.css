@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.1.0
+ * Revision: 1.1.1
  * Description: CSS styles for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 01:14 ET
+ * Modified Date: 2026-07-15 11:08 ET
  */
 
 :root {
@@ -263,11 +263,11 @@ h2 {
 }
 
 .data-form {
-  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
   display: grid;
   gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 24px;
+  margin-top: 24px;
+  padding-top: 24px;
 }
 
 .form-grid {
@@ -442,6 +442,7 @@ code {
     font-size: 1.55rem;
   }
 }
+
 
 
 

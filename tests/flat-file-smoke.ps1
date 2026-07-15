@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.5.1
+# Revision : 1.5.2
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 10:59 ET
+# Modified Date : 2026-07-15 11:08 ET
 # Changelog :
+# 1.5.2 verify managed records render before add/edit forms
 # 1.5.1 verify cache-busted static asset URLs
 # 1.5.0 verify authenticated CRUD record endpoints and management UI hooks
 # 1.4.1 verify project metadata is wired into the main render path
@@ -41,8 +42,8 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.4\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -55,6 +56,7 @@ if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 
 foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }
+if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
 foreach ($menuText in @('Audit', 'Changelog', 'Vendors')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
