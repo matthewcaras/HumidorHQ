@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.6.0
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, connected CRUD endpoints, and PHP JSON sample data.
+# Revision : 1.6.1
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 11:34 ET
+# Modified Date : 2026-07-15 11:44 ET
 # Changelog :
+# 1.6.1 verify TODO.md menu and API access
 # 1.6.0 verify connected PO Lines create lots, balances, and inventory events
 # 1.5.3 verify audit date-time is shown in Eastern Time format
 # 1.5.2 verify managed records render before add/edit forms
@@ -48,7 +49,7 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -63,7 +64,7 @@ foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'ap
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }
 if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
-foreach ($menuText in @('Audit', 'Changelog', 'Vendors', 'PO Lines')) {
+foreach ($menuText in @('Audit', 'Changelog', 'Todo', 'Vendors', 'PO Lines')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
 
@@ -99,7 +100,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta', '/records/', 'purchase-lines')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', 'purchase-lines')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
