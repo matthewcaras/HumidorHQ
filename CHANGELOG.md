@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.5.2
+Revision: 1.5.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:44 ET
+Modified Date: 2026-07-15 11:52 ET
 -->
 
 # Changelog
@@ -15,6 +15,10 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.5.3 - 2026-07-15
+
+- Restyled the flat-file app to match the warm dark brown screenshot palette and denser layout.
+- Bumped the CSS asset version so deployed browsers load the visual update.
 ## 1.5.2 - 2026-07-15
 
 - Added a protected Todo menu page that renders `TODO.md` through the PHP API.
