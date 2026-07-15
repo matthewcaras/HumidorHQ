@@ -84,6 +84,21 @@ async function recordPageView(page) {
   }
 }
 
+
+function renderProjectMeta() {
+  const meta = document.querySelector('#project-meta')
+  if (!meta) {
+    return
+  }
+  if (!state.appMeta) {
+    meta.textContent = 'Rev loading...'
+    return
+  }
+  meta.innerHTML = `
+    <span>Rev ${state.appMeta.revision}</span>
+    <span>Modified ${state.appMeta.modifiedEt}</span>
+  `
+}
 function renderNav() {
   const nav = document.querySelector('#app-nav')
   nav.replaceChildren(
@@ -413,6 +428,7 @@ function render() {
 async function init() {
   render()
   try {
+    state.appMeta = await apiGet('/app-meta')
     state.session = await apiGet('/session')
     if (isAuthenticated()) {
       state.sampleData = await apiGet('/sample-data')
@@ -431,3 +447,4 @@ async function init() {
 }
 
 init()
+

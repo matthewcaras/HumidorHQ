@@ -34,6 +34,58 @@ function sample_data_collections(): array
     ];
 }
 
+
+function app_meta_payload(): array
+{
+    $changelogPath = APP_ROOT . DIRECTORY_SEPARATOR . 'CHANGELOG.md';
+    $content = file_exists($changelogPath) ? file_get_contents($changelogPath) : '';
+    $revision = '0.0.0';
+    if (is_string($content) && preg_match('/^##\s+(\d+\.\d+\.\d+)\s+-/m', $content, $matches)) {
+        $revision = $matches[1];
+    }
+
+    $paths = [
+        APP_ROOT . DIRECTORY_SEPARATOR . 'CHANGELOG.md',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'README.md',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'index.html',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'api',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'public',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'data',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'tests',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'tools',
+    ];
+    $latest = 0;
+    foreach ($paths as $path) {
+        if (is_file($path)) {
+            $latest = max($latest, (int) filemtime($path));
+            continue;
+        }
+        if (!is_dir($path)) {
+            continue;
+        }
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $fileInfo) {
+            if (!$fileInfo->isFile()) {
+                continue;
+            }
+            $name = $fileInfo->getFilename();
+            if ($name === 'auth-users.json' || $name === 'audit-log.jsonl' || str_ends_with($name, '.lock') || str_contains($name, '.tmp')) {
+                continue;
+            }
+            $latest = max($latest, (int) $fileInfo->getMTime());
+        }
+    }
+
+    $modified = new DateTimeImmutable('@' . ($latest > 0 ? $latest : time()));
+    $modified = $modified->setTimezone(new DateTimeZone('America/New_York'));
+
+    return [
+        'revision' => $revision,
+        'modifiedEt' => $modified->format('Y-m-d g:i A') . ' ET',
+    ];
+}
 function changelog_payload(): array
 {
     $path = APP_ROOT . DIRECTORY_SEPARATOR . 'CHANGELOG.md';
@@ -50,6 +102,10 @@ try {
 
     if ($path === '/health' && $method === 'GET') {
         json_success(['status' => 'ok', 'app' => 'Humidor HQ']);
+    }
+
+    if ($path === '/app-meta' && $method === 'GET') {
+        json_success(app_meta_payload());
     }
 
     if ($path === '/session' && $method === 'GET') {
@@ -114,3 +170,10 @@ try {
 } catch (Throwable $error) {
     handle_api_error($error);
 }
+
+
+
+
+
+
+

@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.2.0
-# Description : Verifies the flat-file HumidorHQ shell, auth, audit logging, changelog access, and PHP JSON sample data.
+# Revision : 1.3.0
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-15
 # Changelog :
+# 1.3.0 verify app metadata revision and Eastern Time modified timestamp
 # 1.2.0 verify audit logging, audit/changelog menu links, and audit placeholder
 # 1.1.1 verify placeholder text is removed and ignored auth file has a tracked placeholder
 # 1.1.0 verify PHP session authentication protects data routes
@@ -39,6 +40,7 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
 
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
+if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 foreach ($menuText in @('Audit', 'Changelog')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
@@ -55,7 +57,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -81,6 +83,10 @@ try {
 
     $health = Invoke-RestMethod "http://127.0.0.1:$port/api/health" -Method Get -WebSession $session
     if ($health.data.status -ne 'ok') { throw 'PHP health endpoint did not return ok.' }
+
+    $meta = Invoke-RestMethod "http://127.0.0.1:$port/api/app-meta" -Method Get -WebSession $session
+    if ($meta.data.revision -notmatch '^\d+\.\d+\.\d+$') { throw 'App metadata revision is missing or invalid.' }
+    if ($meta.data.modifiedEt -notmatch 'ET$') { throw 'App metadata modified timestamp is not labeled ET.' }
 
     $anonymousSession = Invoke-RestMethod "http://127.0.0.1:$port/api/session" -Method Get -WebSession $session
     if ($anonymousSession.data.authenticated -ne $false) { throw 'Anonymous session should not be authenticated.' }

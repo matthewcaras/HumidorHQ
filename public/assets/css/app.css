@@ -40,6 +40,8 @@ textarea {
 .sidebar {
   background: #21302f;
   color: #f7fbfa;
+  display: flex;
+  flex-direction: column;
   padding: 28px 20px;
 }
 
@@ -52,6 +54,15 @@ textarea {
 .brand p {
   margin: 8px 0 28px;
   color: #bfd0cd;
+}
+
+.project-meta {
+  color: #bfd0cd;
+  display: grid;
+  font-size: 0.78rem;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 22px;
 }
 
 .nav {
@@ -301,7 +312,6 @@ code {
   .sidebar {
     padding: 20px;
   }
-
   .nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -330,6 +340,9 @@ code {
     font-size: 1.55rem;
   }
 }
+
+
+
 
 
 
