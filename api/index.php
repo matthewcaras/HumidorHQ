@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.2.0
+ * Revision: 1.2.1
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-15 11:34 ET
+ * Modified Date: 2026-07-15 11:44 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -98,6 +98,15 @@ function changelog_payload(): array
     $content = file_exists($path) ? file_get_contents($path) : '';
     if (!is_string($content)) {
         throw new ApiError('CHANGELOG_READ_FAILED', 'Changelog could not be read.', 500);
+    }
+    return ['content' => $content];
+}
+function todo_payload(): array
+{
+    $path = APP_ROOT . DIRECTORY_SEPARATOR . 'TODO.md';
+    $content = file_exists($path) ? file_get_contents($path) : '';
+    if (!is_string($content)) {
+        throw new ApiError('TODO_READ_FAILED', 'Todo list could not be read.', 500);
     }
     return ['content' => $content];
 }
@@ -398,6 +407,12 @@ try {
         json_success(changelog_payload());
     }
 
+
+    if ($path === '/todo' && $method === 'GET') {
+        require_auth();
+        audit_record('Todo', 'view');
+        json_success(todo_payload());
+    }
     if (preg_match('#^/records/([a-z0-9\-]+)$#', $path, $matches)) {
         require_auth();
         $collection = $matches[1];

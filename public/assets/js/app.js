@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.2.0
+ * Revision: 1.2.1
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-15 11:34 ET
+ * Modified Date: 2026-07-15 11:44 ET
  */
 
 const API_BASE_URL = 'api'
@@ -33,6 +33,7 @@ const pages = [
   { id: 'Reports', label: 'Reports' },
   { id: 'Audit', label: 'Audit' },
   { id: 'Changelog', label: 'Changelog' },
+  { id: 'Todo', label: 'Todo' },
 ]
 
 const managedPages = {
@@ -730,6 +731,17 @@ function renderChangelog(view) {
   view.append(panel)
 }
 
+
+async function ensureTodo() {
+  state.todo = await apiGet('/todo')
+}
+
+function renderTodo(view) {
+  const panel = document.createElement('pre')
+  panel.className = 'markdown-panel'
+  panel.textContent = state.todo?.content || 'TODO.md is empty.'
+  view.append(panel)
+}
 function renderLogin(view) {
   const panel = document.createElement('form')
   panel.className = 'login-panel'
@@ -859,6 +871,16 @@ function render() {
     return
   }
 
+
+  if (state.activePage === 'Todo') {
+    if (!state.todo) {
+      view.innerHTML = '<p class="muted">Loading todo list...</p>'
+      ensureTodo().then(render).catch((error) => { state.error = error; render() })
+      return
+    }
+    renderTodo(view)
+    return
+  }
   renderSectionSummary(view, state.activePage)
 }
 

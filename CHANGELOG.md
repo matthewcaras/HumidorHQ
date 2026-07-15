@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.5.1
+Revision: 1.5.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:39 ET
+Modified Date: 2026-07-15 11:44 ET
 -->
 
 # Changelog
@@ -14,6 +14,12 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.5.2 - 2026-07-15
+
+- Added a protected Todo menu page that renders `TODO.md` through the PHP API.
+- Added `/api/todo` and smoke-test coverage for the todo page content.
+- Bumped the app JavaScript asset version so browsers load the Todo menu update.
 
 ## 1.5.1 - 2026-07-15
 
