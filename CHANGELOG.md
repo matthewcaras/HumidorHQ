@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.1.0
+Revision: 1.4.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 01:14 ET
+Modified Date: 2026-07-15 01:32 ET
 -->
 
 # Changelog
@@ -78,6 +78,7 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
 
 
 
