@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.1.0
+ * Revision: 1.1.1
  * Description: Plain JavaScript browser source for the HumidorHQ flat-file app with authenticated CRUD management screens.
- * Modified Date: 2026-07-15 01:14 ET
+ * Modified Date: 2026-07-15 11:08 ET
  */
 
 const API_BASE_URL = 'api'
@@ -593,8 +593,8 @@ function renderManagedTable(view, pageConfig) {
 }
 
 function renderManagedPage(view, pageConfig) {
-  renderManagedForm(view, pageConfig)
   renderManagedTable(view, pageConfig)
+  renderManagedForm(view, pageConfig)
 }
 
 const pageSections = {
@@ -827,3 +827,4 @@ async function init() {
 }
 
 init()
+
