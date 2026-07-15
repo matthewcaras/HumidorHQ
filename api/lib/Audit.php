@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: Audit.php
- * Revision: 1.0.0
- * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Revision: 1.1.0
+ * Description: Audit logging helpers for the HumidorHQ flat-file app.
+ * Modified Date: 2026-07-15 11:18 ET
  */
 
 function audit_log_path(): string
@@ -12,12 +12,29 @@ function audit_log_path(): string
     return DATA_ROOT . DIRECTORY_SEPARATOR . 'audit-log.jsonl';
 }
 
+function audit_datetime_et(?string $value = null): string
+{
+    if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} ET$/', $value)) {
+        return $value;
+    }
+
+    try {
+        $dateTime = $value === null || trim($value) === ''
+            ? new DateTimeImmutable('now', new DateTimeZone('UTC'))
+            : new DateTimeImmutable($value);
+    } catch (Throwable) {
+        return (string) $value;
+    }
+
+    return $dateTime->setTimezone(new DateTimeZone('America/New_York'))->format('Y-m-d H:i:s') . ' ET';
+}
+
 function audit_record(string $page, string $action, array $details = []): void
 {
     $user = current_auth_user();
     $username = is_array($user) ? (string) ($user['username'] ?? 'unknown') : 'anonymous';
     $record = [
-        'dateTime' => now_iso(),
+        'dateTime' => audit_datetime_et(),
         'user' => $username,
         'page' => trim($page) !== '' ? trim($page) : 'Unknown',
         'action' => trim($action) !== '' ? trim($action) : 'unknown',
@@ -82,7 +99,7 @@ function get_audit_records(int $limit = 200): array
         $decoded = json_decode($line, true);
         if (is_array($decoded)) {
             $records[] = [
-                'dateTime' => (string) ($decoded['dateTime'] ?? ''),
+                'dateTime' => audit_datetime_et((string) ($decoded['dateTime'] ?? '')),
                 'user' => (string) ($decoded['user'] ?? ''),
                 'page' => (string) ($decoded['page'] ?? ''),
                 'action' => (string) ($decoded['action'] ?? ''),
@@ -95,5 +112,3 @@ function get_audit_records(int $limit = 200): array
     $records = array_slice(array_reverse($records), 0, $limit);
     return ['records' => $records, 'total' => $total, 'limit' => $limit];
 }
-
-

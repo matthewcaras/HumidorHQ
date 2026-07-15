@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.5.2
+# Revision : 1.5.3
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 11:08 ET
+# Modified Date : 2026-07-15 11:18 ET
 # Changelog :
+# 1.5.3 verify audit date-time is shown in Eastern Time format
 # 1.5.2 verify managed records render before add/edit forms
 # 1.5.1 verify cache-busted static asset URLs
 # 1.5.0 verify authenticated CRUD record endpoints and management UI hooks
@@ -165,6 +166,7 @@ try {
     if ($audit.data.records.Count -lt 2) { throw 'Audit endpoint did not return expected activity records.' }
     $dashboardRecord = $audit.data.records | Where-Object { $_.user -eq 'testuser' -and $_.page -eq 'Dashboard' -and $_.action -eq 'view' } | Select-Object -First 1
     if (-not $dashboardRecord) { throw 'Audit log is missing the Dashboard page view record.' }
+    if ($dashboardRecord.dateTime -notmatch '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} ET$') { throw "Audit date-time should use Eastern Time display format. Got $($dashboardRecord.dateTime)" }
 
     $changelog = Invoke-RestMethod "http://127.0.0.1:$port/api/changelog" -Method Get -WebSession $session
     if ($changelog.data.content -notmatch 'Changelog') { throw 'Changelog endpoint did not return CHANGELOG.md content.' }
