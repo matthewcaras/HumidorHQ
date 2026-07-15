@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.5.0
+# Revision : 1.5.1
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 01:14 ET
+# Modified Date : 2026-07-15 10:59 ET
 # Changelog :
+# 1.5.1 verify cache-busted static asset URLs
 # 1.5.0 verify authenticated CRUD record endpoints and management UI hooks
 # 1.4.1 verify project metadata is wired into the main render path
 # 1.4.0 verify metadata headers on tracked non-JSON files
@@ -40,8 +41,8 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js') { throw 'index.html does not load public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css') { throw 'index.html does not load public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.4\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.4\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -191,5 +192,6 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
+
 
 
