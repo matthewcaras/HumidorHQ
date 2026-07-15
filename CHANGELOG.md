@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.5.0
+Revision: 1.5.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:34 ET
+Modified Date: 2026-07-15 11:39 ET
 -->
 
 # Changelog
@@ -14,6 +14,11 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.5.1 - 2026-07-15
+
+- Added `TODO.md` to track future development items.
+- Added smoked-cigar rating and comments as the first backlog item for future buying assistance.
 
 ## 1.5.0 - 2026-07-15
 
