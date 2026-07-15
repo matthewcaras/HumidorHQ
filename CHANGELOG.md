@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.5.5
+Revision: 1.5.7
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 14:58 ET
+Modified Date: 2026-07-15 15:18 ET
 -->
 
 # Changelog
@@ -15,6 +15,16 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.5.7 - 2026-07-15
+
+- Added purchased quantity totals to Purchases by summing linked PO Lines.
+- Added Catalog quantity columns for purchased and on-hand counts from linked PO Lines, lots, and location balances.
+- Bumped JavaScript asset version so deployed browsers load the quantity display update.
+
+## 1.5.6 - 2026-07-15
+
+- Removed the top-left technology label and top-right API status pill from the page header.
+- Bumped the JavaScript asset version so deployed browsers load the header cleanup.
 ## 1.5.5 - 2026-07-15
 
 - Removed the Dashboard Data Health widget from the screenshot-style dashboard layout.
@@ -121,22 +131,4 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

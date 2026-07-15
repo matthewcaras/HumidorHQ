@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.2.3
+ * Revision: 1.3.0
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-15 14:58 ET
+ * Modified Date: 2026-07-15 15:18 ET
  */
 
 const API_BASE_URL = 'api'
@@ -40,7 +40,8 @@ const managedPages = {
   Catalog: {
     collection: 'catalog-cigars',
     title: 'Catalog Cigar',
-    intro: 'Add and maintain master cigar records. Catalog entries describe the cigar, not quantity or location.',
+    intro: 'Add and maintain master cigar records. Quantity totals are calculated from PO Lines, lots, and humidor balances.',
+    dependencies: ['purchase-lines', 'lots', 'lot-location-balances'],
     fields: [
       { name: 'manufacturer', label: 'Manufacturer', required: true },
       { name: 'series', label: 'Series', required: true },
@@ -60,6 +61,8 @@ const managedPages = {
       { label: 'Cigar', value: (row) => [row.manufacturer, row.series].filter(Boolean).join(' ') },
       { label: 'Vitola', value: (row) => row.vitola || '' },
       { label: 'Wrapper', value: (row) => row.wrapper || '' },
+      { label: 'Purchased', value: (row) => formatCount(purchasedQuantityForCatalog(row.id)) },
+      { label: 'On Hand', value: (row) => formatCount(onHandQuantityForCatalog(row.id)) },
       { label: 'MSRP', value: (row) => money(row.msrp) },
     ],
   },
@@ -86,7 +89,7 @@ const managedPages = {
     collection: 'purchases',
     title: 'Purchase',
     intro: 'Add purchase headers. Purchase lines and lot generation will build on these records.',
-    dependencies: ['vendors'],
+    dependencies: ['vendors', 'purchase-lines'],
     fields: [
       { name: 'vendorId', label: 'Vendor', type: 'select', collection: 'vendors', optionLabel: 'name' },
       { name: 'purchaseDate', label: 'Purchase Date', type: 'date', required: true },
@@ -103,6 +106,7 @@ const managedPages = {
       { label: 'Date', value: (row) => row.purchaseDate || '' },
       { label: 'Vendor', value: (row) => vendorName(row.vendorId) },
       { label: 'Invoice / PO', value: (row) => row.invoiceNumber || '' },
+      { label: 'Qty Purchased', value: (row) => formatCount(purchasedQuantityForPurchase(row.id)) },
       { label: 'Total', value: (row) => money(row.totalPaid) },
     ],
   },
@@ -127,7 +131,8 @@ const managedPages = {
       { label: 'Qty', value: (row) => row.quantity ?? '' },
       { label: 'Line Total', value: (row) => money(Number(row.quantity || 0) * Number(row.unitCost || 0)) },
     ],
-  },  Humidors: {
+  },
+  Humidors: {
     collection: 'storage-locations',
     title: 'Humidor',
     intro: 'Add humidors, tupperdores, coolers, or other storage locations.',
@@ -158,6 +163,38 @@ function escapeHtml(value) {
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString()
+}
+
+function numericValue(value) {
+  const number = Number(value || 0)
+  return Number.isFinite(number) ? number : 0
+}
+
+function purchasedQuantityForCatalog(catalogCigarId) {
+  const id = Number(catalogCigarId || 0)
+  return (state.records['purchase-lines'] || [])
+    .filter((row) => Number(row.catalogCigarId) === id)
+    .reduce((total, row) => total + numericValue(row.quantity), 0)
+}
+
+function purchasedQuantityForPurchase(purchaseId) {
+  const id = Number(purchaseId || 0)
+  return (state.records['purchase-lines'] || [])
+    .filter((row) => Number(row.purchaseId) === id)
+    .reduce((total, row) => total + numericValue(row.quantity), 0)
+}
+
+function onHandQuantityForCatalog(catalogCigarId) {
+  const id = Number(catalogCigarId || 0)
+  const lotIds = new Set(
+    (state.records.lots || [])
+      .filter((row) => Number(row.catalogCigarId) === id)
+      .map((row) => Number(row.id))
+  )
+
+  return (state.records['lot-location-balances'] || [])
+    .filter((row) => lotIds.has(Number(row.lotId)))
+    .reduce((total, row) => total + numericValue(row.quantity), 0)
 }
 
 function money(value) {
@@ -207,6 +244,9 @@ function collectionCount(name) {
 
 function setStatus(text, mode = 'neutral') {
   const status = document.querySelector('#api-status')
+  if (!status) {
+    return
+  }
   status.textContent = text
   status.dataset.mode = mode
 }
