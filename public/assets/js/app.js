@@ -137,7 +137,7 @@ function renderDashboard(view) {
 
   const note = document.createElement('p')
   note.className = 'muted'
-  note.textContent = 'This shell is running without React, TypeScript, Vite, Node, Prisma, or a compile step. Feature pages will be filled in with plain JavaScript against the PHP API.'
+  note.textContent = 'This shell is running without React, TypeScript, Vite, Node, Prisma, or a compile step. Each page reads the current protected JSON data through the PHP API.'
 
   view.append(grid, note)
 }
@@ -184,14 +184,43 @@ function renderCollectionList(view) {
   view.append(table)
 }
 
-function renderPlaceholder(view, pageTitle) {
-  const message = document.createElement('div')
-  message.className = 'empty-state'
-  message.innerHTML = `
-    <h3>${pageTitle}</h3>
-    <p>This page is queued for plain JavaScript conversion. The PHP API and repo JSON data are available now.</p>
-  `
-  view.append(message)
+const pageSections = {
+  Catalog: {
+    intro: 'Catalog source files currently available through the PHP JSON API.',
+    collections: ['catalog-cigars'],
+  },
+  Purchases: {
+    intro: 'Purchase and receipt source files currently available through the PHP JSON API.',
+    collections: ['purchases', 'purchase-lines', 'vendors'],
+  },
+  Humidors: {
+    intro: 'Storage and placement source files currently available through the PHP JSON API.',
+    collections: ['storage-locations', 'storage-sub-locations', 'lot-location-balances', 'lots'],
+  },
+  Reports: {
+    intro: 'Report source files currently available through the PHP JSON API.',
+    collections: ['inventory-events', 'lots', 'smoking-journal-entries'],
+  },
+}
+
+function renderSectionSummary(view, pageTitle) {
+  const section = pageSections[pageTitle]
+  if (!section) {
+    renderCollectionList(view)
+    return
+  }
+
+  const intro = document.createElement('p')
+  intro.className = 'muted'
+  intro.textContent = section.intro
+
+  const grid = document.createElement('div')
+  grid.className = 'metric-grid compact'
+  section.collections.forEach((name) => {
+    grid.append(metricCard(name, collectionCount(name), `Loaded from data/${name}.json`))
+  })
+
+  view.append(intro, grid)
 }
 
 function renderLogin(view) {
@@ -289,7 +318,7 @@ function render() {
     return
   }
 
-  renderPlaceholder(view, state.activePage)
+  renderSectionSummary(view, state.activePage)
 }
 
 async function init() {
@@ -312,3 +341,4 @@ async function init() {
 }
 
 init()
+

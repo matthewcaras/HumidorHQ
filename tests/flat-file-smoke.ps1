@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.1.0
+# Revision : 1.1.1
 # Description : Verifies the flat-file HumidorHQ shell uses plain assets, PHP session auth, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-15
 # Changelog :
+# 1.1.1 verify placeholder text is removed and ignored auth file has a tracked placeholder
 # 1.1.0 verify PHP session authentication protects data routes
 # 1.0.2 quote PHP document root paths that contain spaces
 # 1.0.1 use separate PHP server stdout and stderr logs
@@ -17,6 +18,7 @@ $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
+$authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.placeholder'
 $authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
 $authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
 $authUsersHadFile = Test-Path -LiteralPath $authUsersPath
@@ -36,6 +38,10 @@ if ($index -notmatch 'public/assets/css/app\.css') {
     throw 'index.html does not load public/assets/css/app.css.'
 }
 
+$appJs = Get-Content -LiteralPath $appJsPath -Raw
+if ($appJs -match 'queued for plain JavaScript conversion') {
+    throw 'Plain JavaScript app still shows queued conversion placeholder text.'
+}
 foreach ($path in @($appJsPath, $appCssPath)) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "Required flat asset is missing: $path"
@@ -128,7 +134,9 @@ try {
     }
     if ($authUsersHadFile) {
         Copy-Item -LiteralPath $authUsersBackupPath -Destination $authUsersPath -Force
-        Remove-Item -LiteralPath $authUsersBackupPath -Force -ErrorAction SilentlyContinue
+        if ([System.IO.File]::Exists($authUsersBackupPath)) {
+            [System.IO.File]::Delete($authUsersBackupPath)
+        }
     } else {
         Remove-Item -LiteralPath $authUsersPath -Force -ErrorAction SilentlyContinue
     }
@@ -138,4 +146,8 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
+
+
+
+
 

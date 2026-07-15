@@ -150,6 +150,10 @@ h2 {
   margin-bottom: 20px;
 }
 
+.metric-grid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .metric-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -315,4 +319,6 @@ code {
     font-size: 1.55rem;
   }
 }
+
+
 

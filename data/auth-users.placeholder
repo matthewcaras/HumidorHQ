@@ -1,0 +1,9 @@
+This placeholder marks the intentionally ignored runtime credential file:
+
+  data/auth-users.json
+
+Create the real file with:
+
+  php tools/create-auth-user.php "username" "password" "Display Name"
+
+Do not commit real usernames, password hashes, or production credentials.
