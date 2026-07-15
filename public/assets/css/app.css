@@ -264,6 +264,17 @@ h2 {
   text-transform: uppercase;
 }
 
+.markdown-panel {
+  background: var(--panel-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  max-height: 620px;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre-wrap;
+}
+
 code {
   background: var(--panel-muted);
   border-radius: 5px;
@@ -319,6 +330,7 @@ code {
     font-size: 1.55rem;
   }
 }
+
 
 
 

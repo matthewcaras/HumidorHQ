@@ -4,6 +4,8 @@ const state = {
   activePage: 'Dashboard',
   session: null,
   sampleData: null,
+  auditData: null,
+  changelog: null,
   error: null,
   authError: null,
   isLoading: true,
@@ -16,6 +18,8 @@ const pages = [
   { id: 'Purchases', label: 'Purchases' },
   { id: 'Humidors', label: 'Humidors' },
   { id: 'Reports', label: 'Reports' },
+  { id: 'Audit', label: 'Audit' },
+  { id: 'Changelog', label: 'Changelog' },
 ]
 
 function formatCount(value) {
@@ -68,6 +72,18 @@ function isAuthenticated() {
   return state.session?.authenticated === true
 }
 
+async function recordPageView(page) {
+  if (!isAuthenticated()) {
+    return
+  }
+  try {
+    await apiPost('/audit/page', { page, action: 'view' })
+    state.auditData = null
+  } catch {
+    // Audit failure should not block navigation.
+  }
+}
+
 function renderNav() {
   const nav = document.querySelector('#app-nav')
   nav.replaceChildren(
@@ -80,6 +96,7 @@ function renderNav() {
       button.addEventListener('click', () => {
         state.activePage = page.id
         render()
+        recordPageView(page.id)
       })
       return button
     }),
@@ -104,6 +121,8 @@ function renderAccountBar(view) {
     await apiPost('/logout')
     state.session = { authenticated: false, user: null }
     state.sampleData = null
+    state.auditData = null
+    state.changelog = null
     state.error = null
     state.authError = null
     setStatus('Signed out', 'neutral')
@@ -223,6 +242,55 @@ function renderSectionSummary(view, pageTitle) {
   view.append(intro, grid)
 }
 
+async function ensureAuditData() {
+  state.auditData = await apiGet('/audit')
+}
+
+function renderAudit(view) {
+  const records = state.auditData?.records || []
+  const summary = document.createElement('p')
+  summary.className = 'muted'
+  summary.textContent = `${formatCount(state.auditData?.total || 0)} audit records tracked in data/audit-log.jsonl.`
+
+  const table = document.createElement('table')
+  table.className = 'data-table'
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Date-Time</th>
+        <th>User</th>
+        <th>Page</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `
+  const tbody = table.querySelector('tbody')
+  records.forEach((record) => {
+    const row = document.createElement('tr')
+    row.innerHTML = `
+      <td>${record.dateTime || ''}</td>
+      <td>${record.user || ''}</td>
+      <td>${record.page || ''}</td>
+      <td>${record.action || ''}</td>
+    `
+    tbody.append(row)
+  })
+
+  view.append(summary, table)
+}
+
+async function ensureChangelog() {
+  state.changelog = await apiGet('/changelog')
+}
+
+function renderChangelog(view) {
+  const panel = document.createElement('pre')
+  panel.className = 'markdown-panel'
+  panel.textContent = state.changelog?.content || 'CHANGELOG.md is empty.'
+  view.append(panel)
+}
+
 function renderLogin(view) {
   const panel = document.createElement('form')
   panel.className = 'login-panel'
@@ -258,6 +326,7 @@ function renderLogin(view) {
         password: String(formData.get('password') || ''),
       })
       state.sampleData = await apiGet('/sample-data')
+      await recordPageView(state.activePage)
       setStatus('PHP API connected', 'ok')
     } catch (error) {
       state.authError = error.message
@@ -318,6 +387,26 @@ function render() {
     return
   }
 
+  if (state.activePage === 'Audit') {
+    if (!state.auditData) {
+      view.innerHTML = '<p class="muted">Loading audit activity...</p>'
+      ensureAuditData().then(render).catch((error) => { state.error = error; render() })
+      return
+    }
+    renderAudit(view)
+    return
+  }
+
+  if (state.activePage === 'Changelog') {
+    if (!state.changelog) {
+      view.innerHTML = '<p class="muted">Loading changelog...</p>'
+      ensureChangelog().then(render).catch((error) => { state.error = error; render() })
+      return
+    }
+    renderChangelog(view)
+    return
+  }
+
   renderSectionSummary(view, state.activePage)
 }
 
@@ -327,6 +416,7 @@ async function init() {
     state.session = await apiGet('/session')
     if (isAuthenticated()) {
       state.sampleData = await apiGet('/sample-data')
+      await recordPageView(state.activePage)
       setStatus('PHP API connected', 'ok')
     } else {
       setStatus('Sign in required', 'neutral')
@@ -341,4 +431,3 @@ async function init() {
 }
 
 init()
-

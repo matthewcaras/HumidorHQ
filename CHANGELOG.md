@@ -8,6 +8,13 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.3.0 - 2026-07-15
+
+- Added append-only JSONL audit logging for user activity by date-time, user, page, and action.
+- Added protected `/api/audit`, `/api/audit/page`, and `/api/changelog` routes.
+- Added Audit and Changelog links to the left menu.
+- Added `data/audit-log.placeholder` and ignored the live `data/audit-log.jsonl` runtime file.
+- Expanded the smoke test to verify audit records and changelog access.
 ## 1.2.2 - 2026-07-15
 
 - Updated `.gitignore` for the current flat PHP/JSON/static project scope.
@@ -40,6 +47,7 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
 
 
 

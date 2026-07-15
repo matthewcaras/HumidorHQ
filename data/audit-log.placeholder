@@ -1,0 +1,7 @@
+This placeholder marks the intentionally ignored runtime audit file:
+
+  data/audit-log.jsonl
+
+The PHP API creates this file automatically as users sign in, view pages, and perform actions.
+
+Do not commit the live audit log. It may contain usernames and activity history.

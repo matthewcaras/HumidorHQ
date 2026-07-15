@@ -58,6 +58,14 @@ Public routes:
 - `POST /api/logout`
 
 Protected routes include `GET /api/sample-data` and future data-changing endpoints.
+
+## Audit Trail
+
+HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
+
+The left menu includes an Audit page for recent activity and a Changelog page that reads `CHANGELOG.md` through the protected PHP API.
+
+The committed `data/audit-log.placeholder` file documents the ignored runtime audit file.
 ## Local Development
 
 For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
@@ -96,6 +104,7 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
 
 
 
