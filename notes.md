@@ -10,6 +10,5 @@ Sample data could not be loaded
 The requested endpoint was not found.
 
 how to add/enter new data?
----
-enter data works, pages load with sample data, two users setup for two devs
+
 
