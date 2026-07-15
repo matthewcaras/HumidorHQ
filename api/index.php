@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Modified Date: 2026-07-15 01:14 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -101,6 +101,164 @@ function changelog_payload(): array
     }
     return ['content' => $content];
 }
+function managed_collection_configs(): array
+{
+    return [
+        'catalog-cigars' => [
+            'page' => 'Catalog',
+            'label' => 'Catalog Cigar',
+            'required' => ['manufacturer', 'series'],
+            'text' => ['manufacturer', 'series', 'vitola', 'shape', 'length', 'wrapper', 'binder', 'filler', 'country', 'strength', 'notes'],
+            'int' => ['ringGauge'],
+            'money' => ['msrp'],
+        ],
+        'vendors' => [
+            'page' => 'Vendors',
+            'label' => 'Vendor',
+            'required' => ['name'],
+            'text' => ['name', 'website', 'contactName', 'email', 'phone', 'notes'],
+            'int' => [],
+            'money' => [],
+        ],
+        'storage-locations' => [
+            'page' => 'Humidors',
+            'label' => 'Humidor',
+            'required' => ['name'],
+            'text' => ['name', 'type', 'notes'],
+            'int' => ['capacity'],
+            'money' => [],
+        ],
+        'purchases' => [
+            'page' => 'Purchases',
+            'label' => 'Purchase',
+            'required' => ['purchaseDate'],
+            'text' => ['invoiceNumber', 'purchaseDate', 'receivedDate', 'notes'],
+            'int' => ['vendorId'],
+            'money' => ['shipping', 'exciseTax', 'salesTax', 'discount', 'totalPaid'],
+        ],
+    ];
+}
+
+function managed_collection_config(string $collection): array
+{
+    $configs = managed_collection_configs();
+    if (!isset($configs[$collection])) {
+        throw new ApiError('COLLECTION_NOT_MANAGED', 'This collection cannot be managed through this endpoint.', 404);
+    }
+    return $configs[$collection];
+}
+
+function clean_text_field(array $input, string $field): string
+{
+    return trim((string) ($input[$field] ?? ''));
+}
+
+function clean_optional_int(array $input, string $field): ?int
+{
+    $value = trim((string) ($input[$field] ?? ''));
+    if ($value === '') {
+        return null;
+    }
+    if (!preg_match('/^-?[0-9]+$/', $value)) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' must be a whole number.', 422);
+    }
+    return (int) $value;
+}
+
+function clean_optional_money(array $input, string $field): ?float
+{
+    $value = trim((string) ($input[$field] ?? ''));
+    if ($value === '') {
+        return null;
+    }
+    if (!is_numeric($value)) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' must be a number.', 422);
+    }
+    return round((float) $value, 2);
+}
+
+function clean_managed_record(string $collection, array $input, ?array $existing = null): array
+{
+    $config = managed_collection_config($collection);
+    $record = $existing ?? [];
+
+    foreach ($config['text'] as $field) {
+        $record[$field] = clean_text_field($input, $field);
+    }
+    foreach ($config['int'] as $field) {
+        $record[$field] = clean_optional_int($input, $field);
+    }
+    foreach ($config['money'] as $field) {
+        $record[$field] = clean_optional_money($input, $field);
+    }
+
+    foreach ($config['required'] as $field) {
+        if (trim((string) ($record[$field] ?? '')) === '') {
+            throw new ApiError('VALIDATION_ERROR', $field . ' is required.', 422);
+        }
+    }
+
+    if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
+        throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
+    }
+
+    $record['updatedAt'] = now_iso();
+    if (!isset($record['createdAt'])) {
+        $record['createdAt'] = $record['updatedAt'];
+    }
+    return $record;
+}
+
+function list_managed_records(string $collection): array
+{
+    managed_collection_config($collection);
+    return ['records' => load_collection($collection)];
+}
+
+function create_managed_record(string $collection, array $input): array
+{
+    $config = managed_collection_config($collection);
+    $rows = load_collection($collection);
+    $record = clean_managed_record($collection, $input);
+    $record['id'] = next_id($collection);
+    $rows[] = $record;
+    save_collection($collection, $rows);
+    audit_record($config['page'], 'create ' . $config['label'], ['collection' => $collection, 'id' => $record['id']]);
+    return $record;
+}
+
+function update_managed_record(string $collection, int $id, array $input): array
+{
+    $config = managed_collection_config($collection);
+    $rows = load_collection($collection);
+    foreach ($rows as $index => $row) {
+        if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
+            $updated = clean_managed_record($collection, $input, $row);
+            $updated['id'] = $id;
+            $rows[$index] = $updated;
+            save_collection($collection, $rows);
+            audit_record($config['page'], 'update ' . $config['label'], ['collection' => $collection, 'id' => $id]);
+            return $updated;
+        }
+    }
+    throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
+}
+
+function delete_managed_record(string $collection, int $id): array
+{
+    $config = managed_collection_config($collection);
+    $rows = load_collection($collection);
+    foreach ($rows as $index => $row) {
+        if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
+            $deleted = $row;
+            array_splice($rows, $index, 1);
+            save_collection($collection, $rows);
+            audit_record($config['page'], 'delete ' . $config['label'], ['collection' => $collection, 'id' => $id]);
+            return $deleted;
+        }
+    }
+    throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
+}
 
 try {
     $path = request_path();
@@ -154,6 +312,31 @@ try {
         json_success(changelog_payload());
     }
 
+    if (preg_match('#^/records/([a-z0-9\-]+)$#', $path, $matches)) {
+        require_auth();
+        $collection = $matches[1];
+        if ($method === 'GET') {
+            audit_record('Collection', 'list records', ['collection' => $collection]);
+            json_success(list_managed_records($collection));
+        }
+        if ($method === 'POST') {
+            json_success(create_managed_record($collection, request_json()), 201);
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+
+    if (preg_match('#^/records/([a-z0-9\-]+)/([1-9][0-9]*)$#', $path, $matches)) {
+        require_auth();
+        $collection = $matches[1];
+        $id = positive_int_param($matches[2], 'record id');
+        if ($method === 'PUT') {
+            json_success(update_managed_record($collection, $id, request_json()));
+        }
+        if ($method === 'DELETE') {
+            json_success(delete_managed_record($collection, $id));
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
     if (preg_match('#^/inventory-events/([1-9][0-9]*)/smoking-journal$#', $path, $matches)) {
         require_auth();
         $inventoryEventId = smoking_journal_inventory_event_id_param($matches[1]);
@@ -176,6 +359,9 @@ try {
 } catch (Throwable $error) {
     handle_api_error($error);
 }
+
+
+
 
 
 
