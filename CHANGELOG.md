@@ -8,6 +8,11 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.2.2 - 2026-07-15
+
+- Updated `.gitignore` for the current flat PHP/JSON/static project scope.
+- Removed stale Node/Vite/Prisma-specific ignore rules from the active ignore list.
+- Added runtime ignores for protected auth credentials and generated JSON lock/temp files while keeping placeholders trackable.
 ## 1.2.1 - 2026-07-15
 
 - Replaced queued page placeholder text with JSON-backed summary views for Catalog, Purchases, Humidors, and Reports.
@@ -35,6 +40,7 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
 
 
 

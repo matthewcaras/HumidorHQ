@@ -1,34 +1,31 @@
-# Logs
-logs
+# Logs and local diagnostics
+logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Local environment and secrets
+.env
+.env.*
 *.local
+/data/auth-users.json
 
-# Editor directories and files
+# PHP and flat-file runtime artifacts
+/data/*.lock
+/data/*.tmp
+/data/*.tmp.*
+
+# Optional local tooling folders
+vendor/
+node_modules/
+dist/
+
+# Editor and OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-/src/generated/prisma
-.env
-
-prisma/*.db
-prisma/*.db-journal
-
-# Local/production auth credentials
-/data/auth-users.json
-
