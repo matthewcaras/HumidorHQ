@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.4.1
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, and PHP JSON sample data.
+# Revision : 1.5.0
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 00:36 ET
+# Modified Date : 2026-07-15 01:14 ET
 # Changelog :
+# 1.5.0 verify authenticated CRUD record endpoints and management UI hooks
 # 1.4.1 verify project metadata is wired into the main render path
 # 1.4.0 verify metadata headers on tracked non-JSON files
 # 1.3.0 verify app metadata revision and Eastern Time modified timestamp
@@ -22,12 +23,18 @@ $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
-$authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.placeholder'
-$auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.placeholder'
+$authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
+$auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
 $authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
+$vendorsPath = Join-Path $repoRoot 'data\vendors.json'
+$vendorsBackupPath = Join-Path $env:TEMP 'humidorhq-vendors.backup.json'
+$countersPath = Join-Path $repoRoot 'data\counters.json'
+$countersBackupPath = Join-Path $env:TEMP 'humidorhq-counters.backup.json'
 $auditLogPath = Join-Path $repoRoot 'data\audit-log.jsonl'
 $authUsersHadFile = Test-Path -LiteralPath $authUsersPath
+$vendorsHadFile = Test-Path -LiteralPath $vendorsPath
+$countersHadFile = Test-Path -LiteralPath $countersPath
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
@@ -44,7 +51,10 @@ $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
-foreach ($menuText in @('Audit', 'Changelog')) {
+foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
+    if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
+}
+foreach ($menuText in @('Audit', 'Changelog', 'Vendors')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
 
@@ -80,7 +90,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/app-meta', '/records/')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -89,6 +99,8 @@ $hash = & $php.Source -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 
 if ($authUsersHadFile) { Copy-Item -LiteralPath $authUsersPath -Destination $authUsersBackupPath -Force }
+if ($vendorsHadFile) { Copy-Item -LiteralPath $vendorsPath -Destination $vendorsBackupPath -Force }
+if ($countersHadFile) { Copy-Item -LiteralPath $countersPath -Destination $countersBackupPath -Force }
 if (Test-Path -LiteralPath $auditLogPath) { Remove-Item -LiteralPath $auditLogPath -Force }
 
 @(
@@ -127,6 +139,21 @@ try {
         if (-not $sample.data.collections.PSObject.Properties.Name.Contains($name)) { throw "Sample-data endpoint is missing $name." }
     }
 
+    $vendorBody = @{ name = 'Smoke Test Vendor'; website = 'https://example.com'; phone = '555-0100'; notes = 'temporary smoke test record' } | ConvertTo-Json
+    $createdVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Post -ContentType 'application/json' -Body $vendorBody -WebSession $session
+    if ($createdVendor.data.name -ne 'Smoke Test Vendor' -or -not $createdVendor.data.id) { throw 'Vendor create endpoint did not return the created record.' }
+
+    $vendorList = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Get -WebSession $session
+    $listedVendor = $vendorList.data.records | Where-Object { $_.id -eq $createdVendor.data.id } | Select-Object -First 1
+    if (-not $listedVendor) { throw 'Vendor list endpoint did not include the created record.' }
+
+    $updatedVendorBody = @{ name = 'Smoke Test Vendor Updated'; website = 'https://example.com'; phone = '555-0101'; notes = 'temporary smoke test record' } | ConvertTo-Json
+    $updatedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Put -ContentType 'application/json' -Body $updatedVendorBody -WebSession $session
+    if ($updatedVendor.data.name -ne 'Smoke Test Vendor Updated') { throw 'Vendor update endpoint did not return the updated record.' }
+
+    $deletedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Delete -WebSession $session
+    if ($deletedVendor.data.id -ne $createdVendor.data.id) { throw 'Vendor delete endpoint did not return the deleted record.' }
+
     $pageAuditBody = @{ page = 'Dashboard'; action = 'view' } | ConvertTo-Json
     $pageAudit = Invoke-RestMethod "http://127.0.0.1:$port/api/audit/page" -Method Post -ContentType 'application/json' -Body $pageAuditBody -WebSession $session
     if ($pageAudit.data.logged -ne $true) { throw 'Page audit endpoint did not confirm logging.' }
@@ -149,6 +176,14 @@ try {
     } else {
         Remove-Item -LiteralPath $authUsersPath -Force -ErrorAction SilentlyContinue
     }
+    if ($vendorsHadFile) {
+        Copy-Item -LiteralPath $vendorsBackupPath -Destination $vendorsPath -Force
+        if ([System.IO.File]::Exists($vendorsBackupPath)) { [System.IO.File]::Delete($vendorsBackupPath) }
+    }
+    if ($countersHadFile) {
+        Copy-Item -LiteralPath $countersBackupPath -Destination $countersPath -Force
+        if ([System.IO.File]::Exists($countersBackupPath)) { [System.IO.File]::Delete($countersBackupPath) }
+    }
     Remove-Item -LiteralPath $auditLogPath -Force -ErrorAction SilentlyContinue
 }
 
@@ -156,6 +191,5 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
-
 
 

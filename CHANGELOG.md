@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.0.1
+Revision: 1.4.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:36 ET
+Modified Date: 2026-07-15 01:32 ET
 -->
 
 # Changelog
@@ -15,6 +15,12 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.4.0 - 2026-07-15
+
+- Added authenticated CRUD routes for managed JSON records under `/api/records/{collection}`.
+- Added purpose-built add/edit/delete screens for Catalog, Vendors, Humidors, and purchase headers.
+- Added a Vendors navigation item so vendor records can be managed directly.
+- Expanded the smoke test to verify CRUD API create, list, update, and delete behavior while restoring touched JSON files.
 ## 1.3.3 - 2026-07-15
 
 - Fixed the sidebar project metadata so the bottom-left revision and modified timestamp refresh after /api/app-meta loads.
@@ -36,7 +42,7 @@ Revision format: `major.minor.feature`
 - Added append-only JSONL audit logging for user activity by date-time, user, page, and action.
 - Added protected `/api/audit`, `/api/audit/page`, and `/api/changelog` routes.
 - Added Audit and Changelog links to the left menu.
-- Added `data/audit-log.placeholder` and ignored the live `data/audit-log.jsonl` runtime file.
+- Added `data/audit-log.jsonl.placeholder` and ignored the live `data/audit-log.jsonl` runtime file.
 - Expanded the smoke test to verify audit records and changelog access.
 
 ## 1.2.2 - 2026-07-15
@@ -48,7 +54,7 @@ Revision format: `major.minor.feature`
 ## 1.2.1 - 2026-07-15
 
 - Replaced queued page placeholder text with JSON-backed summary views for Catalog, Purchases, Humidors, and Reports.
-- Added `data/auth-users.placeholder` to document the ignored runtime credential file.
+- Added `data/auth-users.json.placeholder` to document the ignored runtime credential file.
 - Expanded the flat-file smoke test to reject stale queued page text and verify the auth placeholder exists.
 ## 1.2.0 - 2026-07-15
 
@@ -72,6 +78,10 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
+
+
+
 
 
 

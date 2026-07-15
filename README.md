@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.0.0
+Revision: 1.1.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-15 01:14 ET
 -->
 
 # HumidorHQ
@@ -55,7 +55,7 @@ Create or update a local user with:
 php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
 ```
 
-That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only. The committed `data/auth-users.placeholder` file documents the ignored runtime credential file that must exist in deployed environments.
+That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only. The committed `data/auth-users.json.placeholder` file documents the ignored runtime credential file that must exist in deployed environments.
 
 Public routes:
 
@@ -66,27 +66,50 @@ Public routes:
 
 Protected routes include `GET /api/sample-data` and future data-changing endpoints.
 
+
+## Data Management
+
+Signed-in users can add, edit, and delete records from the left menu:
+
+- `Catalog` manages `data/catalog-cigars.json`.
+- `Vendors` manages `data/vendors.json`.
+- `Humidors` manages `data/storage-locations.json`.
+- `Purchases` manages purchase headers in `data/purchases.json`.
+
+The first CRUD pass intentionally keeps purchase lines, lot creation, and inventory event automation out of scope. Those workflows affect cost basis and inventory accounting and should be added as a separate pass.
 ## Audit Trail
 
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
 
 The left menu includes an Audit page for recent activity and a Changelog page that reads `CHANGELOG.md` through the protected PHP API.
 
-The committed `data/audit-log.placeholder` file documents the ignored runtime audit file.
+The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
 ## Local Development
 
 For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
 
-Example:
+Recommended:
 
 ```powershell
-php -S localhost:8000
+.\start-local-server.ps1
+```
+
+To stop the local server:
+
+```powershell
+.\stop-local-server.ps1
+```
+
+Manual PHP equivalent:
+
+```powershell
+php -S 127.0.0.1:8000 -t .
 ```
 
 Then open:
 
 ```text
-http://localhost:8000/
+http://127.0.0.1:8000/
 ```
 
 ## Deployment
@@ -111,6 +134,9 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
+
+
 
 
 
