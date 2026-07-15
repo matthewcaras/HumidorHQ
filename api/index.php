@@ -4,12 +4,46 @@ declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
 
+function sample_data_collections(): array
+{
+    $collections = [
+        'catalog-cigars',
+        'vendors',
+        'storage-locations',
+        'storage-sub-locations',
+        'purchases',
+        'purchase-lines',
+        'lots',
+        'lot-location-balances',
+        'inventory-events',
+        'smoking-journal-entries',
+    ];
+
+    $summary = [];
+    foreach ($collections as $collection) {
+        $rows = load_collection($collection);
+        $summary[$collection] = [
+            'count' => count($rows),
+            'source' => 'data/' . $collection . '.json',
+        ];
+    }
+
+    return [
+        'generatedAt' => now_iso(),
+        'collections' => $summary,
+    ];
+}
+
 try {
     $path = request_path();
     $method = request_method();
 
     if ($path === '/health' && $method === 'GET') {
         json_success(['status' => 'ok', 'app' => 'Humidor HQ']);
+    }
+
+    if ($path === '/sample-data' && $method === 'GET') {
+        json_success(sample_data_collections());
     }
 
     if (preg_match('#^/inventory-events/([1-9][0-9]*)/smoking-journal$#', $path, $matches)) {

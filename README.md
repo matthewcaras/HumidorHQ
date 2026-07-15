@@ -1,6 +1,6 @@
 # HumidorHQ
 
-HumidorHQ is a cigar collection and humidor management app being converted to a flat-file hosting model for GitHub-driven deployment to Hostinger.
+HumidorHQ is a cigar collection and humidor management app using a flat-file hosting model for GitHub-driven deployment to Hostinger.
 
 ## Current Target
 
@@ -27,13 +27,13 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `docs/` - design notes, migration notes, and conversion tracking
 - `CHANGELOG.md` - revisioned project change history
 
-Legacy TypeScript, React, Vite, Node, and Prisma files may remain during migration only as reference material. They are not part of the final hosting target.
+Legacy TypeScript, React, Vite, Node, and Prisma runtime files have been removed from the deployable app. Historical conversion notes may still reference those technologies for migration context only.
 
 ## Data Model
 
 Runtime data is stored in JSON files under `data/`. These files also serve as sample data for local and deployed testing.
 
-The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger.
+The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger. `GET /api/sample-data` summarizes the current repo JSON files for the flat dashboard shell.
 
 ## Local Development
 
@@ -60,7 +60,7 @@ The intended deployment flow is:
 3. Hostinger serves `index.html`, static assets, PHP API files, and protected JSON data files.
 4. The frontend calls relative PHP API paths.
 
-No build artifact should be required for deployment once the conversion is complete.
+No build artifact is required for deployment.
 
 ## Revision Policy
 
@@ -73,3 +73,5 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
+

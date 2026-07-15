@@ -1,13 +1,36 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>humidorhq</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HumidorHQ flat-file cigar collection manager">
+    <title>HumidorHQ</title>
+    <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
+    <link rel="stylesheet" href="public/assets/css/app.css">
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <h1>HumidorHQ</h1>
+          <p>Flat-file collection manager</p>
+        </div>
+        <nav class="nav" id="app-nav"></nav>
+      </aside>
+
+      <main class="main-content">
+        <section class="hero-panel" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">PHP / JSON / JavaScript</p>
+            <h2 id="page-title">Dashboard</h2>
+          </div>
+          <p class="status-pill" id="api-status">Loading sample data</p>
+        </section>
+
+        <section id="app-view" class="content-panel" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <script src="public/assets/js/app.js" defer></script>
   </body>
 </html>
