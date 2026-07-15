@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.2.2
+ * Revision: 1.2.3
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-15 14:58 ET
+ * Modified Date: 2026-07-15 15:02 ET
  */
 
 :root {
@@ -167,27 +167,6 @@ h3 {
   color: var(--text);
 }
 
-.status-pill {
-  background: var(--bg-elevated);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  margin: 0;
-  padding: 8px 12px;
-  white-space: nowrap;
-}
-
-.status-pill[data-mode="ok"] {
-  background: rgba(166, 227, 161, 0.08);
-  border-color: rgba(166, 227, 161, 0.32);
-  color: #a6e3a1;
-}
-
-.status-pill[data-mode="error"] {
-  background: rgba(240, 138, 125, 0.09);
-  border-color: rgba(240, 138, 125, 0.36);
-  color: var(--danger);
-}
 
 .content-panel {
   min-height: 360px;

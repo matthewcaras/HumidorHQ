@@ -1,10 +1,12 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.6.4
+# Revision : 1.6.6
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 14:58 ET
+# Modified Date : 2026-07-15 15:18 ET
 # Changelog :
+# 1.6.6 verify purchase and catalog quantity display helpers
+# 1.6.5 verify header technology label and API status pill are removed
 # 1.6.4 verify Dashboard Data Health widget is removed and asset cache versions are current
 # 1.6.3 verify screenshot-style dashboard shell and asset cache versions
 # 1.6.2 verify warm dark visual theme and CSS cache version
@@ -52,7 +54,8 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.5') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.7') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -70,6 +73,9 @@ foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'ap
 if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
 foreach ($menuText in @('Audit', 'Changelog', 'Todo', 'Vendors', 'PO Lines')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
+}
+foreach ($quantityHook in @('purchasedQuantityForPurchase', 'purchasedQuantityForCatalog', 'onHandQuantityForCatalog', 'Qty Purchased', 'On Hand')) {
+    if ($appJs -notmatch [regex]::Escape($quantityHook)) { throw "Plain JavaScript app is missing quantity display hook: $quantityHook" }
 }
 
 $appCss = Get-Content -LiteralPath $appCssPath -Raw
@@ -234,6 +240,4 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
-
-
 
