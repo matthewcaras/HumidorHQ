@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.1.1
- * Description: Plain JavaScript browser source for the HumidorHQ flat-file app with authenticated CRUD management screens.
- * Modified Date: 2026-07-15 11:08 ET
+ * Revision: 1.2.0
+ * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
+ * Modified Date: 2026-07-15 11:34 ET
  */
 
 const API_BASE_URL = 'api'
@@ -28,6 +28,7 @@ const pages = [
   { id: 'Catalog', label: 'Catalog' },
   { id: 'Vendors', label: 'Vendors' },
   { id: 'Purchases', label: 'Purchases' },
+  { id: 'PurchaseLines', label: 'PO Lines' },
   { id: 'Humidors', label: 'Humidors' },
   { id: 'Reports', label: 'Reports' },
   { id: 'Audit', label: 'Audit' },
@@ -104,7 +105,28 @@ const managedPages = {
       { label: 'Total', value: (row) => money(row.totalPaid) },
     ],
   },
-  Humidors: {
+  PurchaseLines: {
+    collection: 'purchase-lines',
+    title: 'Purchase Line',
+    intro: 'Connect a purchase to a catalog cigar and humidor. Saving a line creates the linked lot, starting humidor balance, and purchase-receipt inventory event.',
+    dependencies: ['purchases', 'catalog-cigars', 'storage-locations', 'vendors'],
+    readOnlyActions: true,
+    fields: [
+      { name: 'purchaseId', label: 'Purchase / PO', type: 'select', collection: 'purchases', optionLabel: purchaseLabel, required: true },
+      { name: 'catalogCigarId', label: 'Catalog Cigar', type: 'select', collection: 'catalog-cigars', optionLabel: cigarName, required: true },
+      { name: 'storageLocationId', label: 'Humidor', type: 'select', collection: 'storage-locations', optionLabel: 'name', required: true },
+      { name: 'quantity', label: 'Quantity', type: 'number', step: '1', required: true },
+      { name: 'unitCost', label: 'Unit Cost', type: 'number', step: '0.01' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    columns: [
+      { label: 'Purchase / PO', value: (row) => purchaseLabelById(row.purchaseId) },
+      { label: 'Cigar', value: (row) => cigarNameById(row.catalogCigarId) },
+      { label: 'Humidor', value: (row) => humidorName(row.storageLocationId) },
+      { label: 'Qty', value: (row) => row.quantity ?? '' },
+      { label: 'Line Total', value: (row) => money(Number(row.quantity || 0) * Number(row.unitCost || 0)) },
+    ],
+  },  Humidors: {
     collection: 'storage-locations',
     title: 'Humidor',
     intro: 'Add humidors, tupperdores, coolers, or other storage locations.',
@@ -150,6 +172,34 @@ function vendorName(vendorId) {
   return vendor?.name || ''
 }
 
+
+function cigarName(row) {
+  return [row?.manufacturer, row?.series, row?.vitola].filter(Boolean).join(' ') || `Cigar ${row?.id || ''}`.trim()
+}
+
+function cigarNameById(cigarId) {
+  const id = Number(cigarId || 0)
+  const cigar = (state.records['catalog-cigars'] || []).find((row) => Number(row.id) === id)
+  return cigar ? cigarName(cigar) : ''
+}
+
+function purchaseLabel(row) {
+  const vendor = vendorName(row?.vendorId)
+  const invoice = row?.invoiceNumber ? `PO ${row.invoiceNumber}` : `Purchase ${row?.id || ''}`
+  return [invoice, vendor, row?.purchaseDate].filter(Boolean).join(' - ')
+}
+
+function purchaseLabelById(purchaseId) {
+  const id = Number(purchaseId || 0)
+  const purchase = (state.records.purchases || []).find((row) => Number(row.id) === id)
+  return purchase ? purchaseLabel(purchase) : ''
+}
+
+function humidorName(storageLocationId) {
+  const id = Number(storageLocationId || 0)
+  const humidor = (state.records['storage-locations'] || []).find((row) => Number(row.id) === id)
+  return humidor?.name || ''
+}
 function collectionCount(name) {
   return state.sampleData?.collections?.[name]?.count || 0
 }
@@ -407,7 +457,7 @@ function renderField(field, record) {
     ;(state.records[field.collection] || []).forEach((option) => {
       const item = document.createElement('option')
       item.value = String(option.id)
-      item.textContent = option[field.optionLabel] || `Record ${option.id}`
+      item.textContent = typeof field.optionLabel === 'function' ? field.optionLabel(option) : option[field.optionLabel] || `Record ${option.id}`
       select.append(item)
     })
     select.value = fieldValue(record, field)
@@ -553,38 +603,45 @@ function renderManagedTable(view, pageConfig) {
     })
     const actions = document.createElement('td')
     actions.className = 'row-actions'
-    const edit = document.createElement('button')
-    edit.type = 'button'
-    edit.className = 'secondary-button compact-button'
-    edit.textContent = 'Edit'
-    edit.addEventListener('click', () => {
-      state.editing[collection] = record
-      state.formError = null
-      render()
-    })
-    const remove = document.createElement('button')
-    remove.type = 'button'
-    remove.className = 'danger-button compact-button'
-    remove.textContent = 'Delete'
-    remove.addEventListener('click', async () => {
-      if (!confirm(`Delete this ${pageConfig.title.toLowerCase()} record?`)) {
-        return
-      }
-      setStatus('Deleting record', 'neutral')
-      try {
-        await apiDelete(`/records/${collection}/${record.id}`)
-        state.records[collection] = null
-        await ensureRecords(collection)
-        await refreshSampleData()
-        state.auditData = null
-        setStatus('Record deleted', 'ok')
-      } catch (error) {
-        state.formError = error.message
-        setStatus('Delete failed', 'error')
-      }
-      render()
-    })
-    actions.append(edit, remove)
+    if (pageConfig.readOnlyActions) {
+      const locked = document.createElement('span')
+      locked.className = 'muted'
+      locked.textContent = 'Linked'
+      actions.append(locked)
+    } else {
+      const edit = document.createElement('button')
+      edit.type = 'button'
+      edit.className = 'secondary-button compact-button'
+      edit.textContent = 'Edit'
+      edit.addEventListener('click', () => {
+        state.editing[collection] = record
+        state.formError = null
+        render()
+      })
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'danger-button compact-button'
+      remove.textContent = 'Delete'
+      remove.addEventListener('click', async () => {
+        if (!confirm(`Delete this ${pageConfig.title.toLowerCase()} record?`)) {
+          return
+        }
+        setStatus('Deleting record', 'neutral')
+        try {
+          await apiDelete(`/records/${collection}/${record.id}`)
+          state.records[collection] = null
+          await ensureRecords(collection)
+          await refreshSampleData()
+          state.auditData = null
+          setStatus('Record deleted', 'ok')
+        } catch (error) {
+          state.formError = error.message
+          setStatus('Delete failed', 'error')
+        }
+        render()
+      })
+      actions.append(edit, remove)
+    }
     row.append(actions)
     tbody.append(row)
   })

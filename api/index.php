@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.1.0
- * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 01:14 ET
+ * Revision: 1.2.0
+ * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
+ * Modified Date: 2026-07-15 11:34 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -136,6 +136,14 @@ function managed_collection_configs(): array
             'int' => ['vendorId'],
             'money' => ['shipping', 'exciseTax', 'salesTax', 'discount', 'totalPaid'],
         ],
+        'purchase-lines' => [
+            'page' => 'PO Lines',
+            'label' => 'Purchase Line',
+            'required' => ['purchaseId', 'catalogCigarId', 'storageLocationId', 'quantity'],
+            'text' => ['notes'],
+            'int' => ['purchaseId', 'catalogCigarId', 'storageLocationId', 'quantity'],
+            'money' => ['unitCost'],
+        ],
     ];
 }
 
@@ -201,6 +209,9 @@ function clean_managed_record(string $collection, array $input, ?array $existing
     if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
         throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
     }
+    if ($collection === 'purchase-lines') {
+        validate_purchase_line_links($record);
+    }
 
     $record['updatedAt'] = now_iso();
     if (!isset($record['createdAt'])) {
@@ -209,6 +220,76 @@ function clean_managed_record(string $collection, array $input, ?array $existing
     return $record;
 }
 
+function validate_purchase_line_links(array $record): void
+{
+    $quantity = (int) ($record['quantity'] ?? 0);
+    if ($quantity < 1) {
+        throw new ApiError('VALIDATION_ERROR', 'quantity must be at least 1.', 422);
+    }
+
+    $links = [
+        'purchaseId' => ['collection' => 'purchases', 'label' => 'Selected purchase'],
+        'catalogCigarId' => ['collection' => 'catalog-cigars', 'label' => 'Selected catalog cigar'],
+        'storageLocationId' => ['collection' => 'storage-locations', 'label' => 'Selected humidor'],
+    ];
+    foreach ($links as $field => $link) {
+        $id = (int) ($record[$field] ?? 0);
+        if ($id < 1 || !find_by_id($link['collection'], $id)) {
+            throw new ApiError('VALIDATION_ERROR', $link['label'] . ' was not found.', 422);
+        }
+    }
+}
+
+function create_inventory_records_for_purchase_line(array $line): array
+{
+    $now = now_iso();
+    $quantity = (int) $line['quantity'];
+    $lot = [
+        'id' => next_id('lots'),
+        'purchaseLineId' => (int) $line['id'],
+        'purchaseId' => (int) $line['purchaseId'],
+        'catalogCigarId' => (int) $line['catalogCigarId'],
+        'initialQuantity' => $quantity,
+        'currentQuantity' => $quantity,
+        'createdAt' => $now,
+        'updatedAt' => $now,
+    ];
+    $lots = load_collection('lots');
+    $lots[] = $lot;
+    save_collection('lots', $lots);
+
+    $balance = [
+        'id' => next_id('lot-location-balances'),
+        'lotId' => (int) $lot['id'],
+        'storageLocationId' => (int) $line['storageLocationId'],
+        'quantity' => $quantity,
+        'createdAt' => $now,
+        'updatedAt' => $now,
+    ];
+    $balances = load_collection('lot-location-balances');
+    $balances[] = $balance;
+    save_collection('lot-location-balances', $balances);
+
+    $event = [
+        'id' => next_id('inventory-events'),
+        'eventType' => 'purchase-receipt',
+        'lotId' => (int) $lot['id'],
+        'purchaseLineId' => (int) $line['id'],
+        'purchaseId' => (int) $line['purchaseId'],
+        'catalogCigarId' => (int) $line['catalogCigarId'],
+        'storageLocationId' => (int) $line['storageLocationId'],
+        'quantity' => $quantity,
+        'occurredAt' => $now,
+        'notes' => 'Created from purchase line ' . (int) $line['id'],
+        'createdAt' => $now,
+        'updatedAt' => $now,
+    ];
+    $events = load_collection('inventory-events');
+    $events[] = $event;
+    save_collection('inventory-events', $events);
+
+    return ['lot' => $lot, 'balance' => $balance, 'event' => $event];
+}
 function list_managed_records(string $collection): array
 {
     managed_collection_config($collection);
@@ -223,6 +304,11 @@ function create_managed_record(string $collection, array $input): array
     $record['id'] = next_id($collection);
     $rows[] = $record;
     save_collection($collection, $rows);
+    if ($collection === 'purchase-lines') {
+        $created = create_inventory_records_for_purchase_line($record);
+        $record['createdLotId'] = $created['lot']['id'];
+        $record['createdInventoryEventId'] = $created['event']['id'];
+    }
     audit_record($config['page'], 'create ' . $config['label'], ['collection' => $collection, 'id' => $record['id']]);
     return $record;
 }
