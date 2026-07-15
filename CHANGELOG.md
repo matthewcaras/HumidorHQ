@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.0.0
+Revision: 1.0.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-15 00:36 ET
 -->
 
 # Changelog
@@ -14,6 +14,11 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.3.3 - 2026-07-15
+
+- Fixed the sidebar project metadata so the bottom-left revision and modified timestamp refresh after /api/app-meta loads.
+- Expanded the smoke test to verify the main JavaScript render path updates project metadata.
 
 ## 1.3.2 - 2026-07-15
 
@@ -67,6 +72,7 @@ Revision format: `major.minor.feature`
 - Documented that TypeScript, React, Vite, Node server runtime, and Prisma runtime are being removed from the final hosted app.
 - Documented that repo `data/*.json` files serve as sample/runtime data through the PHP API.
 - Added README deployment guidance for GitHub-to-Hostinger hosting with no compile step.
+
 
 
 

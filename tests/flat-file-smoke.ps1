@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.4.0
+# Revision : 1.4.1
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog access, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 00:13 ET
+# Modified Date : 2026-07-15 00:36 ET
 # Changelog :
+# 1.4.1 verify project metadata is wired into the main render path
 # 1.4.0 verify metadata headers on tracked non-JSON files
 # 1.3.0 verify app metadata revision and Eastern Time modified timestamp
 # 1.2.0 verify audit logging, audit/changelog menu links, and audit placeholder
@@ -42,6 +43,7 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
+if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
 foreach ($menuText in @('Audit', 'Changelog')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
@@ -154,5 +156,6 @@ Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 
 # Example Usage:
 #   .\tests\flat-file-smoke.ps1
+
 
 
