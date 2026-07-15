@@ -1,75 +1,75 @@
-# React + TypeScript + Vite
+# HumidorHQ
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+HumidorHQ is a cigar collection and humidor management app being converted to a flat-file hosting model for GitHub-driven deployment to Hostinger.
 
-Currently, two official plugins are available:
+## Current Target
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The target runtime is:
 
-## React Compiler
+- PHP for API endpoints
+- JSON files for persistent data and sample data
+- Plain JavaScript for browser behavior
+- HTML and CSS for the frontend
+- No TypeScript
+- No React runtime
+- No Vite or build/compile step
+- No Node server process
+- No Prisma runtime
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The app should be deployable as normal files to Hostinger, with GitHub used as the source repo and webhook/deployment flow.
 
-## Expanding the ESLint configuration
+## Project Layout
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `index.html` - browser entry point
+- `public/` - static assets
+- `api/` - PHP API front controller and supporting libraries
+- `data/` - JSON data files used by the PHP API
+- `docs/` - design notes, migration notes, and conversion tracking
+- `CHANGELOG.md` - revisioned project change history
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Legacy TypeScript, React, Vite, Node, and Prisma files may remain during migration only as reference material. They are not part of the final hosting target.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Data Model
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Runtime data is stored in JSON files under `data/`. These files also serve as sample data for local and deployed testing.
 
+The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger.
+
+## Local Development
+
+For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
+
+Example:
+
+```powershell
+php -S localhost:8000
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Then open:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```text
+http://localhost:8000/
 ```
+
+## Deployment
+
+The intended deployment flow is:
+
+1. Push changes to GitHub.
+2. GitHub webhook or deployment automation sends the flat files to Hostinger.
+3. Hostinger serves `index.html`, static assets, PHP API files, and protected JSON data files.
+4. The frontend calls relative PHP API paths.
+
+No build artifact should be required for deployment once the conversion is complete.
+
+## Revision Policy
+
+Project revisions start at `1.0.0`.
+
+Use `major.minor.feature` numbering:
+
+- `major` - breaking architecture or data changes
+- `minor` - new workflow, page, API, or significant enhancement
+- `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
