@@ -1,1 +1,20 @@
-[]
+[
+    {
+        "name": "test",
+        "type": "test",
+        "notes": "test",
+        "capacity": 1,
+        "updatedAt": "2026-07-15T12:46:59Z",
+        "createdAt": "2026-07-15T12:46:59Z",
+        "id": 1
+    },
+    {
+        "name": "test",
+        "type": "test",
+        "notes": "test",
+        "capacity": 6,
+        "updatedAt": "2026-07-15T12:47:43Z",
+        "createdAt": "2026-07-15T12:47:43Z",
+        "id": 2
+    }
+]

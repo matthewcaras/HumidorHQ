@@ -1,1 +1,13 @@
-[]
+[
+    {
+        "name": "test",
+        "website": "test",
+        "contactName": "test",
+        "email": "test@test.com",
+        "phone": "test",
+        "notes": "test",
+        "updatedAt": "2026-07-15T12:48:00Z",
+        "createdAt": "2026-07-15T12:48:00Z",
+        "id": 1
+    }
+]
