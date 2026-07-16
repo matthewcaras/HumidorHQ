@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.2
+Revision: 1.6.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 08:22 ET
+Modified Date: 2026-07-16 08:35 ET
 -->
 
 # Changelog
@@ -14,6 +14,11 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.6.3 - 2026-07-16
+
+- Added one-time per-computer Codex skills, plugins, and tools check guidance to `AGENTS.md`.
+- Added ignored `.codex-local/tool-check.json` marker path with a tracked placeholder.
 
 ## 1.6.2 - 2026-07-16
 
