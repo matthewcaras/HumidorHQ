@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.2.1
+ * Revision: 1.3.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-15 11:44 ET
+ * Modified Date: 2026-07-16 07:45 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -137,11 +137,19 @@ function managed_collection_configs(): array
             'int' => ['capacity'],
             'money' => [],
         ],
+        'storage-sub-locations' => [
+            'page' => 'Humidor Sections',
+            'label' => 'Humidor Section',
+            'required' => ['storageLocationId', 'name'],
+            'text' => ['name', 'type', 'notes'],
+            'int' => ['storageLocationId', 'capacity'],
+            'money' => [],
+        ],
         'purchases' => [
             'page' => 'Purchases',
             'label' => 'Purchase',
-            'required' => ['purchaseDate'],
-            'text' => ['invoiceNumber', 'purchaseDate', 'receivedDate', 'notes'],
+            'required' => ['purchaseDate', 'status'],
+            'text' => ['invoiceNumber', 'purchaseDate', 'expectedDate', 'receivedDate', 'status', 'trackingNumber', 'notes'],
             'int' => ['vendorId'],
             'money' => ['shipping', 'exciseTax', 'salesTax', 'discount', 'totalPaid'],
         ],
@@ -218,6 +226,12 @@ function clean_managed_record(string $collection, array $input, ?array $existing
     if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
         throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
     }
+    if ($collection === 'purchases') {
+        validate_purchase_status($record);
+    }
+    if ($collection === 'storage-sub-locations') {
+        validate_storage_sub_location_links($record);
+    }
     if ($collection === 'purchase-lines') {
         validate_purchase_line_links($record);
     }
@@ -227,6 +241,22 @@ function clean_managed_record(string $collection, array $input, ?array $existing
         $record['createdAt'] = $record['updatedAt'];
     }
     return $record;
+}
+
+function validate_purchase_status(array $record): void
+{
+    $allowed = ['in-route', 'partially-received', 'received'];
+    if (!in_array((string) ($record['status'] ?? ''), $allowed, true)) {
+        throw new ApiError('VALIDATION_ERROR', 'status must be in-route, partially-received, or received.', 422);
+    }
+}
+
+function validate_storage_sub_location_links(array $record): void
+{
+    $id = (int) ($record['storageLocationId'] ?? 0);
+    if ($id < 1 || !find_by_id('storage-locations', $id)) {
+        throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    }
 }
 
 function validate_purchase_line_links(array $record): void
@@ -460,15 +490,4 @@ try {
 } catch (Throwable $error) {
     handle_api_error($error);
 }
-
-
-
-
-
-
-
-
-
-
-
 

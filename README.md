@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.2.0
+Revision: 1.3.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 11:34 ET
+Modified Date: 2026-07-16 07:45 ET
 -->
 
 # HumidorHQ
@@ -69,13 +69,14 @@ Protected routes include `GET /api/sample-data` and future data-changing endpoin
 
 ## Data Management
 
-Signed-in users can add, edit, and delete records from the left menu:
+Signed-in users can add, edit, and delete records from the working navigation and Dashboard quick actions:
 
-- `Catalog` manages `data/catalog-cigars.json`.
+- `Catalog` manages `data/catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
 - `Vendors` manages `data/vendors.json`.
-- `Humidors` manages `data/storage-locations.json`.
-- `Purchases` manages purchase headers in `data/purchases.json`.
-- `PO Lines` links a purchase, catalog cigar, and humidor in `data/purchase-lines.json`.
+- `Humidors` manages `data/storage-locations.json` and shows the number of linked sections.
+- `Humidor Sections` stores drawers, shelves, trays, and zones in `data/storage-sub-locations.json`; it is available from Dashboard quick actions, not the left menu.
+- `Purchases` manages purchase headers in `data/purchases.json`, including status values for in-route, partially received, and received orders.
+- `PO Lines` links a purchase, catalog cigar, and humidor in `data/purchase-lines.json`; it is still available internally but hidden from the left menu for now.
 
 Creating a PO Line automatically creates the related inventory records:
 
@@ -84,12 +85,11 @@ Creating a PO Line automatically creates the related inventory records:
 - `data/inventory-events.json` receives a `purchase-receipt` event.
 
 The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, or humidor. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
-
 ## Audit Trail
 
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
 
-The left menu includes an Audit page for recent activity and a Changelog page that reads `CHANGELOG.md` through the protected PHP API.
+Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
 
@@ -143,12 +143,4 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
-
-
-
-
-
-
-
-
 
