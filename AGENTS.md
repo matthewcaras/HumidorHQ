@@ -1,8 +1,8 @@
 <!--
 Filename: AGENTS.md
-Revision: 1.1.1
+Revision: 1.1.2
 Description: Shared Codex working instructions for the HumidorHQ repository.
-Modified Date: 2026-07-16 08:55 ET
+Modified Date: 2026-07-16 09:11 ET
 -->
 
 # HumidorHQ Codex Instructions
@@ -21,23 +21,22 @@ These instructions apply to Codex sessions working in this repository. They are 
 
 ## Git Workflow
 
+- Default all Codex work for Jason to the `Jason-Bug-Fixes` branch.
 - Do not work directly on `main`.
+- Do not automatically merge to `main`.
+- Do not automatically fast-forward, merge, rebase, or push updates into `Matt-Functional-Updates`, `Matt-Design-Changes`, or any other branch.
+- Only merge, fast-forward, rebase, create PRs, or update other branches when Jason explicitly asks for that specific branch operation in the current conversation.
 - Ask once per Codex session whether Matt or Jason is also actively working on this repo or the same page/function, then remember and reuse that answer for the rest of the session unless the user says the situation changed.
 - If both people may be editing the same area, use separate branches and merge by PR so changes are reviewed instead of overwritten.
-- Start feature work from the latest `main`:
+- Before feature or bug-fix work, confirm the current branch is `Jason-Bug-Fixes` unless the user explicitly requested another branch:
 
 ```powershell
-git checkout main
-git pull origin main
-git checkout -b <short-feature-branch>
+git branch --show-current
 ```
 
 - Commit focused changes.
-- Push the branch.
-- Open a PR into `main`.
-- Merge only after verification passes.
+- Push only the current working branch unless explicitly asked to push another branch.
 - Do not delete `php-json-migration-map` unless Jason or Matt explicitly asks.
-
 ## One-Time Local Capability Check
 
 - Once per computer, check the local Codex skills, plugins, and tools needed for this repo before doing feature work.
