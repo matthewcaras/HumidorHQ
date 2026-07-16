@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.7
+Revision: 1.7.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:45 ET
+Modified Date: 2026-07-16 3:12 PM ET
 -->
 
 # Changelog
@@ -14,6 +14,28 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.7.2 - 2026-07-16
+
+- Added `tools/import-rich-workbook.ps1` to import the HumidorHQ rich Excel workbook into the local flat-file JSON model.
+- Imported the provided local workbook into catalog, vendors, humidors, purchases, purchase lots, and on-hand balances for local verification.
+- Added a safe fallback that places lots into `Imported Inventory / General` when the workbook has no populated Current Inventory sheet yet.
+
+## 1.7.1 - 2026-07-16
+
+- Moved the Dashboard humidor summary card to the first position and reordered the remaining cards so average cost and average MSRP line up beneath cost basis and MSRP value.
+- Removed the redundant Dashboard collection value panel and added lifetime gifted quantity, cost, and MSRP metrics beside the smoked totals.
+- Removed the visible section-count column from the Humidors management table and the humidor summary table on the Dashboard.
+- Added a Collection-page partial-lot move form so inventory can be split between humidors or drawers while preserving lot-level cost, MSRP, and event history.
+
+## 1.7.0 - 2026-07-16
+
+- Reworked the Dashboard to show on-hand cigars, current cost basis, current MSRP value, savings, average on-hand cost, average on-hand MSRP, lifetime smoked totals, and a humidor summary with oldest dates.
+- Replaced the Collection JSON-file list with an actual on-hand cigar view sortable by alphabetical order or humidor location.
+- Expanded Purchases so users can manage purchased cigar lines inline and automatically allocate shipping, excise tax, sales tax, and discount across lines by weighted purchase price.
+- Expanded Humidors so users can manage drawers and sections inline while seeing each humidor's current count and oldest inventory date.
+- Synced purchase-line edits and deletes to lots, lot balances, and purchase-receipt inventory events, including cost and MSRP snapshots used by current-value and lifetime metrics.
+- Updated the local server script to find winget-installed PHP even before the terminal PATH refreshes.
 
 ## 1.6.7 - 2026-07-16
 

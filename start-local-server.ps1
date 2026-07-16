@@ -1,9 +1,10 @@
 # Filename: start-local-server.ps1
-# Revision : 1.1.0
+# Revision : 1.1.1
 # Description : Starts the HumidorHQ local PHP development server on 127.0.0.1 and opens it in Chrome.
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15
+# Modified Date : 2026-07-16
 # Changelog :
+# 1.1.1 look for PHP in standard winget install folders when PATH has not refreshed yet
 # 1.1.0 open the local HumidorHQ URL in Chrome after confirming the server is listening
 # 1.0.1 use netstat for listener checks because Get-NetTCPConnection can hang on some Windows sessions
 # 1.0.0 initial release
@@ -14,6 +15,29 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Get-PhpCommand {
+    $phpCommand = Get-Command php -ErrorAction SilentlyContinue
+    if ($phpCommand) {
+        return $phpCommand
+    }
+
+    $candidatePaths = @(
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.5_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.1_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        'C:\php\php.exe'
+    )
+
+    $phpPath = $candidatePaths | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    if (-not $phpPath) {
+        throw 'PHP was not found on PATH or in the standard winget install locations.'
+    }
+
+    return Get-Item -LiteralPath $phpPath
+}
 
 function Get-LocalListenerPid {
     param(
@@ -58,7 +82,7 @@ function Open-LocalSiteInChrome {
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$php = Get-Command php -ErrorAction Stop
+$php = Get-PhpCommand
 $url = "http://${HostName}:$Port/"
 $existingPid = Get-LocalListenerPid -Port $Port -HostName $HostName
 
@@ -69,7 +93,8 @@ if ($existingPid) {
 }
 
 $args = @('-S', "${HostName}:$Port", '-t', $repoRoot)
-$process = Start-Process -FilePath $php.Source -ArgumentList $args -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru
+$phpPath = if ($php.PSObject.Properties.Name -contains 'Source') { $php.Source } else { $php.FullName }
+$process = Start-Process -FilePath $phpPath -ArgumentList $args -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru
 Start-Sleep -Milliseconds 500
 
 $listenerPid = Get-LocalListenerPid -Port $Port -HostName $HostName

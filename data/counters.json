@@ -1,12 +1,12 @@
 {
-    "catalog-cigars": 2,
-    "vendors": 2,
-    "storage-locations": 3,
-    "storage-sub-locations": 1,
-    "purchases": 2,
-    "purchase-lines": 1,
-    "lots": 1,
-    "lot-location-balances": 1,
-    "inventory-events": 1,
-    "smoking-journal-entries": 1
+    "inventory-events": 97,
+    "vendors": 4,
+    "storage-locations": 11,
+    "smoking-journal-entries": 1,
+    "storage-sub-locations": 12,
+    "lots": 79,
+    "purchase-lines": 79,
+    "lot-location-balances": 80,
+    "purchases": 43,
+    "catalog-cigars": 67
 }

@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.2.5
+ * Revision: 1.3.6
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 09:18 ET
+ * Modified Date: 2026-07-16 17:12 ET
  */
 
 :root {
@@ -239,6 +239,16 @@ h3 {
   margin: 9px 0;
 }
 
+.dual-metric-card .dual-metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dual-metric-card .dual-metric-grid strong {
+  margin-bottom: 0;
+}
+
 
 .dashboard-shell {
   display: grid;
@@ -261,6 +271,11 @@ h3 {
 .dashboard-side-grid {
   display: grid;
   gap: 16px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  width: 100%;
 }
 
 .dashboard-panel {
@@ -290,6 +305,21 @@ h3 {
 .pipeline-list {
   display: grid;
   gap: 10px;
+}
+
+.collection-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.collection-controls select {
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  min-height: 38px;
+  padding: 8px 10px;
 }
 
 .dashboard-link-row {
@@ -322,6 +352,143 @@ h3 {
 
 .dashboard-link-row strong {
   color: var(--accent-strong);
+}
+
+.linkish-button {
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.linkish-button:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.selected-row td {
+  background: rgba(212, 154, 82, 0.08);
+}
+
+.collection-expanded-row td {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0 10px 14px;
+}
+
+.collection-expanded-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  margin-top: 8px;
+  padding: 14px;
+}
+
+.collection-expanded-card .muted {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collection-detail-table {
+  margin-top: 10px;
+}
+
+.inline-action-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.inline-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-select-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.purchase-builder-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 14px;
+}
+
+.purchase-draft-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.purchase-draft-row {
+  align-items: center;
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, auto) auto;
+  padding: 10px 12px;
+}
+
+.inline-assignment-form {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(160px, 1fr) minmax(140px, 1fr) auto;
+  padding-top: 12px;
+}
+
+.inline-move-form {
+  align-items: end;
+  display: none;
+  gap: 10px;
+  grid-template-columns: 80px minmax(150px, 1fr) minmax(140px, 1fr) auto;
+}
+
+.inline-move-form.is-open {
+  display: grid;
+}
+
+.strength-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.strength-mild {
+  background: rgba(77, 163, 93, 0.18);
+  color: #7dde90;
+}
+
+.strength-mild-medium {
+  background: rgba(92, 177, 229, 0.18);
+  color: #8fd4ff;
+}
+
+.strength-medium {
+  background: rgba(234, 179, 8, 0.22);
+  color: #f4c95d;
+}
+
+.strength-medium-full {
+  background: rgba(217, 119, 6, 0.24);
+  color: #ea8c1a;
+}
+
+.strength-full {
+  background: rgba(190, 78, 63, 0.2);
+  color: #ff8e80;
 }
 
 .quick-action-list {
@@ -436,6 +603,10 @@ h3 {
   padding: 16px;
 }
 
+.compact-top-gap {
+  margin-top: 16px;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;
@@ -507,6 +678,41 @@ h3 {
   padding: 11px 10px;
   text-align: left;
   vertical-align: top;
+}
+
+.collection-table td:nth-child(2),
+.collection-table td:nth-child(3),
+.collection-table td:nth-child(4),
+.collection-table td:nth-child(5),
+.collection-table td:nth-child(6),
+.collection-table th:nth-child(2),
+.collection-table th:nth-child(3),
+.collection-table th:nth-child(4),
+.collection-table th:nth-child(5),
+.collection-table th:nth-child(6) {
+  text-align: center;
+}
+
+.collection-cigar-cell,
+.collection-location-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.collection-cigar-cell strong {
+  color: var(--text);
+}
+
+.collection-cigar-cell small,
+.collection-location-cell small {
+  color: var(--muted);
+}
+
+.collection-cigar-cell small {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .data-table th {
@@ -583,6 +789,26 @@ code {
   .dashboard-body {
     grid-template-columns: 1fr;
   }
+
+  .collection-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collection-controls select,
+  .collection-controls button {
+    width: 100%;
+  }
+
+  .inline-move-form.is-open {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-select-row,
+  .inline-assignment-form,
+  .purchase-draft-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
@@ -597,5 +823,28 @@ code {
 
   h2 {
     font-size: 1.5rem;
+  }
+
+  .content-panel,
+  .hero-panel {
+    padding: 16px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 9px 8px;
+  }
+
+  .inline-action-buttons {
+    flex-direction: column;
+  }
+
+  .inline-action-buttons button,
+  .inline-move-form.is-open {
+    width: 100%;
+  }
+
+  .inline-move-form.is-open {
+    grid-template-columns: 1fr;
   }
 }

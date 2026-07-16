@@ -1,13 +1,35 @@
 [
-    {
-        "name": "test",
-        "website": "test",
-        "contactName": "test",
-        "email": "test@test.com",
-        "phone": "test",
-        "notes": "test",
-        "updatedAt": "2026-07-15T12:48:00Z",
-        "createdAt": "2026-07-15T12:48:00Z",
-        "id": 1
-    }
+  {
+    "id": 1,
+    "name": "Cigars.Com",
+    "website": null,
+    "contactName": null,
+    "email": null,
+    "phone": null,
+    "notes": null,
+    "createdAt": "2026-07-16T15:47:11Z",
+    "updatedAt": "2026-07-16T15:47:11Z"
+  },
+  {
+    "id": 2,
+    "name": "Cigars International",
+    "website": null,
+    "contactName": null,
+    "email": null,
+    "phone": null,
+    "notes": null,
+    "createdAt": "2026-07-16T15:47:11Z",
+    "updatedAt": "2026-07-16T15:47:11Z"
+  },
+  {
+    "id": 3,
+    "name": "Cigar Page",
+    "website": null,
+    "contactName": null,
+    "email": null,
+    "phone": null,
+    "notes": null,
+    "createdAt": "2026-07-16T15:47:11Z",
+    "updatedAt": "2026-07-16T15:47:11Z"
+  }
 ]
