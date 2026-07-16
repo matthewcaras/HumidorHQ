@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.7.2
+# Revision : 1.7.3
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 09:18 ET
+# Modified Date : 2026-07-16 09:45 ET
 # Changelog :
+# 1.7.3 verify read-only internal collections load for dependent pages
 # 1.7.2 verify signed-in controls render in the sidebar footer
 # 1.7.1 verify Dashboard public links and hash-based page refresh routing
 # 1.7.0 verify hidden utility navigation, purchase status tracking, and humidor sub-locations
@@ -59,7 +60,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.5') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.7') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.7') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -172,6 +173,11 @@ try {
     if ($null -eq $sample.data.collections) { throw 'Sample-data endpoint did not return collection summaries.' }
     foreach ($name in @('catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events')) {
         if (-not $sample.data.collections.PSObject.Properties.Name.Contains($name)) { throw "Sample-data endpoint is missing $name." }
+    }
+
+    foreach ($readOnlyCollection in @('lots', 'lot-location-balances', 'inventory-events')) {
+        $readOnlyList = Invoke-RestMethod "http://127.0.0.1:$port/api/records/$readOnlyCollection" -Method Get -WebSession $session
+        if ($null -eq $readOnlyList.data.records) { throw "Read-only collection endpoint did not return records for $readOnlyCollection." }
     }
 
     $vendorBody = @{ name = 'Smoke Test Vendor'; website = 'https://example.com'; phone = '555-0100'; notes = 'temporary smoke test record' } | ConvertTo-Json

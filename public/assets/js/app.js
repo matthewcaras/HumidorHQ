@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.4.2
+ * Revision: 1.4.3
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-16 09:18 ET
+ * Modified Date: 2026-07-16 09:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -196,6 +196,7 @@ function setActivePage(pageId, options = {}) {
   const nextPage = validPageId(pageId) ? pageId : 'Dashboard'
   state.activePage = nextPage
   state.formError = null
+  state.error = null
   if (options.updateHash !== false && window.location.hash !== `#${encodeURIComponent(nextPage)}`) {
     window.location.hash = encodeURIComponent(nextPage)
   }

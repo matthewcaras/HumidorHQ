@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.4.2
+Revision: 1.4.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:32 ET
+Modified Date: 2026-07-16 09:45 ET
 -->
 
 # HumidorHQ
@@ -101,6 +101,9 @@ Creating a PO Line automatically creates the related inventory records:
 - `data/inventory-events.json` receives a `purchase-receipt` event.
 
 The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, or humidor. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
+
+Lots, location balances, and inventory events are readable by the app for reports and quantity calculations, but direct writes stay controlled by purchase-line and inventory workflows.
+
 ## Audit Trail
 
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.

@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.6
+Revision: 1.6.7
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:32 ET
+Modified Date: 2026-07-16 09:45 ET
 -->
 
 # Changelog
@@ -14,6 +14,12 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.6.7 - 2026-07-16
+
+- Fixed Catalog and related pages failing when read-only internal collections were loaded for quantity calculations.
+- Added read-only API access for lots, location balances, and inventory events while keeping writes blocked.
+- Cleared stale page errors during navigation so one failed request does not affect every tab.
 
 ## 1.6.6 - 2026-07-16
 

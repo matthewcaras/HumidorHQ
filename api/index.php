@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.3.0
+ * Revision: 1.3.1
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-16 07:45 ET
+ * Modified Date: 2026-07-16 09:45 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -160,6 +160,33 @@ function managed_collection_configs(): array
             'text' => ['notes'],
             'int' => ['purchaseId', 'catalogCigarId', 'storageLocationId', 'quantity'],
             'money' => ['unitCost'],
+        ],
+        'lots' => [
+            'page' => 'Reports',
+            'label' => 'Lot',
+            'readOnly' => true,
+            'required' => [],
+            'text' => [],
+            'int' => [],
+            'money' => [],
+        ],
+        'lot-location-balances' => [
+            'page' => 'Reports',
+            'label' => 'Location Balance',
+            'readOnly' => true,
+            'required' => [],
+            'text' => [],
+            'int' => [],
+            'money' => [],
+        ],
+        'inventory-events' => [
+            'page' => 'Reports',
+            'label' => 'Inventory Event',
+            'readOnly' => true,
+            'required' => [],
+            'text' => [],
+            'int' => [],
+            'money' => [],
         ],
     ];
 }
@@ -338,6 +365,9 @@ function list_managed_records(string $collection): array
 function create_managed_record(string $collection, array $input): array
 {
     $config = managed_collection_config($collection);
+    if ((bool) ($config['readOnly'] ?? false)) {
+        throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
+    }
     $rows = load_collection($collection);
     $record = clean_managed_record($collection, $input);
     $record['id'] = next_id($collection);
@@ -355,6 +385,9 @@ function create_managed_record(string $collection, array $input): array
 function update_managed_record(string $collection, int $id, array $input): array
 {
     $config = managed_collection_config($collection);
+    if ((bool) ($config['readOnly'] ?? false)) {
+        throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
+    }
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
@@ -372,6 +405,9 @@ function update_managed_record(string $collection, int $id, array $input): array
 function delete_managed_record(string $collection, int $id): array
 {
     $config = managed_collection_config($collection);
+    if ((bool) ($config['readOnly'] ?? false)) {
+        throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
+    }
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
