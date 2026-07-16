@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.7.2
+Revision: 1.8.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 3:12 PM ET
+Modified Date: 2026-07-16 15:44 ET
 -->
 
 # Changelog
@@ -14,6 +14,31 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.8.3 - 2026-07-16
+
+- Removed the sidebar's Flat-file collection manager tagline.
+- Simplified Consumption Totals by removing redundant section labels, count badge, and monetary helper text.
+- Renamed the event quantity helper labels to Smoked and Gifted and removed the redundant Humidors eyebrow.
+
+## 1.8.2 - 2026-07-16
+
+- Reorganized lifetime smoked and gifted metrics with a tall quantity card, Cost above Avg Cost, and MSRP above Avg MSRP.
+- Added responsive behavior that preserves the paired metric layout on tablets and stacks it cleanly on phones.
+
+## 1.8.1 - 2026-07-16
+
+- Moved Update Purchase Status above purchased cigar details and defaulted the Edit / Receive status selection to Received.
+- Simplified the Dashboard top summary by removing redundant Humidors and Lifetime Smoked cards and moving On Hand / En Route into the first position.
+- Added average cost and average MSRP metrics for both lifetime smoked and gifted events.
+- Replaced the inherited purple lightning favicon with a warm HumidorHQ cigar icon.
+
+## 1.8.0 - 2026-07-16
+
+- Reworked Purchases around a compact summary header with total orders, total cigars, lifetime paid, and en route cigar counts.
+- Made the new purchase order builder open only from `+ Add Purchase` and removed the redundant Pending status input.
+- Moved purchased cigar details into expandable purchase records while preserving edit, receive, and location assignment actions for en route orders.
+- Removed the separate Purchased Cigars panel and tightened the calculated total and Add Cigar layout.
 
 ## 1.7.2 - 2026-07-16
 

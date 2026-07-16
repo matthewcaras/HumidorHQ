@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.5.2
+Revision: 1.6.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 3:12 PM ET
+Modified Date: 2026-07-16 15:44 ET
 -->
 
 # HumidorHQ
@@ -11,11 +11,11 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 ## Page Functions And Features
 
-- `Dashboard` shows total cigars on hand, current cost basis, current MSRP value, current savings, average cost per cigar, average MSRP per cigar, lifetime smoked totals, and each humidor's current count with oldest inventory date.
+- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked and gifted totals with per-cigar averages, and each humidor's current count with oldest inventory date.
 - `Collection` shows the cigars currently on hand and can sort them alphabetically or by humidor location.
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
-- `Purchases` tracks purchase headers, vendor, status, expected date, received date, tracking number, invoice/PO number, costs, purchased quantity totals, and inline purchased-cigar lines with weighted cost allocation.
+- `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
 - `Humidors` manages storage locations, current count, oldest inventory date, and inline drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
 - `Reports` shows current inventory and lifetime removal-event summaries with recent inventory event history.
