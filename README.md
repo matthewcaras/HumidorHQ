@@ -1,13 +1,26 @@
 <!--
 Filename: README.md
-Revision: 1.3.0
+Revision: 1.4.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 07:45 ET
+Modified Date: 2026-07-16 08:55 ET
 -->
 
 # HumidorHQ
 
 HumidorHQ is a cigar collection and humidor management app using a flat-file hosting model for GitHub-driven deployment to Hostinger.
+
+## Page Functions And Features
+
+- `Dashboard` summarizes catalog, humidor, inventory, vendor, purchase, and receipt-event counts. Dashboard count rows link to the related working pages and keep internal purchase-line records hidden from the user-facing dashboard.
+- `Collection` shows the current flat-file JSON collections and source files returned by the PHP API.
+- `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
+- `Vendors` manages vendor contact records used by purchases.
+- `Purchases` tracks purchase headers, vendor, status, expected date, received date, tracking number, invoice/PO number, costs, and purchased quantity totals.
+- `Humidors` manages storage locations and shows linked drawer, shelf, tray, or zone counts.
+- `Humidor Sections` manages drawers, shelves, trays, and zones inside humidors. It is available from Dashboard actions but hidden from the left menu.
+- `Reports` is the current destination for inventory lots, balances, and receipt-event summaries until dedicated report screens are added.
+- `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
+- Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 
 ## Current Target
 
@@ -69,7 +82,7 @@ Protected routes include `GET /api/sample-data` and future data-changing endpoin
 
 ## Data Management
 
-Signed-in users can add, edit, and delete records from the working navigation and Dashboard quick actions:
+Signed-in users can add, edit, and delete records from the working navigation, Dashboard linked count rows, and Dashboard quick actions:
 
 - `Catalog` manages `data/catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
 - `Vendors` manages `data/vendors.json`.

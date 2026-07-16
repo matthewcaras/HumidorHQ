@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.3
+Revision: 1.6.4
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 08:35 ET
+Modified Date: 2026-07-16 08:55 ET
 -->
 
 # Changelog
@@ -14,6 +14,13 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.6.4 - 2026-07-16
+
+- Removed visible Purchase Lines and PO Lines rows from the Dashboard while keeping internal records available.
+- Made Dashboard inventory and purchase pipeline rows navigate to their related pages.
+- Added hash-based page routing so browser refresh stays on the active page.
+- Expanded README with user-facing HumidorHQ page functions and added README-update guidance to AGENTS.md.
 
 ## 1.6.3 - 2026-07-16
 
