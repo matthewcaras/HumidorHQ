@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.5
+Revision: 1.6.6
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:18 ET
+Modified Date: 2026-07-16 09:32 ET
 -->
 
 # Changelog
@@ -14,6 +14,11 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.6.6 - 2026-07-16
+
+- Removed temporary repository probe files `do-you-see-me.txt` and `test.txt`.
+- Updated active branches from `main` after cleanup.
 
 ## 1.6.5 - 2026-07-16
 

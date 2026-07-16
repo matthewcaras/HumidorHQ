@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.4.1
+Revision: 1.4.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:18 ET
+Modified Date: 2026-07-16 09:32 ET
 -->
 
 # HumidorHQ
@@ -49,6 +49,8 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `CHANGELOG.md` - revisioned project change history
 
 Legacy TypeScript, React, Vite, Node, and Prisma runtime files have been removed from the deployable app. Historical conversion notes may still reference those technologies for migration context only.
+
+Temporary probe files are not part of the deployable app and should not be committed.
 
 ## Data Model
 
