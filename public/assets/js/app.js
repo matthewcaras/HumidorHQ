@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.3.0
+ * Revision: 1.4.0
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-15 15:18 ET
+ * Modified Date: 2026-07-16 07:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -28,12 +28,18 @@ const pages = [
   { id: 'Catalog', label: 'Catalog' },
   { id: 'Vendors', label: 'Vendors' },
   { id: 'Purchases', label: 'Purchases' },
-  { id: 'PurchaseLines', label: 'PO Lines' },
+  { id: 'PurchaseLines', label: 'PO Lines', hidden: true },
   { id: 'Humidors', label: 'Humidors' },
   { id: 'Reports', label: 'Reports' },
-  { id: 'Audit', label: 'Audit' },
-  { id: 'Changelog', label: 'Changelog' },
-  { id: 'Todo', label: 'Todo' },
+  { id: 'Audit', label: 'Audit', hidden: true },
+  { id: 'Changelog', label: 'Changelog', hidden: true },
+  { id: 'Todo', label: 'Todo', hidden: true },
+]
+
+const purchaseStatusOptions = [
+  { value: 'in-route', label: 'In Route' },
+  { value: 'partially-received', label: 'Partially Received' },
+  { value: 'received', label: 'Received' },
 ]
 
 const managedPages = {
@@ -88,12 +94,15 @@ const managedPages = {
   Purchases: {
     collection: 'purchases',
     title: 'Purchase',
-    intro: 'Add purchase headers. Purchase lines and lot generation will build on these records.',
+    intro: 'Track purchase headers from in-route through partial receipt and received status. PO Lines still hold cigar quantities.',
     dependencies: ['vendors', 'purchase-lines'],
     fields: [
       { name: 'vendorId', label: 'Vendor', type: 'select', collection: 'vendors', optionLabel: 'name' },
+      { name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true },
       { name: 'purchaseDate', label: 'Purchase Date', type: 'date', required: true },
+      { name: 'expectedDate', label: 'Expected Date', type: 'date' },
       { name: 'receivedDate', label: 'Received Date', type: 'date' },
+      { name: 'trackingNumber', label: 'Tracking Number' },
       { name: 'invoiceNumber', label: 'Invoice / PO Number' },
       { name: 'shipping', label: 'Shipping', type: 'number', step: '0.01' },
       { name: 'exciseTax', label: 'Excise Tax', type: 'number', step: '0.01' },
@@ -104,7 +113,9 @@ const managedPages = {
     ],
     columns: [
       { label: 'Date', value: (row) => row.purchaseDate || '' },
+      { label: 'Status', value: (row) => purchaseStatusLabel(row.status) },
       { label: 'Vendor', value: (row) => vendorName(row.vendorId) },
+      { label: 'Expected', value: (row) => row.expectedDate || '' },
       { label: 'Invoice / PO', value: (row) => row.invoiceNumber || '' },
       { label: 'Qty Purchased', value: (row) => formatCount(purchasedQuantityForPurchase(row.id)) },
       { label: 'Total', value: (row) => money(row.totalPaid) },
@@ -135,7 +146,8 @@ const managedPages = {
   Humidors: {
     collection: 'storage-locations',
     title: 'Humidor',
-    intro: 'Add humidors, tupperdores, coolers, or other storage locations.',
+    intro: 'Add humidors, tupperdores, coolers, or other storage locations. Drawer and shelf records are managed in Humidor Sections.',
+    dependencies: ['storage-sub-locations'],
     fields: [
       { name: 'name', label: 'Name', required: true },
       { name: 'type', label: 'Type' },
@@ -146,7 +158,27 @@ const managedPages = {
       { label: 'Name', value: (row) => row.name || '' },
       { label: 'Type', value: (row) => row.type || '' },
       { label: 'Capacity', value: (row) => row.capacity ?? '' },
+      { label: 'Sections', value: (row) => formatCount(humidorSectionCount(row.id)) },
       { label: 'Notes', value: (row) => row.notes || '' },
+    ],
+  },
+  HumidorSections: {
+    collection: 'storage-sub-locations',
+    title: 'Humidor Section',
+    intro: 'Add drawers, shelves, trays, or zones inside a humidor.',
+    dependencies: ['storage-locations'],
+    fields: [
+      { name: 'storageLocationId', label: 'Humidor', type: 'select', collection: 'storage-locations', optionLabel: 'name', required: true },
+      { name: 'name', label: 'Section Name', required: true },
+      { name: 'type', label: 'Type' },
+      { name: 'capacity', label: 'Capacity', type: 'number', step: '1' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    columns: [
+      { label: 'Section', value: (row) => sectionName(row) },
+      { label: 'Humidor', value: (row) => humidorName(row.storageLocationId) },
+      { label: 'Type', value: (row) => row.type || '' },
+      { label: 'Capacity', value: (row) => row.capacity ?? '' },
     ],
   },
 }
@@ -195,6 +227,20 @@ function onHandQuantityForCatalog(catalogCigarId) {
   return (state.records['lot-location-balances'] || [])
     .filter((row) => lotIds.has(Number(row.lotId)))
     .reduce((total, row) => total + numericValue(row.quantity), 0)
+}
+
+function purchaseStatusLabel(value) {
+  const option = purchaseStatusOptions.find((item) => item.value === value)
+  return option?.label || ''
+}
+
+function humidorSectionCount(storageLocationId) {
+  const id = Number(storageLocationId || 0)
+  return (state.records['storage-sub-locations'] || []).filter((row) => Number(row.storageLocationId) === id).length
+}
+
+function sectionName(row) {
+  return row?.name || `Section ${row?.id || ''}`.trim()
 }
 
 function money(value) {
@@ -343,7 +389,7 @@ function renderProjectMeta() {
 function renderNav() {
   const nav = document.querySelector('#app-nav')
   nav.replaceChildren(
-    ...pages.map((page) => {
+    ...pages.filter((page) => !page.hidden).map((page) => {
       const button = document.createElement('button')
       button.type = 'button'
       button.className = page.id === state.activePage ? 'nav-item active' : 'nav-item'
@@ -471,8 +517,8 @@ function renderDashboard(view) {
     <div class="quick-action-list">
       <button type="button" data-page="Catalog">Add Catalog Cigar</button>
       <button type="button" data-page="Purchases">Create Purchase</button>
-      <button type="button" data-page="PurchaseLines">Add PO Line</button>
       <button type="button" data-page="Humidors">Manage Humidors</button>
+      <button type="button" data-page="HumidorSections">Add Humidor Section</button>
     </div>
   `
   actions.querySelectorAll('button[data-page]').forEach((button) => {
@@ -574,12 +620,21 @@ function renderField(field, record) {
     emptyOption.value = ''
     emptyOption.textContent = 'Select...'
     select.append(emptyOption)
-    ;(state.records[field.collection] || []).forEach((option) => {
-      const item = document.createElement('option')
-      item.value = String(option.id)
-      item.textContent = typeof field.optionLabel === 'function' ? field.optionLabel(option) : option[field.optionLabel] || `Record ${option.id}`
-      select.append(item)
-    })
+    if (field.options) {
+      field.options.forEach((option) => {
+        const item = document.createElement('option')
+        item.value = option.value
+        item.textContent = option.label
+        select.append(item)
+      })
+    } else {
+      ;(state.records[field.collection] || []).forEach((option) => {
+        const item = document.createElement('option')
+        item.value = String(option.id)
+        item.textContent = typeof field.optionLabel === 'function' ? field.optionLabel(option) : option[field.optionLabel] || `Record ${option.id}`
+        select.append(item)
+      })
+    }
     select.value = fieldValue(record, field)
     label.append(select)
     return label

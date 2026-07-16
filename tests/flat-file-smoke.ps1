@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.6.6
+# Revision : 1.7.0
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-15 15:18 ET
+# Modified Date : 2026-07-16 07:45 ET
 # Changelog :
+# 1.7.0 verify hidden utility navigation, purchase status tracking, and humidor sub-locations
 # 1.6.6 verify purchase and catalog quantity display helpers
 # 1.6.5 verify header technology label and API status pill are removed
 # 1.6.4 verify Dashboard Data Health widget is removed and asset cache versions are current
@@ -38,7 +39,7 @@ $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
 $authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
 $auditLogPath = Join-Path $repoRoot 'data\audit-log.jsonl'
-$runtimeCollections = @('vendors', 'catalog-cigars', 'storage-locations', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'counters')
+$runtimeCollections = @('vendors', 'catalog-cigars', 'storage-locations', 'purchases', 'purchase-lines', 'storage-sub-locations', 'lots', 'lot-location-balances', 'inventory-events', 'counters')
 $runtimeBackups = @{}
 foreach ($collection in $runtimeCollections) {
     $runtimePath = Join-Path $repoRoot "data\$collection.json"
@@ -55,7 +56,7 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.5\.7') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -71,11 +72,17 @@ foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'ap
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }
 if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
-foreach ($menuText in @('Audit', 'Changelog', 'Todo', 'Vendors', 'PO Lines')) {
+foreach ($menuText in @('Vendors', 'Purchases', 'Humidors')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
+}
+foreach ($hiddenPage in @('Audit', 'Changelog', 'Todo', 'PurchaseLines')) {
+    if ($appJs -notmatch "id: '$hiddenPage',[^`r`n]+hidden: true") { throw "Plain JavaScript app should keep $hiddenPage available but hidden from the menu." }
 }
 foreach ($quantityHook in @('purchasedQuantityForPurchase', 'purchasedQuantityForCatalog', 'onHandQuantityForCatalog', 'Qty Purchased', 'On Hand')) {
     if ($appJs -notmatch [regex]::Escape($quantityHook)) { throw "Plain JavaScript app is missing quantity display hook: $quantityHook" }
+}
+foreach ($workflowHook in @('purchaseStatusOptions', 'In Route', 'Partially Received', 'trackingNumber', 'storage-sub-locations', 'humidorSectionCount', 'sectionName')) {
+    if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
 }
 
 $appCss = Get-Content -LiteralPath $appCssPath -Raw
@@ -110,7 +117,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', 'purchase-lines')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', 'purchase-lines', 'storage-sub-locations')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -156,7 +163,7 @@ try {
 
     $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session
     if ($null -eq $sample.data.collections) { throw 'Sample-data endpoint did not return collection summaries.' }
-    foreach ($name in @('catalog-cigars', 'vendors', 'storage-locations', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events')) {
+    foreach ($name in @('catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events')) {
         if (-not $sample.data.collections.PSObject.Properties.Name.Contains($name)) { throw "Sample-data endpoint is missing $name." }
     }
 
@@ -181,11 +188,16 @@ try {
     $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
 
-    $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Test'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Cabinet'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $humidorBody -WebSession $session
 
-    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; receivedDate = '2026-07-15'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $sectionBody = @{ storageLocationId = "$($createdHumidor.data.id)"; name = 'Drawer 1'; type = 'Drawer'; capacity = '10'; notes = 'temporary linked smoke test section' } | ConvertTo-Json
+    $createdSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $sectionBody -WebSession $session
+    if ($createdSection.data.name -ne 'Drawer 1' -or $createdSection.data.storageLocationId -ne $createdHumidor.data.id) { throw 'Storage sub-location create endpoint did not return the linked drawer record.' }
+
+    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; expectedDate = '2026-07-18'; receivedDate = ''; status = 'in-route'; trackingNumber = 'TRACK-1'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
+    if ($createdPurchase.data.status -ne 'in-route' -or $createdPurchase.data.expectedDate -ne '2026-07-18' -or $createdPurchase.data.trackingNumber -ne 'TRACK-1') { throw 'Purchase create endpoint did not preserve status, expected date, and tracking number.' }
 
     $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; quantity = '5'; unitCost = '10'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body $lineBody -WebSession $session
