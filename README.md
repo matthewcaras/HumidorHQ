@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.6.3
+Revision: 1.7.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 15:44 ET
+Modified Date: 2026-07-16 16:38 ET
 -->
 
 # HumidorHQ
@@ -16,9 +16,9 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
-- `Humidors` manages storage locations, current count, oldest inventory date, and inline drawer/shelf/tray/zone setup.
+- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
-- `Reports` shows current inventory and lifetime removal-event summaries with recent inventory event history.
+- `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
