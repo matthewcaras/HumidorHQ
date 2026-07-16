@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.8.3
+Revision: 1.9.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 15:44 ET
+Modified Date: 2026-07-16 16:38 ET
 -->
 
 # Changelog
@@ -14,6 +14,24 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.9.2 - 2026-07-16
+
+- Allowed empty humidors to be deleted when their only linked records are empty drawers or sections.
+- Automatically removes those empty sections with the humidor while retaining deletion protection for current inventory and linked purchase history.
+
+## 1.9.1 - 2026-07-16
+
+- Kept Dashboard inventory totals independent from Collection humidor and drawer filters.
+- Fixed Humidor Edit so the form expands inline and permits safe name and detail changes.
+- Disabled Humidor Delete when positive inventory is assigned and added matching API-side validation.
+
+## 1.9.0 - 2026-07-16
+
+- Added a Removal History report above Activity with Lifetime, Current Year, Prior Year, and Custom date filters.
+- Added All Removals, Smoked, and Gifted type filters plus cigar, location, notes, and lot search.
+- Added filtered removal counts, total cost, MSRP, savings, per-cigar averages, quantity included, and matching event details.
+- Preserved the existing Activity history directly below the new report and added responsive report controls for mobile use.
 
 ## 1.8.3 - 2026-07-16
 

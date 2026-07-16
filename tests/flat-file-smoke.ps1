@@ -1,10 +1,13 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.9.3
+# Revision : 1.10.2
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 15:44 ET
+# Modified Date : 2026-07-16 16:38 ET
 # Changelog :
+# 1.10.2 verify empty humidor section cleanup during deletion
+# 1.10.1 verify unfiltered dashboard totals, inline humidor editing, protected deletion, and latest assets
+# 1.10.0 verify removal report filters, calculated values, event history, and latest assets
 # 1.9.3 verify simplified dashboard and sidebar labels plus latest JS asset version
 # 1.9.2 verify paired lifetime cost/MSRP average layout and latest asset versions
 # 1.9.1 verify dashboard summary order, lifetime averages, receive defaults, and cigar favicon
@@ -96,8 +99,8 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -111,6 +114,10 @@ if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMe
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout') { throw 'Signed-in controls must render in the sidebar footer.' }
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
+if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
+$apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
+if ($apiIndex -notmatch 'save_collection\(''storage-sub-locations'', \$sections\)' -or $apiIndex -notmatch 'linkedSectionIds') { throw 'API is missing empty humidor section cleanup.' }
 if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
 if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
 if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
@@ -240,6 +247,15 @@ try {
 
     $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+
+    $emptyHumidorBody = @{ name = 'Empty Smoke Humidor'; type = 'Cabinet'; capacity = '10'; notes = 'temporary empty humidor' } | ConvertTo-Json
+    $emptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $emptyHumidorBody -WebSession $session
+    $emptySectionBody = @{ storageLocationId = "$($emptyHumidor.data.id)"; name = 'Empty Drawer'; type = 'Drawer'; capacity = '10'; notes = 'temporary empty section' } | ConvertTo-Json
+    $emptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $emptySectionBody -WebSession $session
+    $deletedEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)" -Method Delete -WebSession $session
+    if ($deletedEmptyHumidor.data.id -ne $emptyHumidor.data.id) { throw 'Empty humidor delete endpoint did not return the deleted record.' }
+    $sectionListAfterDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Get -WebSession $session
+    if ($sectionListAfterDelete.data.records | Where-Object { $_.id -eq $emptySection.data.id }) { throw 'Deleting an empty humidor did not remove its empty section.' }
 
     $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Cabinet'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $humidorBody -WebSession $session

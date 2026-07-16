@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.4.1
+ * Revision: 1.4.3
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-16 13:34 ET
+ * Modified Date: 2026-07-16 16:38 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -953,16 +953,36 @@ function delete_managed_record(string $collection, int $id): array
                 throw new ApiError('VALIDATION_ERROR', 'Delete linked purchase lines before deleting this purchase.', 409);
             }
             if ($collection === 'storage-locations') {
-                $hasSections = count(array_filter(
-                    load_collection('storage-sub-locations'),
-                    static fn (mixed $section): bool => is_array($section) && (int) ($section['storageLocationId'] ?? 0) === $id
+                $hasInventory = count(array_filter(
+                    load_collection('lot-location-balances'),
+                    static fn (mixed $balance): bool => is_array($balance)
+                        && (int) ($balance['storageLocationId'] ?? 0) === $id
+                        && (float) ($balance['quantity'] ?? 0) > 0
                 )) > 0;
+                $sections = load_collection('storage-sub-locations');
+                $linkedSectionIds = array_map(
+                    static fn (array $section): int => (int) ($section['id'] ?? 0),
+                    array_values(array_filter(
+                        $sections,
+                        static fn (mixed $section): bool => is_array($section) && (int) ($section['storageLocationId'] ?? 0) === $id
+                    ))
+                );
                 $hasLines = count(array_filter(
                     load_collection('purchase-lines'),
-                    static fn (mixed $line): bool => is_array($line) && (int) ($line['storageLocationId'] ?? 0) === $id
+                    static fn (mixed $line): bool => is_array($line) && (
+                        (int) ($line['storageLocationId'] ?? 0) === $id
+                        || in_array((int) ($line['storageSubLocationId'] ?? 0), $linkedSectionIds, true)
+                    )
                 )) > 0;
-                if ($hasSections || $hasLines) {
-                    throw new ApiError('VALIDATION_ERROR', 'Delete linked humidor sections and purchase lines before deleting this humidor.', 409);
+                if ($hasInventory || $hasLines) {
+                    throw new ApiError('VALIDATION_ERROR', 'Move assigned cigars before deleting this humidor.', 409);
+                }
+                if (count($linkedSectionIds) > 0) {
+                    $sections = array_values(array_filter(
+                        $sections,
+                        static fn (mixed $section): bool => !is_array($section) || (int) ($section['storageLocationId'] ?? 0) !== $id
+                    ));
+                    save_collection('storage-sub-locations', $sections);
                 }
             }
             if ($collection === 'storage-sub-locations') {

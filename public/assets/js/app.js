@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.8.3
+ * Revision: 1.9.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 15:44 ET
+ * Modified Date: 2026-07-16 16:38 ET
  */
 
 const API_BASE_URL = 'api'
@@ -36,6 +36,11 @@ const state = {
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
   editingHumidorSectionId: null,
+  reportPeriod: 'lifetime',
+  reportRemovalType: 'all',
+  reportSearch: '',
+  reportCustomStart: '',
+  reportCustomEnd: '',
 }
 
 const pages = [
@@ -147,6 +152,7 @@ const managedPages = {
     collection: 'storage-locations',
     title: 'Humidor',
     intro: 'Manage humidors and create drawers, shelves, trays, or zones for later inventory placement.',
+    inlineEdit: true,
     dependencies: ['storage-sub-locations'],
     fields: [
       { name: 'name', label: 'Name', required: true },
@@ -515,9 +521,9 @@ function buildCollectionItems() {
   })
 }
 
-function currentCollectionMetrics() {
+function currentCollectionMetrics(useCollectionFilters = true) {
   let items = buildCollectionItems()
-  if (state.collectionHumidorFilterId || state.collectionSectionFilterId) {
+  if (useCollectionFilters && (state.collectionHumidorFilterId || state.collectionSectionFilterId)) {
     items = items
       .map((item) => ({
         ...item,
@@ -883,7 +889,7 @@ function inventoryStatusCard(onHandQuantity, enRouteQuantity, uniqueCigarCount) 
 }
 
 function renderDashboard(view) {
-  const current = currentCollectionMetrics()
+  const current = currentCollectionMetrics(false)
   const enRouteQuantity = enRoutePurchaseQuantity()
   const smoked = removalMetrics('SMOKED')
   const gifted = removalMetrics('GIFTED')
@@ -1482,6 +1488,14 @@ function renderManagedTable(view, pageConfig) {
     remove.type = 'button'
     remove.className = 'danger-button compact-button'
     remove.textContent = 'Delete'
+    if (collection === 'storage-locations') {
+      const assignedQuantity = humidorCurrentCount(record.id)
+      if (assignedQuantity > 0) {
+        remove.disabled = true
+        remove.title = `Move all ${formatCount(assignedQuantity)} assigned cigars before deleting this humidor.`
+        remove.setAttribute('aria-label', `Delete unavailable. ${formatCount(assignedQuantity)} cigars are assigned to this humidor.`)
+      }
+    }
     remove.addEventListener('click', async () => {
       if (!confirm(`Delete this ${pageConfig.title.toLowerCase()} record?`)) {
         return
@@ -2702,27 +2716,251 @@ function renderHumidorSectionsPanel(view) {
 
 function renderHumidorsPage(view) {
   renderManagedTable(view, managedPages.Humidors)
-  renderManagedForm(view, managedPages.Humidors)
+  if (!state.editing['storage-locations']) {
+    view.append(renderManagedForm(view, managedPages.Humidors))
+  }
   renderHumidorSectionsPanel(view)
 }
 
-function renderReportsPage(view) {
-  const current = currentCollectionMetrics()
-  const smoked = removalMetrics('SMOKED')
-  const gifted = removalMetrics('GIFTED')
-  const discarded = removalMetrics('DISCARDED')
+function removalEventDate(event) {
+  return displayDate(event.eventDate || event.occurredAt || event.updatedAt)
+}
 
-  const summary = document.createElement('div')
-  summary.className = 'metric-grid'
-  summary.append(
-    metricCard('On Hand', current.totalQuantity, 'Current inventory quantity'),
-    metricCard('Smoked', smoked.quantity, `${money(smoked.totalCost)} cost`),
-    metricCard('Gifted', gifted.quantity, `${money(gifted.totalCost)} cost`),
-    metricCard('Discarded', discarded.quantity, `${money(discarded.totalCost)} cost`),
+function removalEventDetails(event) {
+  const lot = recordById('lots', event.lotId)
+  const cigar = lot?.catalogCigarId
+    ? recordById('catalog-cigars', lot.catalogCigarId)
+    : recordById('catalog-cigars', event.catalogCigarId)
+  const location = humidorName(event.storageLocationId)
+  const section = event.storageSubLocationId
+    ? sectionName(recordById('storage-sub-locations', event.storageSubLocationId))
+    : ''
+  return {
+    cigar,
+    cigarLabel: cigar ? cigarName(cigar) : '',
+    locationLabel: [location, section].filter(Boolean).join(' / '),
+    lotLabel: event.lotId ? `Lot ${event.lotId}` : '',
+  }
+}
+
+function filteredRemovalEvents() {
+  const currentYear = new Date().getFullYear()
+  const search = String(state.reportSearch || '').trim().toLowerCase()
+  return records('inventory-events')
+    .filter((event) => ['SMOKED', 'GIFTED'].includes(normalizeEventType(event.eventType)))
+    .filter((event) => {
+      const eventType = normalizeEventType(event.eventType)
+      return state.reportRemovalType === 'all' || eventType === state.reportRemovalType
+    })
+    .filter((event) => {
+      const date = removalEventDate(event)
+      const year = Number(date.slice(0, 4) || 0)
+      if (state.reportPeriod === 'current') {
+        return year === currentYear
+      }
+      if (state.reportPeriod === 'prior') {
+        return year === currentYear - 1
+      }
+      if (state.reportPeriod === 'custom') {
+        const afterStart = !state.reportCustomStart || date >= state.reportCustomStart
+        const beforeEnd = !state.reportCustomEnd || date <= state.reportCustomEnd
+        return afterStart && beforeEnd
+      }
+      return true
+    })
+    .filter((event) => {
+      if (!search) {
+        return true
+      }
+      const details = removalEventDetails(event)
+      return [details.cigarLabel, details.locationLabel, details.lotLabel, event.notes]
+        .some((value) => String(value || '').toLowerCase().includes(search))
+    })
+    .sort((left, right) => removalEventDate(right).localeCompare(removalEventDate(left)) || Number(right.id || 0) - Number(left.id || 0))
+}
+
+function removalReportMetrics(events) {
+  const quantity = events.reduce((sum, event) => sum + numericValue(event.quantity), 0)
+  const totalCost = events.reduce((sum, event) => sum + numericValue(event.quantity) * numericValue(event.costPerCigarAtEvent), 0)
+  const totalMsrp = events.reduce((sum, event) => sum + numericValue(event.quantity) * numericValue(event.msrpPerCigarAtEvent), 0)
+  return {
+    quantity,
+    smoked: events.filter((event) => normalizeEventType(event.eventType) === 'SMOKED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
+    gifted: events.filter((event) => normalizeEventType(event.eventType) === 'GIFTED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
+    totalCost,
+    totalMsrp,
+    totalSavings: totalMsrp - totalCost,
+    averageCost: quantity > 0 ? totalCost / quantity : 0,
+    averageMsrp: quantity > 0 ? totalMsrp / quantity : 0,
+  }
+}
+
+function reportFilterButton(label, value, stateKey) {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = `report-filter-button${state[stateKey] === value ? ' active' : ''}`
+  button.textContent = label
+  button.addEventListener('click', () => {
+    state[stateKey] = value
+    if (stateKey === 'reportPeriod' && value === 'custom') {
+      const year = new Date().getFullYear()
+      state.reportCustomStart ||= `${year}-01-01`
+      state.reportCustomEnd ||= todayIsoDate()
+    }
+    render()
+  })
+  return button
+}
+
+function renderRemovalHistory(view) {
+  const events = filteredRemovalEvents()
+  const metrics = removalReportMetrics(events)
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel removal-report-panel'
+  panel.innerHTML = `
+    <div class="section-heading report-title">
+      <div>
+        <h3>Removal History</h3>
+        <p class="muted">Choose a date range and removal type to recalculate the counts and values below.</p>
+      </div>
+    </div>
+  `
+
+  const filters = document.createElement('div')
+  filters.className = 'report-filter-grid'
+  const period = document.createElement('fieldset')
+  period.className = 'report-filter-group'
+  period.innerHTML = '<legend>Period</legend>'
+  const periodButtons = document.createElement('div')
+  periodButtons.className = 'report-filter-buttons'
+  periodButtons.append(
+    reportFilterButton('Lifetime', 'lifetime', 'reportPeriod'),
+    reportFilterButton('Current Year', 'current', 'reportPeriod'),
+    reportFilterButton('Prior Year', 'prior', 'reportPeriod'),
+    reportFilterButton('Custom', 'custom', 'reportPeriod'),
   )
+  period.append(periodButtons)
+
+  const removalType = document.createElement('fieldset')
+  removalType.className = 'report-filter-group'
+  removalType.innerHTML = '<legend>Removal Type</legend>'
+  const typeButtons = document.createElement('div')
+  typeButtons.className = 'report-filter-buttons report-type-buttons'
+  typeButtons.append(
+    reportFilterButton('All Removals', 'all', 'reportRemovalType'),
+    reportFilterButton('Smoked', 'SMOKED', 'reportRemovalType'),
+    reportFilterButton('Gifted', 'GIFTED', 'reportRemovalType'),
+  )
+  removalType.append(typeButtons)
+  filters.append(period, removalType)
+  panel.append(filters)
+
+  if (state.reportPeriod === 'custom') {
+    const customDates = document.createElement('div')
+    customDates.className = 'report-custom-dates'
+    customDates.innerHTML = `
+      <label class="form-field"><span>Start Date</span><input type="date" name="reportStart" value="${escapeHtml(state.reportCustomStart)}"></label>
+      <label class="form-field"><span>End Date</span><input type="date" name="reportEnd" value="${escapeHtml(state.reportCustomEnd)}"></label>
+    `
+    customDates.querySelector('[name="reportStart"]').addEventListener('change', (event) => {
+      state.reportCustomStart = event.target.value
+      render()
+    })
+    customDates.querySelector('[name="reportEnd"]').addEventListener('change', (event) => {
+      state.reportCustomEnd = event.target.value
+      render()
+    })
+    panel.append(customDates)
+  }
+
+  const searchForm = document.createElement('form')
+  searchForm.className = 'report-search-form'
+  searchForm.innerHTML = `
+    <label class="form-field"><span>Search</span><input name="reportSearch" value="${escapeHtml(state.reportSearch)}" placeholder="Search cigar, location, notes, or lot number"></label>
+    <button class="primary-button" type="submit">Search</button>
+    <button class="secondary-button" type="button" data-clear-search>Clear</button>
+  `
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    state.reportSearch = new FormData(searchForm).get('reportSearch') || ''
+    render()
+  })
+  searchForm.querySelector('[data-clear-search]').addEventListener('click', () => {
+    state.reportSearch = ''
+    render()
+  })
+  panel.append(searchForm)
+
+  const counts = document.createElement('div')
+  counts.className = 'metric-grid compact report-count-grid'
+  counts.append(
+    metricCard('Total Removed', metrics.quantity, ''),
+    metricCard('Smoked', metrics.smoked, ''),
+    metricCard('Gifted', metrics.gifted, ''),
+  )
+  panel.append(counts)
+
+  const valuesTitle = document.createElement('h3')
+  valuesTitle.className = 'report-values-title'
+  valuesTitle.textContent = state.reportRemovalType === 'all'
+    ? 'All Removal Values'
+    : `${state.reportRemovalType === 'SMOKED' ? 'Smoked' : 'Gifted'} Values`
+  const values = document.createElement('div')
+  values.className = 'report-value-grid'
+  values.append(
+    metricCard('Total Cost', metrics.totalCost, '', true),
+    metricCard('Total MSRP', metrics.totalMsrp, '', true),
+    metricCard('Total Savings', metrics.totalSavings, '', true),
+    metricCard('Average Cost Per Cigar', metrics.averageCost, '', true),
+    metricCard('Average MSRP Per Cigar', metrics.averageMsrp, '', true),
+    metricCard('Quantity Included', metrics.quantity, ''),
+  )
+  panel.append(valuesTitle, values)
+
+  const historyTitle = document.createElement('div')
+  historyTitle.className = 'section-heading report-events-heading'
+  historyTitle.innerHTML = `<div><h3>Removal Events</h3><p class="muted">${formatCount(events.length)} matching event records.</p></div>`
+  panel.append(historyTitle)
+  if (events.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No smoked or gifted events match the selected filters.</p>'
+    panel.append(empty)
+  } else {
+    const tableWrap = document.createElement('div')
+    tableWrap.className = 'table-scroll'
+    const table = document.createElement('table')
+    table.className = 'data-table'
+    table.innerHTML = `
+      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th></tr></thead>
+      <tbody></tbody>
+    `
+    const tbody = table.querySelector('tbody')
+    events.forEach((event) => {
+      const details = removalEventDetails(event)
+      const row = document.createElement('tr')
+      row.innerHTML = `
+        <td>${escapeHtml(removalEventDate(event))}</td>
+        <td>${escapeHtml(normalizeEventType(event.eventType))}</td>
+        <td>${escapeHtml(details.cigarLabel)}</td>
+        <td>${escapeHtml(details.locationLabel || 'Unassigned')}</td>
+        <td>${formatCount(event.quantity)}</td>
+        <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
+        <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+      `
+      tbody.append(row)
+    })
+    tableWrap.append(table)
+    panel.append(tableWrap)
+  }
+  view.append(panel)
+}
+
+function renderReportsPage(view) {
+  renderRemovalHistory(view)
 
   const activity = document.createElement('section')
-  activity.className = 'dashboard-panel'
+  activity.className = 'dashboard-panel report-activity-panel'
   activity.innerHTML = `
     <div class="section-heading">
       <div>
@@ -2766,7 +3004,7 @@ function renderReportsPage(view) {
   tableWrap.append(table)
   activity.append(tableWrap)
 
-  view.append(summary, activity)
+  view.append(activity)
 }
 
 async function ensureAuditData() {
