@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.0
+Revision: 1.6.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 07:45 ET
+Modified Date: 2026-07-16 08:10 ET
 -->
 
 # Changelog
@@ -15,12 +15,18 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.6.1 - 2026-07-16
+
+- Added repo-level `AGENTS.md` so Jason and Matt share HumidorHQ Codex working rules.
+- Documented Matt-specific quiet mode guidance for his personal `~/.codex/AGENTS.md`.
+
 ## 1.6.0 - 2026-07-16
 
 - Hid PO Lines, Audit, Changelog, and Todo from the left menu while keeping their pages and endpoints available.
 - Added purchase status tracking for in-route, partially received, and received orders with expected date and tracking number fields.
 - Added Humidor Sections for drawers, shelves, trays, and other sub-locations inside a humidor.
 - Bumped JavaScript asset version so deployed browsers load the purchase and humidor workflow update.
+
 ## 1.5.7 - 2026-07-15
 
 - Added purchased quantity totals to Purchases by summing linked PO Lines.
