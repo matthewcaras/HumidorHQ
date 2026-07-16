@@ -1,10 +1,29 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.7.3
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
+# Revision : 1.10.3
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 09:45 ET
+# Modified Date : 2026-07-16 17:24 ET
 # Changelog :
+# 1.10.3 skip binary screenshot and image assets during text metadata header validation
+# 1.10.2 verify empty humidor section cleanup during deletion
+# 1.10.1 verify unfiltered dashboard totals, inline humidor editing, protected deletion, and latest assets
+# 1.10.0 verify removal report filters, calculated values, event history, and latest assets
+# 1.9.3 verify simplified dashboard and sidebar labels plus latest JS asset version
+# 1.9.2 verify paired lifetime cost/MSRP average layout and latest asset versions
+# 1.9.1 verify dashboard summary order, lifetime averages, receive defaults, and cigar favicon
+# 1.9.0 verify purchases summary, toggled order builder, and expandable purchase records
+# 1.8.10 verify dual on-hand and en-route dashboard card plus latest asset versions
+# 1.8.9 verify dashboard en-route metric text and latest JS cache version
+# 1.8.8 verify purchase records sort and latest JS cache version
+# 1.8.7 verify purchase draft state survives add-cigar renders
+# 1.8.6 verify purchase builder subtotal reconciliation hooks and stored line purchase prices
+# 1.8.5 verify pending-to-received purchase lifecycle plus inline catalog creation hooks
+# 1.8.4 verify collection humidor and drawer filters plus catalog inline edit
+# 1.8.3 verify dashboard activity relocation and responsive table wrappers
+# 1.8.2 verify inline collection actions and current cache-busted asset versions
+# 1.8.1 verify partial-lot move workflow and current cache-busted asset versions
+# 1.8.0 verify dashboard financial hooks, collection inventory view, inline purchase-line allocation, and winget PHP fallback
 # 1.7.3 verify read-only internal collections load for dependent pages
 # 1.7.2 verify signed-in controls render in the sidebar footer
 # 1.7.1 verify Dashboard public links and hash-based page refresh routing
@@ -54,14 +73,36 @@ foreach ($collection in $runtimeCollections) {
 }
 $authUsersHadFile = Test-Path -LiteralPath $authUsersPath
 
+function Get-PhpCommand {
+    $phpCommand = Get-Command php -ErrorAction SilentlyContinue
+    if ($phpCommand) {
+        return $phpCommand.Source
+    }
+
+    $candidatePaths = @(
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.5_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
+        'C:\php\php.exe'
+    )
+
+    $phpPath = $candidatePaths | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    if (-not $phpPath) {
+        throw 'php.exe was not found on PATH or in the standard winget install locations.'
+    }
+    return $phpPath
+}
+
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.7') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.7') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -70,16 +111,23 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
-if ($appJs -notmatch 'dashboard-shell') { throw 'Plain JavaScript app is missing the screenshot-style dashboard shell.' }
+if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout') { throw 'Signed-in controls must render in the sidebar footer.' }
-if ($appJs -notmatch 'dashboard-link-row' -or $appJs -notmatch 'data-page="Purchases"' -or $appJs -notmatch 'data-page="Humidors"') { throw 'Dashboard rows must link to related working pages.' }
-if ($appJs -match '<span>PO Lines</span>' -or $appJs -match '<span>Purchase Lines</span>') { throw 'Dashboard should not expose PO Lines or Purchase Lines rows.' }
+if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
+if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
+$apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
+if ($apiIndex -notmatch 'save_collection\(''storage-sub-locations'', \$sections\)' -or $apiIndex -notmatch 'linkedSectionIds') { throw 'API is missing empty humidor section cleanup.' }
+if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
+if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
+if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
+if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
+if ($index -match 'Flat-file collection manager' -or $appJs -match 'Smoked inventory events' -or $appJs -match 'Gifted inventory events') { throw 'Removed sidebar and consumption helper labels are still present.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
-foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
+foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm', 'renderPurchaseLinesPanel', 'renderHumidorSectionsPanel')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }
-if ($appJs -notmatch 'function renderManagedPage\(view, pageConfig\) \{\s*renderManagedTable\(view, pageConfig\)\s*renderManagedForm\(view, pageConfig\)') { throw 'Managed pages must render current records before add/edit forms.' }
 foreach ($menuText in @('Vendors', 'Purchases', 'Humidors')) {
     if ($appJs -notmatch $menuText) { throw "Plain JavaScript app is missing $menuText menu link." }
 }
@@ -89,7 +137,7 @@ foreach ($hiddenPage in @('Audit', 'Changelog', 'Todo', 'PurchaseLines')) {
 foreach ($quantityHook in @('purchasedQuantityForPurchase', 'purchasedQuantityForCatalog', 'onHandQuantityForCatalog', 'Qty Purchased', 'On Hand')) {
     if ($appJs -notmatch [regex]::Escape($quantityHook)) { throw "Plain JavaScript app is missing quantity display hook: $quantityHook" }
 }
-foreach ($workflowHook in @('purchaseStatusOptions', 'In Route', 'Partially Received', 'trackingNumber', 'storage-sub-locations', 'humidorSectionCount', 'sectionName')) {
+foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'purchaseDraftLines', 'subtotal', 'showPurchaseCatalogCreate', 'purchasePrice', 'msrpPerCigar', 'storageSubLocationId', 'trueCostPerCigar', 'currentSavings', 'collectionSort', 'collectionSectionFilterId', 'inline-move-form', 'table-scroll', '/inventory/move', '/inventory/remove', 'inlineEdit: true')) {
     if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
 }
 
@@ -99,7 +147,7 @@ if ($appCss -match '`r`n') { throw 'CSS contains literal PowerShell newline esca
 $trackedFiles = & git -C $repoRoot ls-files
 $headerFailures = @()
 foreach ($trackedFile in $trackedFiles) {
-    if ($trackedFile -match '\.json$') {
+    if ($trackedFile -match '\.(json|png|jpg|jpeg|gif|webp|bmp|ico)$') {
         continue
     }
     $trackedPath = Join-Path $repoRoot $trackedFile
@@ -125,12 +173,12 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', 'purchase-lines', 'storage-sub-locations')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', '/inventory/move', 'purchase-lines', 'storage-sub-locations')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
-$php = Get-Command php -ErrorAction Stop
-$hash = & $php.Source -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
+$php = Get-PhpCommand
+$hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 
 if ($authUsersHadFile) { Copy-Item -LiteralPath $authUsersPath -Destination $authUsersBackupPath -Force }
@@ -147,7 +195,7 @@ $port = 8765
 $serverOutLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.out.log'
 $serverErrLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.err.log'
 $phpArgs = "-S 127.0.0.1:$port -t `"$repoRoot`""
-$process = Start-Process -FilePath $php.Source -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
+$process = Start-Process -FilePath $php -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
 try {
     Start-Sleep -Milliseconds 700
     $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -201,6 +249,15 @@ try {
     $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
 
+    $emptyHumidorBody = @{ name = 'Empty Smoke Humidor'; type = 'Cabinet'; capacity = '10'; notes = 'temporary empty humidor' } | ConvertTo-Json
+    $emptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $emptyHumidorBody -WebSession $session
+    $emptySectionBody = @{ storageLocationId = "$($emptyHumidor.data.id)"; name = 'Empty Drawer'; type = 'Drawer'; capacity = '10'; notes = 'temporary empty section' } | ConvertTo-Json
+    $emptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $emptySectionBody -WebSession $session
+    $deletedEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)" -Method Delete -WebSession $session
+    if ($deletedEmptyHumidor.data.id -ne $emptyHumidor.data.id) { throw 'Empty humidor delete endpoint did not return the deleted record.' }
+    $sectionListAfterDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Get -WebSession $session
+    if ($sectionListAfterDelete.data.records | Where-Object { $_.id -eq $emptySection.data.id }) { throw 'Deleting an empty humidor did not remove its empty section.' }
+
     $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Cabinet'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $humidorBody -WebSession $session
 
@@ -208,25 +265,59 @@ try {
     $createdSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $sectionBody -WebSession $session
     if ($createdSection.data.name -ne 'Drawer 1' -or $createdSection.data.storageLocationId -ne $createdHumidor.data.id) { throw 'Storage sub-location create endpoint did not return the linked drawer record.' }
 
-    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; expectedDate = '2026-07-18'; receivedDate = ''; status = 'in-route'; trackingNumber = 'TRACK-1'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = ''; status = 'pending'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
     $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
-    if ($createdPurchase.data.status -ne 'in-route' -or $createdPurchase.data.expectedDate -ne '2026-07-18' -or $createdPurchase.data.trackingNumber -ne 'TRACK-1') { throw 'Purchase create endpoint did not preserve status, expected date, and tracking number.' }
+    if ($createdPurchase.data.status -ne 'pending' -or $createdPurchase.data.subtotal -ne 50 -or $createdPurchase.data.invoiceNumber -ne 'SMOKE-PO-1') { throw 'Purchase create endpoint did not preserve status, subtotal, and invoice number.' }
 
-    $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; quantity = '5'; unitCost = '10'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body $lineBody -WebSession $session
-    if ((-not $createdLine.data.id) -or (-not $createdLine.data.createdLotId) -or (-not $createdLine.data.createdInventoryEventId)) { throw 'Purchase line create endpoint did not return linked inventory ids.' }
+    if ((-not $createdLine.data.id) -or $createdLine.data.createdLotId -or $createdLine.data.createdInventoryEventId) { throw 'Pending purchase lines should not create receipt inventory ids before the order is received.' }
+    if ($createdLine.data.trueCostPerCigar -ne 10 -or $createdLine.data.allocatedShipping -ne 0 -or $createdLine.data.msrpPerCigarResolved -ne 9.5) { throw 'Purchase line create endpoint did not return allocated financial fields.' }
 
     $lots = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lots.json') -Raw | ConvertFrom-Json
-    $linkedLot = $lots | Where-Object { $_.id -eq $createdLine.data.createdLotId -and $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
-    if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id) { throw 'Purchase line did not create the expected linked lot.' }
+    $pendingLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
+    if ($pendingLot) { throw 'Pending purchase lines should not create lots before receipt and location assignment.' }
+
+    $balances = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $pendingBalance = $balances | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
+    if ($pendingBalance) { throw 'Pending purchase lines should not create location balances before receipt and location assignment.' }
+
+    $events = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $pendingEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
+    if ($pendingEvent) { throw 'Pending purchase lines should not create receipt events before receipt and location assignment.' }
+
+    $receivedPurchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = '2026-07-16'; status = 'received'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
+    $receivedPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -ContentType 'application/json' -Body $receivedPurchaseBody -WebSession $session
+    if ($receivedPurchase.data.status -ne 'received' -or $receivedPurchase.data.receivedDate -ne '2026-07-16') { throw 'Purchase update endpoint did not mark the order received.' }
+
+    $assignLineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; storageSubLocationId = "$($createdSection.data.id)"; quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $assignedLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -ContentType 'application/json' -Body $assignLineBody -WebSession $session
+
+    $lots = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lots.json') -Raw | ConvertFrom-Json
+    $linkedLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
+    if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id -or $linkedLot.costPerCigarSnapshot -ne 10 -or $linkedLot.msrpPerCigarSnapshot -ne 9.5) { throw 'Received purchase line did not create the expected linked lot.' }
 
     $balances = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
     $linkedBalance = $balances | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id } | Select-Object -First 1
-    if (-not $linkedBalance -or $linkedBalance.quantity -ne 5) { throw 'Purchase line did not create the expected lot-location balance.' }
+    if (-not $linkedBalance -or $linkedBalance.quantity -ne 5 -or $linkedBalance.storageSubLocationId -ne $createdSection.data.id) { throw 'Received purchase line did not create the expected lot-location balance.' }
 
     $events = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
-    $linkedEvent = $events | Where-Object { $_.id -eq $createdLine.data.createdInventoryEventId -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
-    if (-not $linkedEvent -or $linkedEvent.quantity -ne 5) { throw 'Purchase line did not create the expected purchase-receipt inventory event.' }
+    $linkedEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
+    if (-not $linkedEvent -or $linkedEvent.quantity -ne 5 -or $linkedEvent.storageSubLocationId -ne $createdSection.data.id -or $linkedEvent.costPerCigarAtEvent -ne 10 -or $linkedEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Received purchase line did not create the expected purchase-receipt inventory event.' }
+
+    $moveBody = @{ sourceBalanceId = "$($linkedBalance.id)"; quantity = '2'; toStorageLocationId = "$($createdHumidor.data.id)"; toStorageSubLocationId = ''; notes = 'temporary smoke move' } | ConvertTo-Json
+    $moveResult = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/move" -Method Post -ContentType 'application/json' -Body $moveBody -WebSession $session
+    if ($moveResult.data.quantityMoved -ne 2 -or $moveResult.data.lotId -ne $linkedLot.id) { throw 'Inventory move endpoint did not return the moved lot and quantity.' }
+
+    $balancesAfterMove = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $movedSource = $balancesAfterMove | Where-Object { $_.id -eq $linkedBalance.id } | Select-Object -First 1
+    $movedDestination = $balancesAfterMove | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id -and ($_.storageSubLocationId -eq $null -or $_.storageSubLocationId -eq '') -and $_.id -ne $linkedBalance.id } | Select-Object -First 1
+    if (-not $movedSource -or $movedSource.quantity -ne 3) { throw 'Inventory move did not reduce the source balance correctly.' }
+    if (-not $movedDestination -or $movedDestination.quantity -ne 2) { throw 'Inventory move did not create the destination balance correctly.' }
+
+    $eventsAfterMove = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $moveEvent = $eventsAfterMove | Where-Object { $_.eventType -eq 'move' -and $_.lotId -eq $linkedLot.id -and $_.quantity -eq 2 } | Select-Object -First 1
+    if (-not $moveEvent -or $moveEvent.costPerCigarAtEvent -ne 10 -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the lot cost and MSRP on the move event.' }
     $pageAuditBody = @{ page = 'Dashboard'; action = 'view' } | ConvertTo-Json
     $pageAudit = Invoke-RestMethod "http://127.0.0.1:$port/api/audit/page" -Method Post -ContentType 'application/json' -Body $pageAuditBody -WebSession $session
     if ($pageAudit.data.logged -ne $true) { throw 'Page audit endpoint did not confirm logging.' }

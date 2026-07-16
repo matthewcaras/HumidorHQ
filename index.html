@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.1.3
+Revision: 1.4.1
 Description: HTML entry point for the HumidorHQ flat-file app.
-Modified Date: 2026-07-16 09:45 ET
+Modified Date: 2026-07-16 16:38 ET
 -->
 
 <!doctype html>
@@ -12,15 +12,14 @@ Modified Date: 2026-07-16 09:45 ET
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="HumidorHQ flat-file cigar collection manager">
     <title>HumidorHQ</title>
-    <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
-    <link rel="stylesheet" href="public/assets/css/app.css?v=1.5.7">
+    <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.0">
+    <link rel="stylesheet" href="public/assets/css/app.css?v=1.9.1">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand">
           <h1>HumidorHQ</h1>
-          <p>Flat-file collection manager</p>
         </div>
         <nav class="nav" id="app-nav"></nav>
         <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
@@ -28,16 +27,18 @@ Modified Date: 2026-07-16 09:45 ET
 
       <main class="main-content">
         <section class="hero-panel" aria-labelledby="page-title">
-          <div>
+          <div class="page-heading-copy">
             <h2 id="page-title">Dashboard</h2>
+            <p id="page-subtitle" class="muted" hidden></p>
           </div>
+          <div id="page-actions" class="page-actions"></div>
         </section>
 
         <section id="app-view" class="content-panel" aria-live="polite"></section>
       </main>
     </div>
 
-    <script src="public/assets/js/app.js?v=1.6.7" defer></script>
+    <script src="public/assets/js/app.js?v=1.9.1" defer></script>
   </body>
 </html>
 

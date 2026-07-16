@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.9
+Revision: 1.9.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:20 ET
+Modified Date: 2026-07-16 17:24 ET
 -->
 
 # Changelog
@@ -14,6 +14,75 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.9.3 - 2026-07-16
+
+- Merged the latest `main` application updates into `Jason-Bug-Fixes` while preserving Jason-specific branch workflow notes, setup helper documentation, and old reference screenshots.
+
+## 1.9.2 - 2026-07-16
+
+- Allowed empty humidors to be deleted when their only linked records are empty drawers or sections.
+- Automatically removes those empty sections with the humidor while retaining deletion protection for current inventory and linked purchase history.
+
+## 1.9.1 - 2026-07-16
+
+- Kept Dashboard inventory totals independent from Collection humidor and drawer filters.
+- Fixed Humidor Edit so the form expands inline and permits safe name and detail changes.
+- Disabled Humidor Delete when positive inventory is assigned and added matching API-side validation.
+
+## 1.9.0 - 2026-07-16
+
+- Added a Removal History report above Activity with Lifetime, Current Year, Prior Year, and Custom date filters.
+- Added All Removals, Smoked, and Gifted type filters plus cigar, location, notes, and lot search.
+- Added filtered removal counts, total cost, MSRP, savings, per-cigar averages, quantity included, and matching event details.
+- Preserved the existing Activity history directly below the new report and added responsive report controls for mobile use.
+
+## 1.8.3 - 2026-07-16
+
+- Removed the sidebar's Flat-file collection manager tagline.
+- Simplified Consumption Totals by removing redundant section labels, count badge, and monetary helper text.
+- Renamed the event quantity helper labels to Smoked and Gifted and removed the redundant Humidors eyebrow.
+
+## 1.8.2 - 2026-07-16
+
+- Reorganized lifetime smoked and gifted metrics with a tall quantity card, Cost above Avg Cost, and MSRP above Avg MSRP.
+- Added responsive behavior that preserves the paired metric layout on tablets and stacks it cleanly on phones.
+
+## 1.8.1 - 2026-07-16
+
+- Moved Update Purchase Status above purchased cigar details and defaulted the Edit / Receive status selection to Received.
+- Simplified the Dashboard top summary by removing redundant Humidors and Lifetime Smoked cards and moving On Hand / En Route into the first position.
+- Added average cost and average MSRP metrics for both lifetime smoked and gifted events.
+- Replaced the inherited purple lightning favicon with a warm HumidorHQ cigar icon.
+
+## 1.8.0 - 2026-07-16
+
+- Reworked Purchases around a compact summary header with total orders, total cigars, lifetime paid, and en route cigar counts.
+- Made the new purchase order builder open only from `+ Add Purchase` and removed the redundant Pending status input.
+- Moved purchased cigar details into expandable purchase records while preserving edit, receive, and location assignment actions for en route orders.
+- Removed the separate Purchased Cigars panel and tightened the calculated total and Add Cigar layout.
+
+## 1.7.2 - 2026-07-16
+
+- Added `tools/import-rich-workbook.ps1` to import the HumidorHQ rich Excel workbook into the local flat-file JSON model.
+- Imported the provided local workbook into catalog, vendors, humidors, purchases, purchase lots, and on-hand balances for local verification.
+- Added a safe fallback that places lots into `Imported Inventory / General` when the workbook has no populated Current Inventory sheet yet.
+
+## 1.7.1 - 2026-07-16
+
+- Moved the Dashboard humidor summary card to the first position and reordered the remaining cards so average cost and average MSRP line up beneath cost basis and MSRP value.
+- Removed the redundant Dashboard collection value panel and added lifetime gifted quantity, cost, and MSRP metrics beside the smoked totals.
+- Removed the visible section-count column from the Humidors management table and the humidor summary table on the Dashboard.
+- Added a Collection-page partial-lot move form so inventory can be split between humidors or drawers while preserving lot-level cost, MSRP, and event history.
+
+## 1.7.0 - 2026-07-16
+
+- Reworked the Dashboard to show on-hand cigars, current cost basis, current MSRP value, savings, average on-hand cost, average on-hand MSRP, lifetime smoked totals, and a humidor summary with oldest dates.
+- Replaced the Collection JSON-file list with an actual on-hand cigar view sortable by alphabetical order or humidor location.
+- Expanded Purchases so users can manage purchased cigar lines inline and automatically allocate shipping, excise tax, sales tax, and discount across lines by weighted purchase price.
+- Expanded Humidors so users can manage drawers and sections inline while seeing each humidor's current count and oldest inventory date.
+- Synced purchase-line edits and deletes to lots, lot balances, and purchase-receipt inventory events, including cost and MSRP snapshots used by current-value and lifetime metrics.
+- Updated the local server script to find winget-installed PHP even before the terminal PATH refreshes.
 
 ## 1.6.9 - 2026-07-16
 

@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.4.5
+Revision: 1.7.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:20 ET
+Modified Date: 2026-07-16 17:24 ET
 -->
 
 # HumidorHQ
@@ -11,14 +11,14 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 ## Page Functions And Features
 
-- `Dashboard` summarizes catalog, humidor, inventory, vendor, purchase, and receipt-event counts. Dashboard count rows link to the related working pages and keep internal purchase-line records hidden from the user-facing dashboard.
-- `Collection` shows the current flat-file JSON collections and source files returned by the PHP API.
+- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked and gifted totals with per-cigar averages, and each humidor's current count with oldest inventory date.
+- `Collection` shows the cigars currently on hand and can sort them alphabetically or by humidor location.
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
-- `Purchases` tracks purchase headers, vendor, status, expected date, received date, tracking number, invoice/PO number, costs, and purchased quantity totals.
-- `Humidors` manages storage locations and shows linked drawer, shelf, tray, or zone counts.
-- `Humidor Sections` manages drawers, shelves, trays, and zones inside humidors. It is available from Dashboard actions but hidden from the left menu.
-- `Reports` is the current destination for inventory lots, balances, and receipt-event summaries until dedicated report screens are added.
+- `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
+- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
+- `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
+- `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
@@ -89,18 +89,18 @@ Signed-in users can add, edit, and delete records from the working navigation, D
 
 - `Catalog` manages `data/catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
 - `Vendors` manages `data/vendors.json`.
-- `Humidors` manages `data/storage-locations.json` and shows the number of linked sections.
-- `Humidor Sections` stores drawers, shelves, trays, and zones in `data/storage-sub-locations.json`; it is available from Dashboard quick actions, not the left menu.
+- `Humidors` manages `data/storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
+- `Humidor Sections` stores drawers, shelves, trays, and zones in `data/storage-sub-locations.json`; it is managed inline from the Humidors page.
 - `Purchases` manages purchase headers in `data/purchases.json`, including status values for in-route, partially received, and received orders.
-- `PO Lines` links a purchase, catalog cigar, and humidor in `data/purchase-lines.json`; it is still available internally but hidden from the left menu for now.
+- `PO Lines` links a purchase, catalog cigar, humidor, and optional drawer/section in `data/purchase-lines.json`; it stays internally routable but is managed inline from the Purchases page.
 
-Creating a PO Line automatically creates the related inventory records:
+Creating or updating a PO Line automatically syncs the related inventory records and weighted purchase allocation fields:
 
 - `data/lots.json` receives the lot tied to the purchase line and catalog cigar.
-- `data/lot-location-balances.json` receives the starting humidor balance.
-- `data/inventory-events.json` receives a `purchase-receipt` event.
+- `data/lot-location-balances.json` receives the current humidor and optional drawer/section balance.
+- `data/inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
 
-The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, or humidor. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
 
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 
@@ -133,6 +133,14 @@ Recommended:
 ```powershell
 .\start-local-server.ps1
 ```
+
+To import the rich historical workbook into the local JSON model:
+
+```powershell
+.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx"
+```
+
+If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.
 
 To stop the local server:
 
