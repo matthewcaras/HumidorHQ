@@ -1,8 +1,8 @@
 <!--
 Filename: AGENTS.md
-Revision: 1.0.1
+Revision: 1.1.0
 Description: Shared Codex working instructions for the HumidorHQ repository.
-Modified Date: 2026-07-16 08:22 ET
+Modified Date: 2026-07-16 08:35 ET
 -->
 
 # HumidorHQ Codex Instructions
@@ -38,8 +38,17 @@ git checkout -b <short-feature-branch>
 - Merge only after verification passes.
 - Do not delete `php-json-migration-map` unless Jason or Matt explicitly asks.
 
-## Verification
+## One-Time Local Capability Check
 
+- Once per computer, check the local Codex skills, plugins, and tools needed for this repo before doing feature work.
+- Verify the machine has the expected basics for HumidorHQ work: Git, GitHub CLI, PHP, Node for JavaScript syntax checks, and PowerShell.
+- Verify Codex can see the skills/plugins/tools expected for repo work, including GitHub/PR workflow support and any local skills the user relies on.
+- Save the result in `.codex-local/tool-check.json` after the check is complete.
+- Do not commit `.codex-local/tool-check.json`; it is per-computer state.
+- If `.codex-local/tool-check.json` already exists, reuse it and do not repeat the capability check unless the user asks, the file is deleted, or tooling errors suggest it is stale.
+- Keep `.codex-local/tool-check.json.placeholder` tracked so each checkout has the expected local marker path.
+
+## Verification
 - For JavaScript changes, run:
 
 ```powershell

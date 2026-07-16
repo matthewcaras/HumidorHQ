@@ -1,0 +1,6 @@
+# Filename: tool-check.json.placeholder
+# Revision: 1.0.0
+# Description: Placeholder for the ignored per-computer Codex capability check marker.
+# Modified Date: 2026-07-16 08:35 ET
+
+Create `.codex-local/tool-check.json` on each computer after checking the local Codex skills, plugins, and tools needed for this repository.
