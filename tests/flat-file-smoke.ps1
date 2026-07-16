@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.3
+# Revision : 1.10.4
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 17:24 ET
+# Modified Date : 2026-07-16 17:45 ET
 # Changelog :
+# 1.10.4 verify hidden Jason utility page links and mobile preview controls
 # 1.10.3 skip binary screenshot and image assets during text metadata header validation
 # 1.10.2 verify empty humidor section cleanup during deletion
 # 1.10.1 verify unfiltered dashboard totals, inline humidor editing, protected deletion, and latest assets
@@ -96,6 +97,12 @@ function Get-PhpCommand {
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
+$jasonPagePath = Join-Path $repoRoot 'j\index.html'
+if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.html.' }
+$jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
+foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO.md', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected mobile size')) {
+    if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
+}
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
