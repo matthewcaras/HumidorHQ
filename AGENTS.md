@@ -1,8 +1,8 @@
 <!--
 Filename: AGENTS.md
-Revision: 1.0.0
+Revision: 1.0.1
 Description: Shared Codex working instructions for the HumidorHQ repository.
-Modified Date: 2026-07-16 08:10 ET
+Modified Date: 2026-07-16 08:22 ET
 -->
 
 # HumidorHQ Codex Instructions
@@ -22,7 +22,7 @@ These instructions apply to Codex sessions working in this repository. They are 
 ## Git Workflow
 
 - Do not work directly on `main`.
-- At the start of feature work, ask whether Matt or Jason is also actively working on this repo or the same page/function.
+- Ask once per Codex session whether Matt or Jason is also actively working on this repo or the same page/function, then remember and reuse that answer for the rest of the session unless the user says the situation changed.
 - If both people may be editing the same area, use separate branches and merge by PR so changes are reviewed instead of overwritten.
 - Start feature work from the latest `main`:
 
