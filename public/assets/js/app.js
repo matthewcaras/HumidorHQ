@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.4.0
+ * Revision: 1.4.1
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-16 07:45 ET
+ * Modified Date: 2026-07-16 08:55 ET
  */
 
 const API_BASE_URL = 'api'
@@ -46,7 +46,7 @@ const managedPages = {
   Catalog: {
     collection: 'catalog-cigars',
     title: 'Catalog Cigar',
-    intro: 'Add and maintain master cigar records. Quantity totals are calculated from PO Lines, lots, and humidor balances.',
+    intro: 'Add and maintain master cigar records. Quantity totals are calculated from purchases, lots, and humidor balances.',
     dependencies: ['purchase-lines', 'lots', 'lot-location-balances'],
     fields: [
       { name: 'manufacturer', label: 'Manufacturer', required: true },
@@ -94,7 +94,7 @@ const managedPages = {
   Purchases: {
     collection: 'purchases',
     title: 'Purchase',
-    intro: 'Track purchase headers from in-route through partial receipt and received status. PO Lines still hold cigar quantities.',
+    intro: 'Track purchase headers from in-route through partial receipt and received status. Purchased quantities are linked behind the scenes.',
     dependencies: ['vendors', 'purchase-lines'],
     fields: [
       { name: 'vendorId', label: 'Vendor', type: 'select', collection: 'vendors', optionLabel: 'name' },
@@ -183,6 +183,29 @@ const managedPages = {
   },
 }
 
+function validPageId(pageId) {
+  return pages.some((page) => page.id === pageId) || Boolean(managedPages[pageId]) || ['Audit', 'Changelog', 'Todo'].includes(pageId)
+}
+
+function pageFromHash() {
+  const pageId = decodeURIComponent(window.location.hash.replace(/^#/, '') || '')
+  return validPageId(pageId) ? pageId : 'Dashboard'
+}
+
+function setActivePage(pageId, options = {}) {
+  const nextPage = validPageId(pageId) ? pageId : 'Dashboard'
+  state.activePage = nextPage
+  state.formError = null
+  if (options.updateHash !== false && window.location.hash !== `#${encodeURIComponent(nextPage)}`) {
+    window.location.hash = encodeURIComponent(nextPage)
+  }
+}
+
+function navigateToPage(pageId) {
+  setActivePage(pageId)
+  render()
+  recordPageView(state.activePage)
+}
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
     '&': '&amp;',
@@ -396,10 +419,7 @@ function renderNav() {
       button.textContent = page.label
       button.disabled = !isAuthenticated()
       button.addEventListener('click', () => {
-        state.activePage = page.id
-        state.formError = null
-        render()
-        recordPageView(page.id)
+        navigateToPage(page.id)
       })
       return button
     }),
@@ -485,10 +505,10 @@ function renderDashboard(view) {
       <span class="dashboard-badge">${formatCount(counts.catalog + counts.lots + counts.balances)} linked records</span>
     </div>
     <div class="dashboard-record-list">
-      <div><span>Catalog Cigars</span><strong>${formatCount(counts.catalog)}</strong><small>data/catalog-cigars.json</small></div>
-      <div><span>Purchase Lines</span><strong>${formatCount(counts.lines)}</strong><small>data/purchase-lines.json</small></div>
-      <div><span>Lots</span><strong>${formatCount(counts.lots)}</strong><small>data/lots.json</small></div>
-      <div><span>Location Balances</span><strong>${formatCount(counts.balances)}</strong><small>data/lot-location-balances.json</small></div>
+      <button type="button" class="dashboard-link-row" data-page="Catalog"><span>Catalog Cigars</span><strong>${formatCount(counts.catalog)}</strong><small>data/catalog-cigars.json</small></button>
+      <button type="button" class="dashboard-link-row" data-page="Humidors"><span>Humidors</span><strong>${formatCount(counts.humidors)}</strong><small>data/storage-locations.json</small></button>
+      <button type="button" class="dashboard-link-row" data-page="Reports"><span>Lots</span><strong>${formatCount(counts.lots)}</strong><small>data/lots.json</small></button>
+      <button type="button" class="dashboard-link-row" data-page="Reports"><span>Location Balances</span><strong>${formatCount(counts.balances)}</strong><small>data/lot-location-balances.json</small></button>
     </div>
   `
 
@@ -502,10 +522,10 @@ function renderDashboard(view) {
       </div>
     </div>
     <div class="pipeline-list">
-      <div><span>Vendors</span><strong>${formatCount(counts.vendors)}</strong></div>
-      <div><span>Purchase Headers</span><strong>${formatCount(counts.purchases)}</strong></div>
-      <div><span>PO Lines</span><strong>${formatCount(counts.lines)}</strong></div>
-      <div><span>Receipt Events</span><strong>${formatCount(counts.events)}</strong></div>
+      <button type="button" class="dashboard-link-row" data-page="Vendors"><span>Vendors</span><strong>${formatCount(counts.vendors)}</strong></button>
+      <button type="button" class="dashboard-link-row" data-page="Purchases"><span>Purchases</span><strong>${formatCount(counts.purchases)}</strong></button>
+      <button type="button" class="dashboard-link-row" data-page="Catalog"><span>Catalog Cigars</span><strong>${formatCount(counts.catalog)}</strong></button>
+      <button type="button" class="dashboard-link-row" data-page="Reports"><span>Receipt Events</span><strong>${formatCount(counts.events)}</strong></button>
     </div>
   `
 
@@ -521,14 +541,6 @@ function renderDashboard(view) {
       <button type="button" data-page="HumidorSections">Add Humidor Section</button>
     </div>
   `
-  actions.querySelectorAll('button[data-page]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.activePage = button.dataset.page
-      state.formError = null
-      render()
-      recordPageView(state.activePage)
-    })
-  })
 
   const main = document.createElement('div')
   main.className = 'dashboard-main-grid'
@@ -543,6 +555,9 @@ function renderDashboard(view) {
   body.append(main, side)
 
   shell.append(summary, body)
+  shell.querySelectorAll('button[data-page]').forEach((button) => {
+    button.addEventListener('click', () => navigateToPage(button.dataset.page))
+  })
   view.append(shell)
 }
 
@@ -1059,6 +1074,7 @@ function render() {
 }
 
 async function init() {
+  setActivePage(pageFromHash(), { updateHash: false })
   render()
   try {
     state.appMeta = await apiGet('/app-meta')
@@ -1079,5 +1095,14 @@ async function init() {
   }
 }
 
+window.addEventListener('hashchange', () => {
+  const nextPage = pageFromHash()
+  if (nextPage === state.activePage) {
+    return
+  }
+  setActivePage(nextPage, { updateHash: false })
+  render()
+  recordPageView(state.activePage)
+})
 init()
 

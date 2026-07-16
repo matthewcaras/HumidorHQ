@@ -1,8 +1,8 @@
 <!--
 Filename: AGENTS.md
-Revision: 1.1.0
+Revision: 1.1.1
 Description: Shared Codex working instructions for the HumidorHQ repository.
-Modified Date: 2026-07-16 08:35 ET
+Modified Date: 2026-07-16 08:55 ET
 -->
 
 # HumidorHQ Codex Instructions
@@ -78,8 +78,7 @@ php -l .\api\index.php
   - `major` means breaking architecture or data changes.
   - `minor` means new workflow, page, API, or significant enhancement.
   - `feature` means focused feature work, fixes, docs, or cache updates.
-- Update `CHANGELOG.md` for meaningful changes.
-- Update `README.md` when behavior or workflow changes.
+- Update `CHANGELOG.md`, `README.md`, and project revision metadata for every project update.
 
 ## File Metadata
 

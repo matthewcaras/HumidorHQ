@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.7.0
+# Revision : 1.7.1
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, audit logging, changelog/todo access, connected CRUD endpoints, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 07:45 ET
+# Modified Date : 2026-07-16 08:55 ET
 # Changelog :
+# 1.7.1 verify Dashboard public links and hash-based page refresh routing
 # 1.7.0 verify hidden utility navigation, purchase status tracking, and humidor sub-locations
 # 1.6.6 verify purchase and catalog quantity display helpers
 # 1.6.5 verify header technology label and API status pill are removed
@@ -56,8 +57,8 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.6\.4') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.5\.6') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -67,6 +68,9 @@ $appJs = Get-Content -LiteralPath $appJsPath -Raw
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'dashboard-shell') { throw 'Plain JavaScript app is missing the screenshot-style dashboard shell.' }
+if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
+if ($appJs -notmatch 'dashboard-link-row' -or $appJs -notmatch 'data-page="Purchases"' -or $appJs -notmatch 'data-page="Humidors"') { throw 'Dashboard rows must link to related working pages.' }
+if ($appJs -match '<span>PO Lines</span>' -or $appJs -match '<span>Purchase Lines</span>') { throw 'Dashboard should not expose PO Lines or Purchase Lines rows.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
 foreach ($crudText in @('Vendors:', 'PurchaseLines:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
