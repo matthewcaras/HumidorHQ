@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.7.10
+ * Revision: 1.8.3
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 17:12 ET
+ * Modified Date: 2026-07-16 15:44 ET
  */
 
 const API_BASE_URL = 'api'
@@ -33,6 +33,7 @@ const state = {
   purchaseDraftOrder: null,
   purchaseDraftEntry: null,
   showPurchaseCatalogCreate: false,
+  showPurchaseOrderForm: false,
   selectedHumidorId: null,
   editingHumidorSectionId: null,
 }
@@ -897,14 +898,12 @@ function renderDashboard(view) {
   const summary = document.createElement('section')
   summary.className = 'dashboard-summary'
   summary.append(
-    metricCard('Humidors', humidors.length, 'Tracked storage locations'),
+    inventoryStatusCard(current.totalQuantity, enRouteQuantity, current.uniqueCigarCount),
     metricCard('Cost Basis', current.currentCostBasis, 'Current value paid for inventory', true),
     metricCard('MSRP Value', current.currentMsrpValue, 'Current retail value of inventory', true),
-    metricCard('Lifetime Smoked', smoked.quantity, `${money(smoked.totalCost)} cost / ${money(smoked.totalMsrp)} MSRP`),
-    inventoryStatusCard(current.totalQuantity, enRouteQuantity, current.uniqueCigarCount),
+    metricCard('Savings', lifetimeSavingsDisplay, 'Lifetime MSRP minus lifetime cost basis'),
     metricCard('Avg Cost', current.averageCostPerCigar || 0, 'Average cost per cigar on hand', true),
     metricCard('Avg MSRP', current.averageMsrpPerCigar || 0, 'Average MSRP per cigar on hand', true),
-    metricCard('Savings', lifetimeSavingsDisplay, 'Lifetime MSRP minus lifetime cost basis'),
   )
 
   const lifetime = document.createElement('section')
@@ -912,20 +911,22 @@ function renderDashboard(view) {
   lifetime.innerHTML = `
     <div class="section-heading compact-heading">
       <div>
-        <p class="eyebrow">Lifetime Smoked</p>
         <h3>Consumption Totals</h3>
       </div>
-      ${infoBadge(`${formatCount(smoked.quantity)} cigars`).outerHTML}
     </div>
-    <div class="metric-grid compact">
-      <article class="metric-card"><span>Quantity</span><strong>${formatCount(smoked.quantity)}</strong><small>Smoked inventory events</small></article>
-      <article class="metric-card"><span>Cost</span><strong>${money(smoked.totalCost)}</strong><small>Cost at removal event</small></article>
-      <article class="metric-card"><span>MSRP</span><strong>${money(smoked.totalMsrp)}</strong><small>MSRP at removal event</small></article>
+    <div class="metric-grid compact lifetime-metric-grid">
+      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(smoked.quantity)}</strong><small>Smoked</small></article>
+      <article class="metric-card"><span>Cost</span><strong>${money(smoked.totalCost)}</strong></article>
+      <article class="metric-card"><span>MSRP</span><strong>${money(smoked.totalMsrp)}</strong></article>
+      <article class="metric-card"><span>Avg Cost</span><strong>${money(smoked.averageCostPerCigar)}</strong></article>
+      <article class="metric-card"><span>Avg MSRP</span><strong>${money(smoked.averageMsrpPerCigar)}</strong></article>
     </div>
-    <div class="metric-grid compact">
-      <article class="metric-card"><span>Lifetime Gifted</span><strong>${formatCount(gifted.quantity)}</strong><small>Gifted inventory events</small></article>
-      <article class="metric-card"><span>Gifted Cost</span><strong>${money(gifted.totalCost)}</strong><small>Cost at gifted event</small></article>
-      <article class="metric-card"><span>Gifted MSRP</span><strong>${money(gifted.totalMsrp)}</strong><small>MSRP at gifted event</small></article>
+    <div class="metric-grid compact lifetime-metric-grid">
+      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(gifted.quantity)}</strong><small>Gifted</small></article>
+      <article class="metric-card"><span>Gifted Cost</span><strong>${money(gifted.totalCost)}</strong></article>
+      <article class="metric-card"><span>Gifted MSRP</span><strong>${money(gifted.totalMsrp)}</strong></article>
+      <article class="metric-card"><span>Avg Gifted Cost</span><strong>${money(gifted.averageCostPerCigar)}</strong></article>
+      <article class="metric-card"><span>Avg Gifted MSRP</span><strong>${money(gifted.averageMsrpPerCigar)}</strong></article>
     </div>
   `
 
@@ -934,7 +935,6 @@ function renderDashboard(view) {
   humidorPanel.innerHTML = `
     <div class="section-heading compact-heading">
       <div>
-        <p class="eyebrow">Humidors</p>
         <h3>Current Counts And Oldest Date</h3>
       </div>
     </div>
@@ -1620,7 +1620,6 @@ function renderPurchaseOrderForm(view) {
   const purchaseDraft = ensurePurchaseDraftOrder()
   ;[
     { name: 'vendorId', label: 'Vendor', type: 'select', collection: 'vendors', optionLabel: 'name' },
-    { name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true },
     { name: 'purchaseDate', label: 'Purchase Date', type: 'date', required: true },
     { name: 'invoiceNumber', label: 'Invoice / PO Number' },
     { name: 'subtotal', label: 'Subtotal', type: 'number', step: '0.01', required: true },
@@ -1640,9 +1639,6 @@ function renderPurchaseOrderForm(view) {
   Array.from(grid.querySelectorAll('input, select')).forEach((input) => {
     input.addEventListener('input', () => {
       purchaseDraft[input.name] = input.value
-      if (input.name === 'status' && input.value !== 'received') {
-        purchaseDraft.receivedDate = ''
-      }
       const totals = purchaseDraftTotals()
       purchaseDraft.totalPaid = totals.totalPaid.toFixed(2)
       totalPaidInput.value = money(purchaseDraft.totalPaid)
@@ -1803,7 +1799,16 @@ function renderPurchaseOrderForm(view) {
   save.type = 'submit'
   save.className = 'primary-button'
   save.textContent = 'Add Purchase Order'
-  actions.append(save)
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.className = 'secondary-button'
+  cancel.textContent = 'Cancel'
+  cancel.addEventListener('click', () => {
+    state.showPurchaseOrderForm = false
+    state.formError = null
+    render()
+  })
+  actions.append(save, cancel)
 
   if (state.formError) {
     const error = document.createElement('p')
@@ -1846,6 +1851,7 @@ function renderPurchaseOrderForm(view) {
       state.purchaseDraftOrder = null
       state.purchaseDraftEntry = null
       state.showPurchaseCatalogCreate = false
+      state.showPurchaseOrderForm = false
       await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
     } catch (error) {
       state.formError = error.message
@@ -1880,7 +1886,10 @@ function renderPurchaseRecordInlineEdit(container, purchase) {
     label.innerHTML = `<span>${escapeHtml(field.label)}</span><input value="${escapeHtml(field.value)}" disabled>`
     grid.append(label)
   })
-  const statusField = renderField({ name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true }, purchase)
+  const statusField = renderField(
+    { name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true },
+    { ...purchase, status: 'received' },
+  )
   const receivedDateField = renderField({ name: 'receivedDate', label: 'Received Date', type: 'date' }, { ...purchase, receivedDate: purchase.receivedDate || todayIsoDate() })
   grid.append(statusField, receivedDateField)
   const actions = document.createElement('div')
@@ -2288,10 +2297,212 @@ function renderPurchaseLinesPanel(view) {
   view.append(panel)
 }
 
+function renderPurchaseOverview(view) {
+  const purchases = records('purchases')
+  const lines = records('purchase-lines')
+  const totalPaid = purchases.reduce((sum, purchase) => sum + numericValue(purchase.totalPaid), 0)
+  const totalPurchased = lines.reduce((sum, line) => sum + numericValue(line.quantity), 0)
+
+  const hero = document.querySelector('.hero-panel')
+  const subtitle = document.querySelector('#page-subtitle')
+  const pageActions = document.querySelector('#page-actions')
+  hero.classList.add('purchase-hero')
+  subtitle.textContent = 'Track vendor history, purchase costs, and line-level receiving.'
+  subtitle.hidden = false
+  const addPurchase = document.createElement('button')
+  addPurchase.type = 'button'
+  addPurchase.className = 'primary-button purchase-add-button'
+  addPurchase.textContent = state.showPurchaseOrderForm ? 'Close Purchase' : '+ Add Purchase'
+  addPurchase.addEventListener('click', () => {
+    state.showPurchaseOrderForm = !state.showPurchaseOrderForm
+    state.formError = null
+    render()
+  })
+  pageActions.append(addPurchase)
+
+  const summary = document.createElement('div')
+  summary.className = 'metric-grid purchase-summary-grid'
+  summary.append(
+    metricCard('Total Purchases', purchases.length, ''),
+    metricCard('Total Cigars Purchased', totalPurchased, ''),
+    metricCard('Total Paid', totalPaid, '', true),
+    metricCard('En Route Cigars', enRoutePurchaseQuantity(), ''),
+  )
+  view.append(summary)
+}
+
+function renderPurchaseLineDetails(container, purchase) {
+  const lines = records('purchase-lines').filter((line) => Number(line.purchaseId) === Number(purchase.id))
+  if (lines.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'muted'
+    empty.textContent = 'No cigars are linked to this purchase order.'
+    container.append(empty)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll'
+  const table = document.createElement('table')
+  table.className = 'data-table purchase-lines-table'
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Cigar</th>
+        <th>Location</th>
+        <th>Qty</th>
+        <th>Purchase Price</th>
+        <th>Tracked MSRP</th>
+        <th>True Cost / Cigar</th>
+        <th>Line Basis</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `
+  const tbody = table.querySelector('tbody')
+  lines.forEach((line) => {
+    const locationLabel = Number(line.storageLocationId || 0) > 0
+      ? [humidorName(line.storageLocationId), line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General'].filter(Boolean).join(' / ')
+      : 'Not assigned yet'
+    const row = document.createElement('tr')
+    row.innerHTML = `
+      <td>${escapeHtml(cigarNameById(line.catalogCigarId))}</td>
+      <td>${escapeHtml(locationLabel)}</td>
+      <td>${formatCount(line.quantity)}</td>
+      <td>${escapeHtml(money(line.purchasePrice || line.lineSubtotal))}</td>
+      <td>${escapeHtml(money(line.msrpPerCigar || line.msrpPerCigarResolved))}</td>
+      <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
+      <td>${escapeHtml(money(line.trueCostBasis))}</td>
+    `
+    tbody.append(row)
+  })
+  tableWrap.append(table)
+  container.append(tableWrap)
+}
+
+function renderPurchaseRecords(view) {
+  const purchases = sortPurchasesNewest(records('purchases'))
+  const heading = document.createElement('div')
+  heading.className = 'section-heading purchase-records-heading'
+  heading.innerHTML = `
+    <div>
+      <h3>Purchase Records</h3>
+      <p class="muted">Select a purchase order to view its cigars. En route orders can be edited and received.</p>
+    </div>
+  `
+  view.append(heading)
+
+  if (purchases.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No purchase records yet.</p>'
+    view.append(empty)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll'
+  const table = document.createElement('table')
+  table.className = 'data-table managed-table purchase-records-table'
+  table.innerHTML = `
+    <thead>
+      <tr>
+        ${managedPages.Purchases.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `
+  const tbody = table.querySelector('tbody')
+  purchases.forEach((purchase) => {
+    const isExpanded = Number(state.selectedPurchaseId || 0) === Number(purchase.id)
+    const isEditing = Number(state.editing.purchases?.id || 0) === Number(purchase.id)
+    const row = document.createElement('tr')
+    row.className = 'clickable-record-row'
+    row.tabIndex = 0
+    row.setAttribute('aria-expanded', String(isExpanded))
+    managedPages.Purchases.columns.forEach((column) => {
+      const cell = document.createElement('td')
+      cell.textContent = column.value(purchase)
+      row.append(cell)
+    })
+    const actions = document.createElement('td')
+    actions.className = 'row-actions'
+    const viewButton = document.createElement('button')
+    viewButton.type = 'button'
+    viewButton.className = 'secondary-button compact-button'
+    viewButton.textContent = isExpanded ? 'Close' : 'View'
+    viewButton.addEventListener('click', (event) => {
+      event.stopPropagation()
+      state.selectedPurchaseId = isExpanded ? null : Number(purchase.id)
+      state.editing.purchases = null
+      render()
+    })
+    actions.append(viewButton)
+    if (!purchaseIsReceived(purchase)) {
+      const edit = document.createElement('button')
+      edit.type = 'button'
+      edit.className = 'primary-button compact-button'
+      edit.textContent = 'Edit / Receive'
+      edit.addEventListener('click', (event) => {
+        event.stopPropagation()
+        state.selectedPurchaseId = Number(purchase.id)
+        state.editing.purchases = purchase
+        state.formError = null
+        render()
+      })
+      actions.append(edit)
+    }
+    row.append(actions)
+    const toggleExpanded = () => {
+      state.selectedPurchaseId = isExpanded ? null : Number(purchase.id)
+      state.editing.purchases = null
+      render()
+    }
+    row.addEventListener('click', toggleExpanded)
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        toggleExpanded()
+      }
+    })
+    tbody.append(row)
+
+    if (isExpanded) {
+      const detailRow = document.createElement('tr')
+      detailRow.className = 'collection-expanded-row'
+      const detailCell = document.createElement('td')
+      detailCell.colSpan = managedPages.Purchases.columns.length + 1
+      const detail = document.createElement('div')
+      detail.className = 'collection-expanded-card purchase-record-detail'
+      const detailHeading = document.createElement('div')
+      detailHeading.className = 'section-heading compact-heading'
+      detailHeading.innerHTML = `
+        <div>
+          <h3>Purchased Cigars</h3>
+          <p class="muted">${formatCount(purchasedQuantityForPurchase(purchase.id))} cigars on ${escapeHtml(purchaseLabel(purchase))}.</p>
+        </div>
+      `
+      if (isEditing) {
+        renderPurchaseRecordInlineEdit(detail, purchase)
+      }
+      detail.append(detailHeading)
+      renderPurchaseLineDetails(detail, purchase)
+      detailCell.append(detail)
+      detailRow.append(detailCell)
+      tbody.append(detailRow)
+    }
+  })
+  tableWrap.append(table)
+  view.append(tableWrap)
+}
+
 function renderPurchasesPage(view) {
-  renderPurchaseOrderForm(view)
-  renderPurchaseLinesPanel(view)
-  renderManagedTable(view, managedPages.Purchases)
+  renderPurchaseOverview(view)
+  if (state.showPurchaseOrderForm) {
+    renderPurchaseOrderForm(view)
+  }
+  renderPurchaseRecords(view)
 }
 
 function humidorSectionPayload(form, humidorId) {
@@ -2676,6 +2887,11 @@ function render() {
   renderNav()
 
   document.querySelector('#page-title').textContent = isAuthenticated() ? state.activePage : 'Sign In'
+  document.querySelector('.hero-panel').classList.remove('purchase-hero')
+  const pageSubtitle = document.querySelector('#page-subtitle')
+  pageSubtitle.textContent = ''
+  pageSubtitle.hidden = true
+  document.querySelector('#page-actions').replaceChildren()
   const view = document.querySelector('#app-view')
   view.replaceChildren()
 

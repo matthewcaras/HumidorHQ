@@ -1,10 +1,14 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.8.10
+# Revision : 1.9.3
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 13:35 ET
+# Modified Date : 2026-07-16 15:44 ET
 # Changelog :
+# 1.9.3 verify simplified dashboard and sidebar labels plus latest JS asset version
+# 1.9.2 verify paired lifetime cost/MSRP average layout and latest asset versions
+# 1.9.1 verify dashboard summary order, lifetime averages, receive defaults, and cigar favicon
+# 1.9.0 verify purchases summary, toggled order builder, and expandable purchase records
 # 1.8.10 verify dual on-hand and en-route dashboard card plus latest asset versions
 # 1.8.9 verify dashboard en-route metric text and latest JS cache version
 # 1.8.8 verify purchase records sort and latest JS cache version
@@ -92,8 +96,9 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.7\.10') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.7\.6') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -106,6 +111,11 @@ if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMe
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout') { throw 'Signed-in controls must render in the sidebar footer.' }
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
+if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
+if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
+if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
+if ($index -match 'Flat-file collection manager' -or $appJs -match 'Smoked inventory events' -or $appJs -match 'Gifted inventory events') { throw 'Removed sidebar and consumption helper labels are still present.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
 foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm', 'renderPurchaseLinesPanel', 'renderHumidorSectionsPanel')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
