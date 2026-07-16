@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.8
+Revision: 1.6.9
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:11 ET
+Modified Date: 2026-07-16 09:20 ET
 -->
 
 # Changelog
@@ -15,10 +15,16 @@ Revision format: `major.minor.feature`
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
+## 1.6.9 - 2026-07-16
+
+- Added `setup-codex-profile.ps1` to save and reuse the HumidorHQ project path in PowerShell.
+- Fixed the incomplete profile setup flow with path validation, profile creation, existing variable replacement, and Codex launch handling.
+
 ## 1.6.8 - 2026-07-16
 
 - Updated shared Codex instructions to keep Jason work on `Jason-Bug-Fixes` by default.
 - Removed automatic merge and branch fast-forward expectations unless explicitly requested.
+
 ## 1.6.7 - 2026-07-16
 
 - Fixed Catalog and related pages failing when read-only internal collections were loaded for quantity calculations.

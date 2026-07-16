@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.4.4
+Revision: 1.4.5
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 09:11 ET
+Modified Date: 2026-07-16 09:20 ET
 -->
 
 # HumidorHQ
@@ -113,6 +113,16 @@ HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes d
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
+
+## Codex Setup Shortcut
+
+For a new computer or Matt's setup, run:
+
+```powershell
+.\setup-codex-profile.ps1
+```
+
+The script prompts for the existing HumidorHQ project folder, validates that it looks like this repo, saves `$HumidorHQ` to the current user's PowerShell profile, changes into that folder, and launches Codex. It does not create the project folder.
 
 ## Local Development
 
