@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.4.1
+ * Revision: 1.4.2
  * Description: Plain JavaScript browser source for HumidorHQ connected record management screens.
- * Modified Date: 2026-07-16 08:55 ET
+ * Modified Date: 2026-07-16 09:18 ET
  */
 
 const API_BASE_URL = 'api'
@@ -426,19 +426,26 @@ function renderNav() {
   )
 }
 
-function renderAccountBar(view) {
-  if (!isAuthenticated()) {
+function renderSidebarAccount() {
+  const account = document.querySelector('#sidebar-account')
+  if (!account) {
     return
   }
 
-  const accountBar = document.createElement('div')
-  accountBar.className = 'account-bar'
+  account.replaceChildren()
+  if (!isAuthenticated()) {
+    account.hidden = true
+    return
+  }
+
+  account.hidden = false
   const userName = state.session.user?.displayName || state.session.user?.username || 'Signed in'
-  accountBar.innerHTML = `<span>Signed in as <strong>${escapeHtml(userName)}</strong></span>`
+  const label = document.createElement('span')
+  label.innerHTML = `Signed in as <strong>${escapeHtml(userName)}</strong>`
 
   const logoutButton = document.createElement('button')
   logoutButton.type = 'button'
-  logoutButton.className = 'secondary-button'
+  logoutButton.className = 'sidebar-logout'
   logoutButton.textContent = 'Log out'
   logoutButton.addEventListener('click', async () => {
     await apiPost('/logout')
@@ -455,8 +462,7 @@ function renderAccountBar(view) {
     render()
   })
 
-  accountBar.append(logoutButton)
-  view.append(accountBar)
+  account.append(label, logoutButton)
 }
 
 function metricCard(label, value, detail) {
@@ -990,6 +996,7 @@ function renderError(view) {
 
 function render() {
   renderProjectMeta()
+  renderSidebarAccount()
   renderNav()
 
   document.querySelector('#page-title').textContent = isAuthenticated() ? state.activePage : 'Sign In'
@@ -1006,7 +1013,6 @@ function render() {
     return
   }
 
-  renderAccountBar(view)
 
   if (state.error) {
     renderError(view)

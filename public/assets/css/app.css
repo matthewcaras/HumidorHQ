@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.2.4
+ * Revision: 1.2.5
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 08:55 ET
+ * Modified Date: 2026-07-16 09:18 ET
  */
 
 :root {
@@ -78,14 +78,48 @@ textarea {
   margin: 7px 0 0;
 }
 
-.project-meta {
+.sidebar-footer {
   border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.sidebar-account {
+  color: #bda996;
+  display: grid;
+  font-size: 0.76rem;
+  gap: 6px;
+}
+
+.sidebar-account strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sidebar-logout {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #d8c5b4;
+  cursor: pointer;
+  font-size: 0.74rem;
+  min-height: 28px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.sidebar-logout:hover {
+  background: var(--panel-muted);
+  color: var(--accent-strong);
+}
+
+.project-meta {
   color: #9e8a78;
   display: grid;
   font-size: 0.76rem;
   gap: 4px;
-  margin-top: auto;
-  padding-top: 16px;
 }
 
 .nav {
@@ -312,16 +346,6 @@ h3 {
   border-color: rgba(242, 182, 109, 0.36);
   color: var(--accent-strong);
 }
-.account-bar {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  margin: -2px 0 18px;
-  padding-bottom: 14px;
-}
-
 .primary-button,
 .secondary-button {
   border: 1px solid transparent;

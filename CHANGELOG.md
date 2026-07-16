@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.6.4
+Revision: 1.6.5
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 08:55 ET
+Modified Date: 2026-07-16 09:18 ET
 -->
 
 # Changelog
@@ -14,6 +14,11 @@ Revision format: `major.minor.feature`
 - `major` - breaking architecture or data changes
 - `minor` - new workflow, page, API, or significant enhancement
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
+
+## 1.6.5 - 2026-07-16
+
+- Moved signed-in user and logout controls to the lower-left sidebar with project revision metadata.
+- Bumped static asset versions for the sidebar account layout update.
 
 ## 1.6.4 - 2026-07-16
 

@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.4.0
+Revision: 1.4.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 08:55 ET
+Modified Date: 2026-07-16 09:18 ET
 -->
 
 # HumidorHQ
@@ -21,6 +21,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Reports` is the current destination for inventory lots, balances, and receipt-event summaries until dedicated report screens are added.
 - `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
+- Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
 
 ## Current Target
 
