@@ -1,6 +1,6 @@
 <!--
 Filename: README.md
-Revision: 1.9.1
+Revision: 1.9.2
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 12:00 PM ET
 -->
@@ -159,6 +159,8 @@ Run the read-only integrity checker with:
 ```powershell
 .\tools\check-data-integrity.ps1
 ```
+
+`tools/repair-inventory-only.ps1` is a narrowly scoped offline migration for the confirmed Balance 66 location and Lots 30, 54, 65, and 70 quantity-cache corrections. It requires exact before-value matches, an external backup directory, an explicit apply confirmation, and an additional override for repository runtime data. Rehearse it only against a copied temporary data root. It does not use API synchronization, import, or rebuild logic and does not modify purchase, purchase-line, event, journal, counter, balance-quantity, or cost/MSRP snapshot data.
 
 The smoke test creates and removes its own temporary data root; it does not overwrite tracked `data/*.json` or the repository audit log.
 

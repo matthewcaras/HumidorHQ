@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.11.1
+Revision: 1.11.2
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 12:00 PM ET
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.11.2 - 2026-07-17
+
+Changed by: Matt
+
+- Added a preconditioned offline migration for the confirmed Balance 66 location correction and Lots 30, 54, 65, and 70 quantity-cache corrections.
+- Required an external timestamped backup, SHA-256 manifest, explicit apply confirmation, protected repository-data override, and post-repair inventory reconciliation.
+- Kept purchases, purchase lines, events, journals, counters, balance quantities, and cost/MSRP snapshots outside the migration scope.
+- Rehearsed the migration only against a copied temporary data root; no existing runtime records were repaired.
 
 ## 1.11.1 - 2026-07-17
 
