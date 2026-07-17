@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.12.0
+Revision: 1.12.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:34 AM ET
+Modified Date: 2026-07-17 8:06 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.12.1 - 2026-07-17
+
+Changed by: Jason
+
+- Cleared keyboard shortcut command buffers when ignored keys are pressed so shortcuts require a consecutive typed sequence.
+- Kept the primary navigation landmark as a real sidebar container while preserving the mobile footer layout.
+- Hid app navigation chrome until authentication is confirmed.
+- Gated utility and mobile preview pages behind the PHP session.
+- Added Apache/Hostinger rules to deny direct browser access to raw markdown files while keeping authenticated app views available.
+- Updated README, asset versions, and smoke-test coverage for the authentication and review-feedback fixes.
 
 ## 1.12.0 - 2026-07-17
 

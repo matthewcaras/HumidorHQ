@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.12.0
+# Revision : 1.12.1
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 7:34 AM ET
+# Modified Date : 2026-07-17 8:06 AM ET
 # Changelog :
+# 1.12.1 verify authenticated chrome, private utility gate, raw markdown denial rules, and shortcut buffer reset
 # 1.12.0 verify prefixed page keyboard shortcuts
 # 1.11.1 verify mobile menu collapses vertically and footer moves below content
 # 1.11.0 verify collapsible main menu, /j utility menu, and j n l shortcut
@@ -65,6 +66,7 @@ $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
+$rootHtaccessPath = Join-Path $repoRoot '.htaccess'
 $authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
 $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
@@ -105,16 +107,16 @@ function Get-PhpCommand {
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
-$jasonPagePath = Join-Path $repoRoot 'j\index.html'
-if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.html.' }
+$jasonPagePath = Join-Path $repoRoot 'j\index.php'
+if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.php.' }
 $jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
-foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view', 'jason-menu-toggle', 'menu-collapsed', 'humidorhq-jason-menu-collapsed')) {
+foreach ($jasonPageHook in @('current_auth_user', 'Location: ../', '../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view', 'jason-menu-toggle', 'menu-collapsed', 'humidorhq-jason-menu-collapsed')) {
     if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
 }
-$mobilePagePath = Join-Path $repoRoot 'mobile\index.html'
-if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.html.' }
+$mobilePagePath = Join-Path $repoRoot 'mobile\index.php'
+if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.php.' }
 $mobilePage = Get-Content -LiteralPath $mobilePagePath -Raw
-foreach ($mobilePageHook in @('Mobile Preview', '../#Dashboard', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
+foreach ($mobilePageHook in @('current_auth_user', 'Location: ../', 'Mobile Preview', '../#Dashboard', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
     if ($mobilePage -notmatch [regex]::Escape($mobilePageHook)) { throw "Visible Mobile preview page is missing hook: $mobilePageHook" }
 }
 foreach ($privateMobileHook in @('../#Changelog', '../#Audit', '../#Todo', 'Jason Tools')) {
@@ -127,13 +129,18 @@ if ($mobilePage -notmatch [regex]::Escape('<p class="size-readout" id="size-read
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
-if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer' -or $index -notmatch 'sidebar-toggle') { throw 'Sidebar account/footer/toggle containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'auth-pending' -or $index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer' -or $index -notmatch 'sidebar-toggle') { throw 'Authenticated shell containers are missing from index.html.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
-foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
+foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath, $rootHtaccessPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
+}
+
+$rootHtaccess = Get-Content -LiteralPath $rootHtaccessPath -Raw
+foreach ($htaccessHook in @('<FilesMatch "\.(md|markdown)$">', 'Require all denied')) {
+    if ($rootHtaccess -notmatch [regex]::Escape($htaccessHook)) { throw "Root .htaccess is missing raw markdown denial hook: $htaccessHook" }
 }
 
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
@@ -142,7 +149,7 @@ if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing pr
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-foreach ($sidebarHook in @('SIDEBAR_COLLAPSED_KEY', 'sidebarCollapsed', 'applySidebarCollapsed', 'installSidebarToggle', 'SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', 'installKeyboardShortcuts')) {
+foreach ($sidebarHook in @('SIDEBAR_COLLAPSED_KEY', 'sidebarCollapsed', 'applySidebarCollapsed', 'installSidebarToggle', 'SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
     if ($appJs -notmatch [regex]::Escape($sidebarHook)) { throw "Plain JavaScript app is missing sidebar or shortcut hook: $sidebarHook" }
 }
 foreach ($pageShortcutHook in @("token: 'das', page: 'Dashboard'", "token: 'col', page: 'Collection'", "token: 'cat', page: 'Catalog'", "token: 'ven', page: 'Vendors'", "token: 'pur', page: 'Purchases'", "token: 'hum', page: 'Humidors'", "token: 'rep', page: 'Reports'", "SHORTCUT_PREFIX = '!'")) {
@@ -163,7 +170,7 @@ foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
 if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
-foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)', 'display: contents', 'order: 4', 'max-height: 42vh')) {
+foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)', 'grid-template-rows: minmax(0, 1fr) auto', 'order: 2', 'max-height: 42vh')) {
     if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($sidebarCssHook)) { throw "CSS is missing collapsible sidebar hook: $sidebarCssHook" }
 }
 foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.12rem', 'white-space: nowrap', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
@@ -189,6 +196,11 @@ foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'pur
 }
 
 $appCss = Get-Content -LiteralPath $appCssPath -Raw
+if ($appCss -match 'display: contents') { throw 'CSS should not use display: contents on landmark/sidebar layout containers.' }
+foreach ($cssAuthHook in @('body.auth-pending .sidebar', 'grid-template-rows: minmax(0, 1fr) auto', 'grid-row: 2', 'order: 2')) {
+    if ($appCss -notmatch [regex]::Escape($cssAuthHook)) { throw "CSS is missing authenticated layout hook: $cssAuthHook" }
+}
+
 if ($appCss -match '`r`n') { throw 'CSS contains literal PowerShell newline escape text.' }
 
 $trackedFiles = & git -C $repoRoot ls-files
@@ -259,6 +271,10 @@ try {
 
     $anonymousSample = Invoke-WebRequest "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session -SkipHttpErrorCheck
     if ($anonymousSample.StatusCode -ne 401) { throw "Sample-data should require authentication. Expected 401, got $($anonymousSample.StatusCode)." }
+    foreach ($protectedPage in @('/j/', '/mobile/')) {
+        $anonymousPage = Invoke-WebRequest "http://127.0.0.1:$port$protectedPage" -Method Get -WebSession $session
+        if ($anonymousPage.Content -notmatch 'Sign In' -or $anonymousPage.Content -match 'Mobile Preview|Jason Tools') { throw "Anonymous $protectedPage page should land on sign-in only." }
+    }
 
     $loginBody = @{ username = 'testuser'; password = 'testpass' } | ConvertTo-Json
     $login = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $session

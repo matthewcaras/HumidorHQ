@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.5.2
+Revision: 1.5.3
 Description: HTML entry point for the HumidorHQ flat-file app.
-Modified Date: 2026-07-17 7:34 AM ET
+Modified Date: 2026-07-17 8:06 AM ET
 -->
 
 <!doctype html>
@@ -13,9 +13,9 @@ Modified Date: 2026-07-17 7:34 AM ET
     <meta name="description" content="HumidorHQ flat-file cigar collection manager">
     <title>HumidorHQ</title>
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.0">
-    <link rel="stylesheet" href="public/assets/css/app.css?v=1.6.1">
+    <link rel="stylesheet" href="public/assets/css/app.css?v=1.6.2">
   </head>
-  <body>
+  <body class="auth-pending">
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand">
@@ -23,13 +23,13 @@ Modified Date: 2026-07-17 7:34 AM ET
           <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-expanded="true" aria-controls="app-nav sidebar-account project-meta" title="Collapse menu">Menu</button>
         </div>
         <nav class="nav" id="app-nav"></nav>
-        <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
       </aside>
+      <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
 
       <main class="main-content">
         <section class="hero-panel" aria-labelledby="page-title">
           <div class="page-heading-copy">
-            <h2 id="page-title">Dashboard</h2>
+            <h2 id="page-title">Sign In</h2>
             <p id="page-subtitle" class="muted" hidden></p>
           </div>
           <div id="page-actions" class="page-actions"></div>
@@ -39,7 +39,7 @@ Modified Date: 2026-07-17 7:34 AM ET
       </main>
     </div>
 
-    <script src="public/assets/js/app.js?v=1.11.0" defer></script>
+    <script src="public/assets/js/app.js?v=1.11.1" defer></script>
   </body>
 </html>
 

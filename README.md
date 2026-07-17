@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.10.0
+Revision: 1.10.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:34 AM ET
+Modified Date: 2026-07-17 8:06 AM ET
 -->
 
 # HumidorHQ
@@ -23,8 +23,8 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Keyboard shortcuts use a `!` prefix and are ignored while typing in form fields: `!das` Dashboard, `!col` Collection, `!cat` Catalog, `!ven` Vendors, `!pur` Purchases, `!hum` Humidors, and `!rep` Reports.
 - Signed-in user, logout controls, Mobile preview access, project revision, a stacked modified date/time, and a collapsible menu control sit in the sidebar on desktop; on mobile, the account and revision footer moves below the content.
-- `Mobile` opens `/mobile/`, a visible viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
-- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, a collapsible left utility menu, and an in-page preview that defaults to full web view with optional mobile presets.
+- `Mobile` opens `/mobile/`, a sign-in protected viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing private utility links.
+- The private utility page is sign-in protected and provides quick links to Dashboard, Changelog, Audit, TODO, a collapsible left utility menu, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target
 
@@ -65,7 +65,7 @@ The browser app should not fetch raw JSON files directly. It should call PHP end
 
 ## Authentication
 
-Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
+Public deployments require sign-in before app navigation, utility pages, mobile preview pages, and data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
 
 `data/auth-users.json` is intentionally ignored by Git. Do not commit real usernames or password hashes.
 
@@ -115,6 +115,8 @@ Lots, location balances, and inventory events are readable by the app for report
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
 
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
+
+Direct raw markdown files are blocked by the root `.htaccess` file on Apache/Hostinger. Use the authenticated app pages or PHP API routes for Changelog and TODO access instead of browsing `CHANGELOG.md` or `TODO.md` directly.
 
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
 

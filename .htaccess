@@ -1,0 +1,13 @@
+# Filename: .htaccess
+# Revision: 1.0.0
+# Description: Apache hosting rules that block direct access to raw project documentation files.
+# Modified Date: 2026-07-17 8:06 AM ET
+
+<FilesMatch "\.(md|markdown)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>

@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.11.0
+ * Revision: 1.11.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 7:34 AM ET
+ * Modified Date: 2026-07-17 8:06 AM ET
  */
 
 const API_BASE_URL = 'api'
@@ -259,7 +259,12 @@ function installKeyboardShortcuts() {
       commandBuffer = ''
       return
     }
+    if (!isAuthenticated()) {
+      commandBuffer = ''
+      return
+    }
     if (event.key.length !== 1) {
+      commandBuffer = ''
       return
     }
 
@@ -878,6 +883,10 @@ function renderProjectMeta() {
 
 function renderNav() {
   const nav = document.querySelector('#app-nav')
+  if (!isAuthenticated()) {
+    nav.replaceChildren()
+    return
+  }
   nav.replaceChildren(
     ...pages.filter((page) => !page.hidden).map((page) => {
       const button = document.createElement('button')
@@ -3247,6 +3256,9 @@ function renderError(view) {
 }
 
 function render() {
+  document.body.classList.toggle('auth-pending', state.isLoading)
+  document.body.classList.toggle('is-authenticated', isAuthenticated())
+  document.body.classList.toggle('is-unauthenticated', !state.isLoading && !isAuthenticated())
   installSidebarToggle()
   applySidebarCollapsed()
   renderProjectMeta()
