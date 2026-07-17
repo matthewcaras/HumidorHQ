@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.1
+Revision: 1.10.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-07-17 ET
 -->
 
 # Changelog
@@ -21,9 +21,100 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
-## 1.10.1 - 2026-07-17
+## 1.10.2 - 2026-07-17
 
-Changed by: Jason
+Changed by: Jason (with Claude Code CLI)
+
+Remediation pass — low-risk, no-approval items from the consolidated review
+(`humidorhq-review-and-remediation.md`). Each item below is cross-referenced to its
+review ID. Verbose on purpose for later review. Verified with `php -l` on all changed
+files, `JSON.parse` on all `data/*.json`, and a full pass of `tests/flat-file-smoke.ps1`.
+
+### Review item M-1 — Malformed empty smoking-journal data file (remedied)
+
+- **Issue:** `data/smoking-journal-entries.json` was a 2-byte whitespace-only file that
+  failed `JSON.parse`. The PHP `load_collection()` tolerated it (empty/whitespace returns
+  `[]`), so the running app survived, but the tracked file was invalid JSON and any stricter
+  reader or external tooling would choke. It was also the only data collection missing a
+  `.lock` sidecar.
+- **Fix:** Replaced the file contents with a valid empty JSON array (`[]`).
+- **Noteworthy:** No schema or data change — the collection was already effectively empty.
+  If a future change tightens `load_collection()` to reject non-array JSON, this file is now
+  already compliant.
+- **Follow-up guard added (same batch):** `tests/flat-file-smoke.ps1` (bumped to 1.10.10) now
+  validates that every committed `data/*.json` parses as JSON (and is not empty/whitespace)
+  before the server run, so a malformed collection file fails the test instead of silently
+  shipping. This runs against committed state prior to any backup/mutation the test performs.
+
+### Review item M-2 — Smoking journal always reported location kind "GENERAL" (remedied)
+
+- **Issue:** `smoking_journal_location_snapshot()` read `$source['kind']`, but
+  storage-sub-location records store the classification under the `type` field
+  (see the managed-collection config and how sections are created). The result was that
+  `storageSubLocationKind` was always `'GENERAL'` regardless of the real section type
+  (e.g. Drawer, Shelf).
+- **Fix:** The snapshot now reads `type` (the actual stored field), falling back to
+  `'GENERAL'` only when no sub-location applies.
+- **Noteworthy:** This is a display/reporting correction only — no stored data changes.
+  `'GENERAL'` is now used intentionally to mean "no specific section" (humidor-level),
+  which pairs with the M-3 fix below. If any consumer specifically depended on the old
+  always-`GENERAL` behavior, it would now see real section types; none was found in `app.js`.
+
+### Review item M-3 — Journal dropped the humidor name for humidor-level smokes (remedied)
+
+- **Issue:** The journal's `sourceLocation` was derived solely from
+  `fromStorageSubLocationId`. When a cigar was assigned only at the humidor level (no
+  section), that field is legitimately null, so the whole location snapshot returned null and
+  the journal showed a blank source even though the humidor (`fromStorageLocationId`) was
+  known.
+- **Fix:** `smoking_journal_build_response()` now resolves the humidor directly from the
+  event's `fromStorageLocationId` and passes both the humidor and the optional sub-location
+  into `smoking_journal_location_snapshot()`, which was refactored to take
+  `(storageLocation, subLocation)`. When no sub-location applies, the sub-location fields are
+  returned with neutral defaults (`id 0`, name `''`, kind `'GENERAL'`) so the response shape
+  is unchanged for the frontend. As a safety net, the snapshot still back-resolves the parent
+  humidor from the sub-location if the humidor was not supplied.
+- **Noteworthy — REVIEW THIS:** the function signature of
+  `smoking_journal_location_snapshot()` changed from `($source)` to
+  `($storageLocation, $subLocation = null)`. Only `smoking_journal_build_response()` calls it,
+  which was updated in the same change, but confirm no other/future caller relies on the old
+  single-argument form. The response JSON shape (field names and types) is preserved.
+  This item overlaps with review items M-4 (snapshot location at event time) and M-7
+  (deletion history integrity); those remain open and are the more complete fix — this change
+  is the safe, immediate correction.
+
+### Review item L-3 — Login timing could reveal whether a username exists (remedied)
+
+- **Issue:** `login_with_credentials()` short-circuited before calling `password_verify()`
+  when the username was unknown, so a nonexistent-user response returned measurably faster
+  than a wrong-password response, enabling username enumeration by timing.
+- **Fix:** The login path now always calls `password_verify()` — against the real hash when
+  the account exists, or against a fixed valid dummy bcrypt hash
+  (`AUTH_TIMING_DUMMY_HASH`) when it does not — before deciding the outcome. The
+  failure result and message are unchanged.
+- **Noteworthy:** `AUTH_TIMING_DUMMY_HASH` is **not** a credential; it is a throwaway hash
+  whose only purpose is to make the bcrypt work happen on the miss path. It uses cost 12 to
+  match the default `password_hash()` cost on this PHP build so the timing lines up; if
+  production user hashes were created at a different cost factor, regenerate the dummy hash to
+  match. This narrows a timing side-channel but does not replace rate limiting — review item
+  H-5 (login throttling + failed-login auditing) is still open and is the primary brute-force
+  defense.
+
+### Review item L-4 — Validation/cleaning helpers lived in the router (remedied)
+
+- **Issue:** `clean_text_field`, `clean_optional_int`, `clean_optional_money`,
+  `money_to_cents`, and `cents_to_money` were defined in `api/index.php` (the router) rather
+  than alongside `positive_int_param` in `api/lib/Validation.php`.
+- **Fix:** Moved all five helpers verbatim into `Validation.php`. Behavior is identical; they
+  remain global functions and `Validation.php` is already included by `bootstrap.php` before
+  the router body executes, so all existing callers resolve unchanged.
+- **Noteworthy:** Pure relocation — no logic changed. Confirmed via grep that each function is
+  now defined exactly once (no duplicate declarations, which would be a fatal error) and that
+  `php -l` passes. This does **not** address review item M-5 (unknown money silently treated
+  as zero): `money_to_cents(null)` still returns `0` by design because allocation relies on
+  that; changing it is a separate, approval-gated accounting fix.
+
+
 
 - Removed the Full Web View preset from the visible `/mobile/` preview page.
 - Set `/mobile/` to default to the iPhone 16 Pro viewport on page load.

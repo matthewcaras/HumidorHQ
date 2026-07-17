@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.4.3
+ * Revision: 1.4.4
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-16 16:38 ET
+ * Modified Date: 2026-07-17 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -198,49 +198,6 @@ function managed_collection_config(string $collection): array
         throw new ApiError('COLLECTION_NOT_MANAGED', 'This collection cannot be managed through this endpoint.', 404);
     }
     return $configs[$collection];
-}
-
-function clean_text_field(array $input, string $field): string
-{
-    return trim((string) ($input[$field] ?? ''));
-}
-
-function clean_optional_int(array $input, string $field): ?int
-{
-    $value = trim((string) ($input[$field] ?? ''));
-    if ($value === '') {
-        return null;
-    }
-    if (!preg_match('/^-?[0-9]+$/', $value)) {
-        throw new ApiError('VALIDATION_ERROR', $field . ' must be a whole number.', 422);
-    }
-    return (int) $value;
-}
-
-function clean_optional_money(array $input, string $field): ?float
-{
-    $value = trim((string) ($input[$field] ?? ''));
-    if ($value === '') {
-        return null;
-    }
-    if (!is_numeric($value)) {
-        throw new ApiError('VALIDATION_ERROR', $field . ' must be a number.', 422);
-    }
-    return round((float) $value, 2);
-}
-
-function money_to_cents(mixed $value): int
-{
-    if ($value === null || $value === '') {
-        return 0;
-    }
-
-    return (int) round((float) $value * 100);
-}
-
-function cents_to_money(int $value): float
-{
-    return round($value / 100, 2);
 }
 
 function line_subtotal_cents(array $line): int

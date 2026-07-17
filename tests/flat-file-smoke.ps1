@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.9
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
-# Author : Jason Lamb (with help from Codex CLI)
+# Revision : 1.10.10
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, PHP JSON sample data, and that every committed data/*.json file is valid JSON.
+# Author : Jason Lamb (with help from Codex CLI and Claude Code CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 6:13 AM ET
+# Modified Date : 2026-07-17 ET
 # Changelog :
+# 1.10.10 validate every committed data/*.json parses as JSON before the server run (review item M-1 guard)
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
 # 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
@@ -101,6 +102,22 @@ function Get-PhpCommand {
 }
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
+
+# Data integrity: every committed data/*.json must be valid JSON (guards review item M-1 — a
+# malformed/empty collection file that json_decode/JSON.parse rejects). Runs against the committed
+# state before the server starts and before the test backs up or mutates any runtime data.
+$dataDir = Join-Path $repoRoot 'data'
+foreach ($dataJsonFile in (Get-ChildItem -LiteralPath $dataDir -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
+    $dataJsonRaw = Get-Content -LiteralPath $dataJsonFile.FullName -Raw
+    if ([string]::IsNullOrWhiteSpace($dataJsonRaw)) {
+        throw "Data file is empty or whitespace, not valid JSON: data/$($dataJsonFile.Name) (expected at least [] or {})."
+    }
+    try {
+        $null = $dataJsonRaw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "Data file is not valid JSON: data/$($dataJsonFile.Name) - $($_.Exception.Message)"
+    }
+}
 
 $jasonPagePath = Join-Path $repoRoot 'j\index.html'
 if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.html.' }

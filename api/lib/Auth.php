@@ -2,10 +2,14 @@
 declare(strict_types=1);
 /*
  * Filename: Auth.php
- * Revision: 1.0.0
+ * Revision: 1.0.1
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Modified Date: 2026-07-17 ET
  */
+
+// Valid bcrypt hash used only to normalize login timing when a username is unknown,
+// so a failed login takes the same time whether or not the account exists. Not a credential.
+const AUTH_TIMING_DUMMY_HASH = '$2y$12$522yAqBE7vX5xpDQusKhCuw6UtLPnEYtYejia9CvSvZGsCvOCi/v6';
 
 function start_api_session(): void
 {
@@ -79,7 +83,11 @@ function login_with_credentials(array $input): array
 
     $user = find_auth_user($username);
     $passwordHash = is_array($user) ? (string) ($user['passwordHash'] ?? '') : '';
-    if ($user === null || $passwordHash === '' || !password_verify($password, $passwordHash)) {
+    // Always run password_verify (against a dummy hash when the account is unknown or has no hash)
+    // so response timing does not reveal whether the username exists.
+    $verifyTarget = $passwordHash !== '' ? $passwordHash : AUTH_TIMING_DUMMY_HASH;
+    $passwordMatches = password_verify($password, $verifyTarget);
+    if ($user === null || $passwordHash === '' || !$passwordMatches) {
         throw new ApiError('AUTH_INVALID_CREDENTIALS', 'Username or password is incorrect.', 401);
     }
 

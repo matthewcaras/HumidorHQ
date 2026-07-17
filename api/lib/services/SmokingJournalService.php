@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: SmokingJournalService.php
- * Revision: 1.0.0
+ * Revision: 1.0.1
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Modified Date: 2026-07-17 ET
  */
 
 const JOURNAL_PROTECTED_BODY_FIELDS = [
@@ -101,31 +101,28 @@ function smoking_journal_catalog_cigar(?array $lot): ?array
     ];
 }
 
-function smoking_journal_location_snapshot(?array $source): ?array
+function smoking_journal_location_snapshot(?array $storageLocation, ?array $subLocation = null): ?array
 {
-    if ($source === null) {
-        return null;
-    }
-    $storageLocation = null;
-    if (isset($source['storageLocation']) && is_array($source['storageLocation'])) {
-        $storageLocation = $source['storageLocation'];
-    } elseif (isset($source['storageLocationId'])) {
-        $storageLocation = find_by_id('storage-locations', (int) $source['storageLocationId']);
+    // Fall back to the sub-location's parent humidor if the humidor was not resolved directly.
+    if ($storageLocation === null && $subLocation !== null && isset($subLocation['storageLocationId'])) {
+        $storageLocation = find_by_id('storage-locations', (int) $subLocation['storageLocationId']);
     }
     if ($storageLocation === null) {
         return null;
     }
     $locationActive = (bool) ($storageLocation['isActive'] ?? true);
-    $subLocationActive = (bool) ($source['isActive'] ?? true);
+    $hasSubLocation = $subLocation !== null;
+    $subLocationActive = $hasSubLocation ? (bool) ($subLocation['isActive'] ?? true) : true;
     return [
         'storageLocationId' => (int) ($storageLocation['id'] ?? 0),
         'storageLocationName' => (string) ($storageLocation['name'] ?? ''),
         'storageLocationIsActive' => $locationActive,
-        'storageSubLocationId' => (int) ($source['id'] ?? 0),
-        'storageSubLocationName' => (string) ($source['name'] ?? ''),
-        'storageSubLocationKind' => (string) ($source['kind'] ?? 'GENERAL'),
+        'storageSubLocationId' => $hasSubLocation ? (int) ($subLocation['id'] ?? 0) : 0,
+        'storageSubLocationName' => $hasSubLocation ? (string) ($subLocation['name'] ?? '') : '',
+        // Sub-location records store the classification under 'type'; 'GENERAL' means "no specific section".
+        'storageSubLocationKind' => $hasSubLocation ? (string) ($subLocation['type'] ?? 'GENERAL') : 'GENERAL',
         'storageSubLocationIsActive' => $subLocationActive,
-        'isArchived' => !$locationActive || !$subLocationActive,
+        'isArchived' => !$locationActive || ($hasSubLocation && !$subLocationActive),
     ];
 }
 
@@ -149,9 +146,13 @@ function smoking_journal_build_response(array $event, ?array $entry): array
     $lot = isset($event['lot']) && is_array($event['lot'])
         ? $event['lot']
         : (isset($event['lotId']) ? find_by_id('lots', (int) $event['lotId']) : null);
-    $source = isset($event['fromStorageSubLocation']) && is_array($event['fromStorageSubLocation'])
+    $subLocation = isset($event['fromStorageSubLocation']) && is_array($event['fromStorageSubLocation'])
         ? $event['fromStorageSubLocation']
         : (isset($event['fromStorageSubLocationId']) ? find_by_id('storage-sub-locations', (int) $event['fromStorageSubLocationId']) : null);
+    // Resolve the humidor directly so humidor-level smokes (no sub-location) still report a source.
+    $storageLocation = isset($event['fromStorageLocation']) && is_array($event['fromStorageLocation'])
+        ? $event['fromStorageLocation']
+        : (isset($event['fromStorageLocationId']) ? find_by_id('storage-locations', (int) $event['fromStorageLocationId']) : null);
 
     return [
         'journalEntry' => smoking_journal_entry_public($entry),
@@ -163,7 +164,7 @@ function smoking_journal_build_response(array $event, ?array $entry): array
             'createdAt' => (string) ($event['createdAt'] ?? ''),
             'lotId' => (int) ($event['lotId'] ?? 0),
             'catalogCigar' => smoking_journal_catalog_cigar($lot),
-            'sourceLocation' => smoking_journal_location_snapshot($source),
+            'sourceLocation' => smoking_journal_location_snapshot($storageLocation, $subLocation),
             'costPerCigarAtEvent' => decimal_to_string($event['costPerCigarAtEvent'] ?? null),
             'msrpPerCigarAtEvent' => decimal_to_string($event['msrpPerCigarAtEvent'] ?? null),
         ],
