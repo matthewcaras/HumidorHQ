@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.11.2
+Revision: 1.11.3
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 12:00 PM ET
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.11.3 - 2026-07-17
+
+Changed by: Matt
+
+- Added a dry-run-first offline migration for the approved Purchases 1-40 header-only subtotal and discount repair.
+- Preserved every stored `totalPaid` as authoritative, including the back-solved subtotals for purchases 10, 15, and 22.
+- Added exact per-purchase preconditions, external backup and manifest verification, automatic failure restoration, and protected collection/hash checks.
+- Rehearsed against copied temporary data only and reached zero integrity-checker errors or warnings without modifying live runtime JSON.
 
 ## 1.11.2 - 2026-07-17
 
