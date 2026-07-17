@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.10.2
+Revision: 1.10.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 8:28 AM ET
+Modified Date: 2026-07-17 8:45 AM ET
 -->
 
 # HumidorHQ
@@ -121,6 +121,8 @@ Direct raw markdown files are blocked by the root `.htaccess` file on Apache/Hos
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
 
 ## Codex Setup Shortcut
+
+The setup helper validates the project folder and safely updates an existing `$HumidorHQ` profile shortcut when one is already present.
 
 For a new computer or Matt's setup, run:
 

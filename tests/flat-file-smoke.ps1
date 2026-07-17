@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.12.2
+# Revision : 1.12.3
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 8:28 AM ET
+# Modified Date : 2026-07-17 8:45 AM ET
 # Changelog :
+# 1.12.3 reuse loaded CSS content for static hook checks
 # 1.12.2 verify private utility shortcut is documented as !jnl
 # 1.12.1 verify authenticated chrome, private utility gate, raw markdown denial rules, and shortcut buffer reset
 # 1.12.0 verify prefixed page keyboard shortcuts
@@ -170,12 +171,13 @@ if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 
 foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
-if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
+$appCss = Get-Content -LiteralPath $appCssPath -Raw
+if ($appCss -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
 foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)', 'grid-template-rows: minmax(0, 1fr) auto', 'order: 2', 'max-height: 42vh')) {
-    if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($sidebarCssHook)) { throw "CSS is missing collapsible sidebar hook: $sidebarCssHook" }
+    if ($appCss -notmatch [regex]::Escape($sidebarCssHook)) { throw "CSS is missing collapsible sidebar hook: $sidebarCssHook" }
 }
 foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.12rem', 'white-space: nowrap', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
-    if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
+    if ($appCss -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
 }
 foreach ($hiddenToolHook in @('renderHiddenPageTools', 'Jason Tools', 'href="j/"', "label: 'TODO'", 'pageLabel(state.activePage)')) {
     if ($appJs -notmatch [regex]::Escape($hiddenToolHook)) { throw "Plain JavaScript app is missing hidden utility hook: $hiddenToolHook" }
@@ -196,7 +198,6 @@ foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'pur
     if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
 }
 
-$appCss = Get-Content -LiteralPath $appCssPath -Raw
 if ($appCss -match 'display: contents') { throw 'CSS should not use display: contents on landmark/sidebar layout containers.' }
 foreach ($cssAuthHook in @('body.auth-pending .sidebar', 'grid-template-rows: minmax(0, 1fr) auto', 'grid-row: 2', 'order: 2')) {
     if ($appCss -notmatch [regex]::Escape($cssAuthHook)) { throw "CSS is missing authenticated layout hook: $cssAuthHook" }

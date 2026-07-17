@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.12.2
+Revision: 1.12.3
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 8:28 AM ET
+Modified Date: 2026-07-17 8:45 AM ET
 -->
 
 # Changelog
@@ -21,12 +21,21 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.12.3 - 2026-07-17
+
+Changed by: Jason
+
+- Reused the loaded CSS content in the smoke test instead of re-reading `app.css` for each static CSS hook.
+- Fixed the Codex setup profile updater so replacing `$HumidorHQ` uses a Regex instance with an actual replacement count.
+- Updated README and smoke-test coverage for the maintenance fixes.
+
 ## 1.12.2 - 2026-07-17
 
 Changed by: Jason
 
 - Made the private utility keyboard command explicit as `!jnl` so it matches the prefixed shortcut pattern.
 - Bumped the JavaScript asset version and smoke-test coverage for the shortcut label.
+
 ## 1.12.1 - 2026-07-17
 
 Changed by: Jason
