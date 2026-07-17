@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.7.2
+Revision: 1.8.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 16:38 ET
+Modified Date: 2026-07-17 6:13 AM ET
 -->
 
 # HumidorHQ
@@ -19,9 +19,11 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
-- `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
+- `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
-- Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
+- Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.
+- `Mobile` opens `/mobile/`, a visible viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
+- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target
 
@@ -47,6 +49,7 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `data/` - JSON data files used by the PHP API
 - `docs/` - design notes, migration notes, and conversion tracking
 - `CHANGELOG.md` - revisioned project change history
+- Changelog entries include `Changed by` labels derived from Git author history where the author can be identified.
 
 Legacy TypeScript, React, Vite, Node, and Prisma runtime files have been removed from the deployable app. Historical conversion notes may still reference those technologies for migration context only.
 
@@ -102,6 +105,8 @@ Creating or updating a PO Line automatically syncs the related inventory records
 
 The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
 
+Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
+
 Lots, location balances, and inventory events are readable by the app for reports and quantity calculations, but direct writes stay controlled by purchase-line and inventory workflows.
 
 ## Audit Trail
@@ -111,6 +116,16 @@ HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes d
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
 The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
+
+## Codex Setup Shortcut
+
+For a new computer or Matt's setup, run:
+
+```powershell
+.\setup-codex-profile.ps1
+```
+
+The script prompts for the existing HumidorHQ project folder, validates that it looks like this repo, saves `$HumidorHQ` to the current user's PowerShell profile, changes into that folder, and launches Codex. It does not create the project folder.
 
 ## Local Development
 

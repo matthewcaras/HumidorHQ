@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.1
+ * Revision: 1.9.4
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 16:38 ET
+ * Modified Date: 2026-07-16 19:25 ET
  */
 
 const API_BASE_URL = 'api'
@@ -54,7 +54,7 @@ const pages = [
   { id: 'Reports', label: 'Reports' },
   { id: 'Audit', label: 'Audit', hidden: true },
   { id: 'Changelog', label: 'Changelog', hidden: true },
-  { id: 'Todo', label: 'Todo', hidden: true },
+  { id: 'Todo', label: 'TODO', hidden: true },
 ]
 
 const purchaseStatusOptions = [
@@ -170,6 +170,9 @@ const managedPages = {
   },
 }
 
+function pageLabel(pageId) {
+  return pages.find((page) => page.id === pageId)?.label || pageId
+}
 function validPageId(pageId) {
   return pages.some((page) => page.id === pageId) || Boolean(managedPages[pageId])
 }
@@ -763,9 +766,14 @@ function renderProjectMeta() {
     meta.textContent = 'Rev loading...'
     return
   }
+  const modifiedParts = String(state.appMeta.modifiedEt || '').split(' ')
+  const modifiedDate = modifiedParts.shift() || ''
+  const modifiedTime = modifiedParts.join(' ')
   meta.innerHTML = `
     <span>Rev ${escapeHtml(state.appMeta.revision)}</span>
-    <span>Modified ${escapeHtml(state.appMeta.modifiedEt)}</span>
+    <span>Modified</span>
+    <span>${escapeHtml(modifiedDate)}</span>
+    <span>${escapeHtml(modifiedTime)}</span>
   `
 }
 
@@ -819,7 +827,12 @@ function renderSidebarAccount() {
     render()
   })
 
-  account.append(label, logoutButton)
+  const mobileLink = document.createElement('a')
+  mobileLink.className = 'sidebar-mobile-link'
+  mobileLink.href = 'mobile/'
+  mobileLink.textContent = 'Mobile'
+
+  account.append(label, logoutButton, mobileLink)
 }
 
 function metricCard(label, value, detail, moneyMode = false) {
@@ -3011,7 +3024,18 @@ async function ensureAuditData() {
   state.auditData = await apiGet('/audit')
 }
 
+function renderHiddenPageTools(view) {
+  const tools = document.createElement('div')
+  tools.className = 'hidden-page-tools'
+  tools.innerHTML = `
+    <a class="secondary-button compact-button" href="j/">Jason Tools</a>
+    <button type="button" class="secondary-button compact-button" data-page="Dashboard">Dashboard</button>
+  `
+  tools.querySelector('button').addEventListener('click', () => navigateToPage('Dashboard'))
+  view.append(tools)
+}
 function renderAudit(view) {
+  renderHiddenPageTools(view)
   const rows = state.auditData?.records || []
   const summary = document.createElement('p')
   summary.className = 'muted'
@@ -3048,6 +3072,7 @@ async function ensureChangelog() {
 }
 
 function renderChangelog(view) {
+  renderHiddenPageTools(view)
   const panel = document.createElement('pre')
   panel.className = 'markdown-panel'
   panel.textContent = state.changelog?.content || 'CHANGELOG.md is empty.'
@@ -3059,6 +3084,7 @@ async function ensureTodo() {
 }
 
 function renderTodo(view) {
+  renderHiddenPageTools(view)
   const panel = document.createElement('pre')
   panel.className = 'markdown-panel'
   panel.textContent = state.todo?.content || 'TODO.md is empty.'
@@ -3124,7 +3150,7 @@ function render() {
   renderSidebarAccount()
   renderNav()
 
-  document.querySelector('#page-title').textContent = isAuthenticated() ? state.activePage : 'Sign In'
+  document.querySelector('#page-title').textContent = isAuthenticated() ? pageLabel(state.activePage) : 'Sign In'
   document.querySelector('.hero-panel').classList.remove('purchase-hero')
   const pageSubtitle = document.querySelector('#page-subtitle')
   pageSubtitle.textContent = ''

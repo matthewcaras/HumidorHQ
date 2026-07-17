@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.1
+ * Revision: 1.5.5
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 16:38 ET
+ * Modified Date: 2026-07-16 19:25 ET
  */
 
 :root {
@@ -45,7 +45,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: 165px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -114,12 +114,26 @@ textarea {
   background: var(--panel-muted);
   color: var(--accent-strong);
 }
+.sidebar-mobile-link {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #d8c5b4;
+  font-size: 0.74rem;
+  min-height: 28px;
+  padding: 5px 8px;
+  text-decoration: none;
+}
+
+.sidebar-mobile-link:hover {
+  background: var(--panel-muted);
+  color: var(--accent-strong);
+}
 
 .project-meta {
   color: #9e8a78;
   display: grid;
   font-size: 0.76rem;
-  gap: 4px;
+  gap: 2px;
 }
 
 .nav {
@@ -268,6 +282,15 @@ h3 {
 .lifetime-quantity-card {
   align-content: center;
   grid-row: 1 / span 2;
+}
+.lifetime-metric-grid .metric-card strong {
+  font-size: 1.12rem;
+  line-height: 1.08;
+  white-space: nowrap;
+}
+
+.lifetime-metric-grid .lifetime-quantity-card strong {
+  font-size: 1.32rem;
 }
 
 .dashboard-body {
@@ -898,6 +921,20 @@ h3 {
   background: rgba(255, 255, 255, 0.025);
 }
 
+
+.hidden-page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.hidden-page-tools .compact-button {
+  align-items: center;
+  display: inline-flex;
+  min-height: 36px;
+  text-decoration: none;
+}
 .markdown-panel {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
