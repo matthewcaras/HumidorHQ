@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.10.1
+Revision: 1.10.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 8:06 AM ET
+Modified Date: 2026-07-17 8:28 AM ET
 -->
 
 # HumidorHQ
@@ -21,7 +21,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
-- Keyboard shortcuts use a `!` prefix and are ignored while typing in form fields: `!das` Dashboard, `!col` Collection, `!cat` Catalog, `!ven` Vendors, `!pur` Purchases, `!hum` Humidors, and `!rep` Reports.
+- Keyboard shortcuts use a `!` prefix and are ignored while typing in form fields: `!das` Dashboard, `!col` Collection, `!cat` Catalog, `!ven` Vendors, `!pur` Purchases, `!hum` Humidors, `!rep` Reports, and `!jnl` for the private utility page.
 - Signed-in user, logout controls, Mobile preview access, project revision, a stacked modified date/time, and a collapsible menu control sit in the sidebar on desktop; on mobile, the account and revision footer moves below the content.
 - `Mobile` opens `/mobile/`, a sign-in protected viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing private utility links.
 - The private utility page is sign-in protected and provides quick links to Dashboard, Changelog, Audit, TODO, a collapsible left utility menu, and an in-page preview that defaults to full web view with optional mobile presets.

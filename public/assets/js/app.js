@@ -1,14 +1,14 @@
 /*
  * Filename: app.js
- * Revision: 1.11.1
+ * Revision: 1.11.2
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 8:06 AM ET
+ * Modified Date: 2026-07-17 8:28 AM ET
  */
 
 const API_BASE_URL = 'api'
 const SIDEBAR_COLLAPSED_KEY = 'humidorhq-sidebar-collapsed'
 const SHORTCUT_PREFIX = '!'
-const PRIVATE_PAGE_SHORTCUT = { token: 'jnl', path: 'j/' }
+const PRIVATE_PAGE_SHORTCUT = { token: 'jnl', command: '!jnl', path: 'j/' }
 const PAGE_SHORTCUTS = [
   { token: 'das', page: 'Dashboard' },
   { token: 'col', page: 'Collection' },

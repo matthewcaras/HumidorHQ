@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.12.1
+Revision: 1.12.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 8:06 AM ET
+Modified Date: 2026-07-17 8:28 AM ET
 -->
 
 # Changelog
@@ -21,6 +21,12 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.12.2 - 2026-07-17
+
+Changed by: Jason
+
+- Made the private utility keyboard command explicit as `!jnl` so it matches the prefixed shortcut pattern.
+- Bumped the JavaScript asset version and smoke-test coverage for the shortcut label.
 ## 1.12.1 - 2026-07-17
 
 Changed by: Jason
@@ -56,7 +62,7 @@ Changed by: Jason
 
 - Added a collapsible main sidebar with saved browser preference.
 - Added a collapsible left utility menu on `/j/` with saved browser preference.
-- Added the `j n l` keyboard shortcut from the main app to open `/j/` when not typing in a form field.
+- Added the `!jnl` keyboard shortcut from the main app to open `/j/` when not typing in a form field.
 - Updated README, asset versions, and smoke-test coverage for the collapsible menus and shortcut.
 
 ## 1.10.1 - 2026-07-17

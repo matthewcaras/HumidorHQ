@@ -1,14 +1,15 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.12.1
+# Revision : 1.12.2
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 8:06 AM ET
+# Modified Date : 2026-07-17 8:28 AM ET
 # Changelog :
+# 1.12.2 verify private utility shortcut is documented as !jnl
 # 1.12.1 verify authenticated chrome, private utility gate, raw markdown denial rules, and shortcut buffer reset
 # 1.12.0 verify prefixed page keyboard shortcuts
 # 1.11.1 verify mobile menu collapses vertically and footer moves below content
-# 1.11.0 verify collapsible main menu, /j utility menu, and j n l shortcut
+# 1.11.0 verify collapsible main menu, /j utility menu, and !jnl shortcut
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
 # 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
@@ -130,7 +131,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'auth-pending' -or $index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer' -or $index -notmatch 'sidebar-toggle') { throw 'Authenticated shell containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -149,7 +150,7 @@ if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing pr
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-foreach ($sidebarHook in @('SIDEBAR_COLLAPSED_KEY', 'sidebarCollapsed', 'applySidebarCollapsed', 'installSidebarToggle', 'SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
+foreach ($sidebarHook in @('SIDEBAR_COLLAPSED_KEY', 'sidebarCollapsed', 'applySidebarCollapsed', 'installSidebarToggle', 'SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', "command: '!jnl'", 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
     if ($appJs -notmatch [regex]::Escape($sidebarHook)) { throw "Plain JavaScript app is missing sidebar or shortcut hook: $sidebarHook" }
 }
 foreach ($pageShortcutHook in @("token: 'das', page: 'Dashboard'", "token: 'col', page: 'Collection'", "token: 'cat', page: 'Catalog'", "token: 'ven', page: 'Vendors'", "token: 'pur', page: 'Purchases'", "token: 'hum', page: 'Humidors'", "token: 'rep', page: 'Reports'", "SHORTCUT_PREFIX = '!'")) {
