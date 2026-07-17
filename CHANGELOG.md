@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.3
+Revision: 1.10.4
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 ET
 -->
@@ -20,6 +20,53 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.10.4 - 2026-07-17
+
+Changed by: Jason (with Claude Code CLI)
+
+Remediation batch 3 — capture location history on inventory events (review items M-4 and
+M-7). Additive event fields plus a smoking-journal fallback; existing readers ignore the new
+fields, so there is no behavior change for current data. Verified with `php -l` and a full
+`tests/flat-file-smoke.ps1` pass (the move test now asserts the snapshot is written).
+
+### Review item M-4 — location snapshots were resolved live, not captured at event time (remedied going forward)
+
+- **Issue:** Inventory events stored only location IDs; the smoking journal (and other views)
+  resolved the humidor/section live at read time. Renaming, archiving, or deleting a location
+  rewrote how past events read, so history was not immutable — counter to the "records what
+  happened" design principle.
+- **Fix:** move, remove (SMOKED/GIFTED/DISCARDED), and purchase-receipt events now also store the
+  human-readable names captured at event time, via a new `location_name_snapshot()` helper:
+  - removal events: `fromStorageLocationName` / `fromStorageSubLocationName` / `fromStorageSubLocationKind`
+  - move events: both `from*` and `to*` name fields
+  - purchase-receipt events: `storageLocationName` / `storageSubLocationName` / `storageSubLocationKind`
+- **Noteworthy / still open:**
+  - Snapshots are captured **going forward only**. Events created before this change have no
+    snapshot and still resolve live (unchanged behavior) until an optional one-time backfill is run.
+    No migration is forced.
+  - The smoking journal uses the snapshot as a **fallback** (the live record wins while it still
+    exists), so a pure rename is still reflected for locations that were only renamed, not deleted.
+    "Always prefer the historical name over the current one" is a further UX decision, deliberately
+    NOT made here.
+  - The frontend Removal History view resolves location live and additionally reads the wrong field
+    (`event.storageLocationId` instead of `fromStorageLocationId`), so it does not yet consume these
+    snapshots. That correction needs an `app.js` asset-version bump and is tracked separately — out
+    of scope for this server-only, no-approval batch.
+
+### Review item M-7 — humidor deletion orphaned historical location references (mitigated)
+
+- **Issue:** Deleting a humidor cascades its sections; past inventory-events / smoking-journal
+  references to those section IDs then resolved to blank locations.
+- **Fix:** With M-4's captured names, the smoking journal now shows the original humidor/section
+  name (marked archived) even after the live record is deleted, instead of a blank source
+  (`smoking_journal_event_location_fallback()`).
+- **Noteworthy:** This mitigates the display loss for **new** events without making humidors
+  un-deletable — the existing guards that block deletion while inventory or purchase lines exist are
+  unchanged. Old events without a captured name still go blank on deletion until backfilled. A hard
+  "block deletion when any historical event references this location" guard was considered and
+  rejected as too restrictive for routine cleanup; the snapshot approach preserves history while
+  still allowing deletion.
 
 ## 1.10.3 - 2026-07-17
 

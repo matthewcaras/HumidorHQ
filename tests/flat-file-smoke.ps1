@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.10
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, PHP JSON sample data, and that every committed data/*.json file is valid JSON.
+# Revision : 1.10.11
+# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, PHP JSON sample data, that every committed data/*.json file is valid JSON, and that inventory moves snapshot location names onto the event.
 # Author : Jason Lamb (with help from Codex CLI and Claude Code CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-17 ET
 # Changelog :
+# 1.10.11 verify inventory move snapshots from/to humidor names onto the move event (review item M-4)
 # 1.10.10 validate every committed data/*.json parses as JSON before the server run (review item M-1 guard)
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
@@ -370,6 +371,7 @@ try {
     $eventsAfterMove = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
     $moveEvent = $eventsAfterMove | Where-Object { $_.eventType -eq 'move' -and $_.lotId -eq $linkedLot.id -and $_.quantity -eq 2 } | Select-Object -First 1
     if (-not $moveEvent -or $moveEvent.costPerCigarAtEvent -ne 10 -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the lot cost and MSRP on the move event.' }
+    if ($moveEvent.fromStorageLocationName -ne $createdHumidor.data.name -or $moveEvent.toStorageLocationName -ne $createdHumidor.data.name) { throw 'Inventory move did not snapshot from/to humidor names onto the move event (review item M-4).' }
     $pageAuditBody = @{ page = 'Dashboard'; action = 'view' } | ConvertTo-Json
     $pageAudit = Invoke-RestMethod "http://127.0.0.1:$port/api/audit/page" -Method Post -ContentType 'application/json' -Body $pageAuditBody -WebSession $session
     if ($pageAudit.data.logged -ne $true) { throw 'Page audit endpoint did not confirm logging.' }

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /*
  * Filename: SmokingJournalService.php
- * Revision: 1.0.1
+ * Revision: 1.0.2
  * Description: PHP application source file for the HumidorHQ flat-file app.
  * Modified Date: 2026-07-17 ET
  */
@@ -126,6 +126,29 @@ function smoking_journal_location_snapshot(?array $storageLocation, ?array $subL
     ];
 }
 
+function smoking_journal_event_location_fallback(array $event): ?array
+{
+    // Used when the live humidor record no longer exists (deleted, or renamed away): fall back to
+    // the location names captured on the event at removal time so history still reads correctly
+    // (review items M-4 / M-7). Marked archived because the original record is gone.
+    $name = $event['fromStorageLocationName'] ?? null;
+    if (!is_string($name) || trim($name) === '') {
+        return null;
+    }
+    $subName = $event['fromStorageSubLocationName'] ?? null;
+    $hasSub = is_string($subName) && trim($subName) !== '';
+    return [
+        'storageLocationId' => (int) ($event['fromStorageLocationId'] ?? 0),
+        'storageLocationName' => $name,
+        'storageLocationIsActive' => false,
+        'storageSubLocationId' => $hasSub ? (int) ($event['fromStorageSubLocationId'] ?? 0) : 0,
+        'storageSubLocationName' => $hasSub ? $subName : '',
+        'storageSubLocationKind' => $hasSub ? (string) ($event['fromStorageSubLocationKind'] ?? 'GENERAL') : 'GENERAL',
+        'storageSubLocationIsActive' => false,
+        'isArchived' => true,
+    ];
+}
+
 function smoking_journal_entry_public(?array $entry): ?array
 {
     if ($entry === null) {
@@ -164,7 +187,9 @@ function smoking_journal_build_response(array $event, ?array $entry): array
             'createdAt' => (string) ($event['createdAt'] ?? ''),
             'lotId' => (int) ($event['lotId'] ?? 0),
             'catalogCigar' => smoking_journal_catalog_cigar($lot),
-            'sourceLocation' => smoking_journal_location_snapshot($storageLocation, $subLocation),
+            // Prefer the live location record; if it is gone, fall back to the names captured on the event.
+            'sourceLocation' => smoking_journal_location_snapshot($storageLocation, $subLocation)
+                ?? smoking_journal_event_location_fallback($event),
             'costPerCigarAtEvent' => decimal_to_string($event['costPerCigarAtEvent'] ?? null),
             'msrpPerCigarAtEvent' => decimal_to_string($event['msrpPerCigarAtEvent'] ?? null),
         ],

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.4.4
+ * Revision: 1.4.5
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
  * Modified Date: 2026-07-17 ET
  */
@@ -413,6 +413,10 @@ function sync_purchase_inventory(int $purchaseId): void
         }
 
         $eventDate = $purchase['receivedDate'] ?? $purchase['purchaseDate'] ?? null;
+        $receiptSnapshot = location_name_snapshot(
+            (int) $line['storageLocationId'],
+            isset($line['storageSubLocationId']) && $line['storageSubLocationId'] !== null ? (int) $line['storageSubLocationId'] : null
+        );
         $eventRecord = [
             'purchaseLineId' => $lineId,
             'purchaseId' => $purchaseId,
@@ -420,6 +424,9 @@ function sync_purchase_inventory(int $purchaseId): void
             'catalogCigarId' => (int) $line['catalogCigarId'],
             'storageLocationId' => (int) $line['storageLocationId'],
             'storageSubLocationId' => $line['storageSubLocationId'] ?? null,
+            'storageLocationName' => $receiptSnapshot['locationName'],
+            'storageSubLocationName' => $receiptSnapshot['subLocationName'],
+            'storageSubLocationKind' => $receiptSnapshot['subLocationKind'],
             'eventType' => 'purchase-receipt',
             'quantity' => (int) $line['quantity'],
             'eventDate' => $eventDate,
@@ -485,6 +492,19 @@ function delete_purchase_line_inventory(int $purchaseLineId): void
         ));
         save_collection($collection, $rows);
     }
+}
+
+function location_name_snapshot(?int $storageLocationId, ?int $storageSubLocationId): array
+{
+    // Capture human-readable location names at event time so history survives a later
+    // rename, archive, or deletion of the humidor/section (review items M-4 / M-7).
+    $humidor = $storageLocationId ? find_by_id('storage-locations', $storageLocationId) : null;
+    $section = $storageSubLocationId ? find_by_id('storage-sub-locations', $storageSubLocationId) : null;
+    return [
+        'locationName' => $humidor['name'] ?? null,
+        'subLocationName' => $section['name'] ?? null,
+        'subLocationKind' => $section['type'] ?? null,
+    ];
 }
 
 function move_inventory(array $input): array
@@ -579,6 +599,11 @@ function move_inventory(array $input): array
     ));
     save_collection('lot-location-balances', $allBalances);
 
+    $fromSnapshot = location_name_snapshot(
+        isset($sourceBalance['storageLocationId']) ? (int) $sourceBalance['storageLocationId'] : null,
+        isset($sourceBalance['storageSubLocationId']) && $sourceBalance['storageSubLocationId'] !== null ? (int) $sourceBalance['storageSubLocationId'] : null
+    );
+    $toSnapshot = location_name_snapshot($toStorageLocationId, $toStorageSubLocationId);
     $events = load_collection('inventory-events');
     $events[] = [
         'id' => next_id('inventory-events'),
@@ -591,6 +616,12 @@ function move_inventory(array $input): array
         'fromStorageSubLocationId' => $sourceBalance['storageSubLocationId'] ?? null,
         'toStorageLocationId' => $toStorageLocationId,
         'toStorageSubLocationId' => $toStorageSubLocationId,
+        'fromStorageLocationName' => $fromSnapshot['locationName'],
+        'fromStorageSubLocationName' => $fromSnapshot['subLocationName'],
+        'fromStorageSubLocationKind' => $fromSnapshot['subLocationKind'],
+        'toStorageLocationName' => $toSnapshot['locationName'],
+        'toStorageSubLocationName' => $toSnapshot['subLocationName'],
+        'toStorageSubLocationKind' => $toSnapshot['subLocationKind'],
         'quantity' => $quantity,
         'eventDate' => substr($now, 0, 10),
         'occurredAt' => $now,
@@ -669,6 +700,10 @@ function remove_inventory(array $input): array
     ));
     save_collection('lot-location-balances', $balances);
 
+    $fromSnapshot = location_name_snapshot(
+        isset($sourceBalance['storageLocationId']) ? (int) $sourceBalance['storageLocationId'] : null,
+        isset($sourceBalance['storageSubLocationId']) && $sourceBalance['storageSubLocationId'] !== null ? (int) $sourceBalance['storageSubLocationId'] : null
+    );
     $events = load_collection('inventory-events');
     $event = [
         'id' => next_id('inventory-events'),
@@ -679,6 +714,9 @@ function remove_inventory(array $input): array
         'catalogCigarId' => $lot['catalogCigarId'] ?? null,
         'fromStorageLocationId' => $sourceBalance['storageLocationId'] ?? null,
         'fromStorageSubLocationId' => $sourceBalance['storageSubLocationId'] ?? null,
+        'fromStorageLocationName' => $fromSnapshot['locationName'],
+        'fromStorageSubLocationName' => $fromSnapshot['subLocationName'],
+        'fromStorageSubLocationKind' => $fromSnapshot['subLocationKind'],
         'quantity' => $quantity,
         'eventDate' => substr($now, 0, 10),
         'occurredAt' => $now,
