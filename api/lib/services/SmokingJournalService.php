@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: SmokingJournalService.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Modified Date: 2026-07-17 17:30 ET
  */
 
 const JOURNAL_PROTECTED_BODY_FIELDS = [
@@ -179,6 +179,9 @@ function get_smoking_journal(int $inventoryEventId): array
 
 function upsert_smoking_journal(int $inventoryEventId, array $input): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => upsert_smoking_journal($inventoryEventId, $input));
+    }
     $event = smoking_journal_find_event($inventoryEventId);
     $data = smoking_journal_parse_input($input);
     $now = now_iso();
@@ -208,6 +211,9 @@ function upsert_smoking_journal(int $inventoryEventId, array $input): array
 
 function delete_smoking_journal(int $inventoryEventId): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => delete_smoking_journal($inventoryEventId));
+    }
     $event = smoking_journal_find_event($inventoryEventId);
     delete_by_field('smoking-journal-entries', 'inventoryEventId', $inventoryEventId);
     return smoking_journal_build_response($event, null);

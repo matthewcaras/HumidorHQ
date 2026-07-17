@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.1
+Revision: 1.15.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-07-17 7:00 PM ET
 -->
 
 # Changelog
@@ -20,6 +20,83 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.15.0 - 2026-07-17
+
+Changed by: Matt
+
+- Replaced the fixed/UTC browser date defaults with local-calendar dates and added strict server validation for purchase, expected, and received dates plus local-timezone inventory event dates.
+- Made PHP authoritative for purchase totals and deterministic integer-cent largest-remainder allocations; rejected negative, over-precision, out-of-range, and invalid numeric inputs.
+- Preserved unknown purchase adjustments and cost/MSRP values as unknown through allocations, dashboards, purchase summaries, and removal reports while keeping known zero as `$0.00`.
+- Synchronized each affected Lot `currentQuantity` from positive balances during move/removal transactions and added regression coverage for exact reconciliation.
+- Explicitly rejected unsupported partially received status instead of silently treating it as pending; line-level partial receiving remains deferred to a separately migrated, idempotent workflow.
+
+## 1.14.0 - 2026-07-17
+
+Changed by: Matt
+
+- Added shared username/client login throttling with bounded inputs, constant-work unknown-user verification, and failed/rate-limited attempt auditing that never records passwords.
+- Added 30-minute idle and 12-hour absolute session limits, strict session mode, CSRF tokens for login and every authenticated mutation, and token rotation at login.
+- Added configurable forced/proxy-aware Secure-cookie detection plus API and Apache content, framing, referrer, permissions, cache, and content-type response defenses.
+- Added isolated regression coverage for throttling, audit safety, CSRF rejection/acceptance, cookie flags, security headers, and both session-expiration policies.
+
+## 1.13.0 - 2026-07-17
+
+Changed by: Matt
+
+- Serialized runtime mutations behind one external-data transaction lock so reads, relationship validation, ID allocation, and writes use one consistent snapshot.
+- Staged every changed JSON collection before replacement and added exact backups plus a recovery journal that rolls back failed commits and is recovered automatically after an interrupted process.
+- Moved counter allocation into the same transaction as its records and delayed mutation success-audit entries until the data commit succeeds.
+- Added isolated concurrent-writer, injected-failure rollback, and simulated-process-interruption recovery tests without touching current runtime JSON.
+
+## 1.12.0 - 2026-07-17
+
+Changed by: Matt
+
+- Required `HUMIDORHQ_DATA_ROOT` to resolve to readable, writable runtime JSON outside the repository and deployed application tree.
+- Added tracked empty `seed-data/`, guarded external data-copy tooling, startup validation, and external-aware local/auth/integrity utilities.
+- Moved smoke fixtures to tracked seed data and added isolated coverage proving repeated code deployment leaves external runtime hashes unchanged.
+- Documented explicit Windows preservation and Hostinger setup; no current runtime JSON was automatically copied, moved, or modified.
+
+## 1.11.3 - 2026-07-17
+
+Changed by: Matt
+
+- Added a dry-run-first offline migration for the approved Purchases 1-40 header-only subtotal and discount repair.
+- Preserved every stored `totalPaid` as authoritative, including the back-solved subtotals for purchases 10, 15, and 22.
+- Added exact per-purchase preconditions, external backup and manifest verification, automatic failure restoration, and protected collection/hash checks.
+- Rehearsed against copied temporary data only and reached zero integrity-checker errors or warnings without modifying live runtime JSON.
+
+## 1.11.2 - 2026-07-17
+
+Changed by: Matt
+
+- Added a preconditioned offline migration for the confirmed Balance 66 location correction and Lots 30, 54, 65, and 70 quantity-cache corrections.
+- Required an external timestamped backup, SHA-256 manifest, explicit apply confirmation, protected repository-data override, and post-repair inventory reconciliation.
+- Kept purchases, purchase lines, events, journals, counters, balance quantities, and cost/MSRP snapshots outside the migration scope.
+- Rehearsed the migration only against a copied temporary data root; no existing runtime records were repaired.
+
+## 1.11.1 - 2026-07-17
+
+Changed by: Matt
+
+- Blocked new purchase lines from being added to received purchases or purchases with existing inventory history.
+- Blocked draft lines from being reassigned to those purchases before any line, counter, inventory, or audit mutation.
+- Applied notes-only immutability and deletion protection to incomplete lines already attached to received purchases.
+- Added isolated regression coverage for rejected creation, reassignment, structural edits, deletion, unchanged hashes/counters, and the preserved pending-purchase workflow.
+
+## 1.11.0 - 2026-07-17
+
+Changed by: Matt
+
+- Rejected exact same-location moves in PHP before any balance, event, audit, or counter mutation and prevented the same selection in the existing move form.
+- Made received purchase inventory history immutable through generic edits and deletion while leaving isolated draft-line deletion available.
+- Added referential deletion guards for linked Catalog cigars, Vendors, Humidors, Humidor sections, purchases, purchase lines, and Smoking Journal history.
+- Prevented generic purchase synchronization from resetting existing received Lots, balances, or receipt events.
+- Made the smoke test use a disposable data root and added isolated regression checks for the Stage 0 safeguards.
+- Required an isolated data root or deliberate destructive override for import and inventory-rebuild tools.
+- Added a read-only integrity checker for quantity, relationship, ID, counter, move, journal, and purchase-total defects.
+- Documented that no existing records were automatically repaired or migrated.
 
 ## 1.10.1 - 2026-07-17
 

@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.8.1
+Revision: 1.13.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-07-17 7:00 PM ET
 -->
 
 # HumidorHQ
@@ -16,7 +16,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
-- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
+- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
@@ -30,7 +30,8 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 The target runtime is:
 
 - PHP for API endpoints
-- JSON files for persistent data and sample data
+- JSON files in an external configured directory for runtime data
+- Empty sample/initialization JSON tracked under `seed-data/`
 - Plain JavaScript for browser behavior
 - HTML and CSS for the frontend
 - No TypeScript
@@ -46,7 +47,8 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `index.html` - browser entry point
 - `public/` - static assets
 - `api/` - PHP API front controller and supporting libraries
-- `data/` - JSON data files used by the PHP API
+- `seed-data/` - tracked empty initialization JSON; never used directly at runtime
+- external `HUMIDORHQ_DATA_ROOT` - live JSON and credentials, outside Git and the deployed application
 - `docs/` - design notes, migration notes, and conversion tracking
 - `CHANGELOG.md` - revisioned project change history
 - Changelog entries include `Changed by` labels derived from Git author history where the author can be identified.
@@ -57,16 +59,26 @@ Temporary probe files are not part of the deployable app and should not be commi
 
 ## Data Model
 
-Runtime data is stored in JSON files under `data/`. These files also serve as sample data for local and deployed testing.
+Runtime data is stored in the external directory identified by `HUMIDORHQ_DATA_ROOT`. Startup fails safely if the variable is missing, the directory is inside the application tree, required JSON is missing or malformed, or PHP cannot read and write the directory.
 
-The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger. `GET /api/sample-data` summarizes the current repo JSON files for the flat dashboard shell.
+Data-changing API workflows use one serialized transaction boundary. Collections are reloaded while that lock is held, IDs are allocated with their records, all changed JSON is staged before replacement, and exact backups plus a recovery journal restore the prior state after a write failure or interrupted process. Successful mutation audit entries are delayed until the JSON commit completes.
+
+Purchase dates use the browser's local calendar by default and are validated as real `YYYY-MM-DD` dates by PHP. Inventory event dates use `HUMIDORHQ_TIMEZONE`, defaulting to `America/Indiana/Indianapolis`.
+
+PHP is authoritative for purchase totals and weighted allocations. Monetary calculations use integer cents and a stable line-ID largest-remainder allocation. Known zero remains `$0.00`; missing adjustments, costs, and MSRP values remain `Unknown` rather than being included as zero in complete-looking totals.
+
+The browser app never fetches raw JSON directly. It calls PHP endpoints under `api/`, and PHP reads and writes the external files. `seed-data/` contains empty Git-tracked initialization data and is blocked from browser access. See [External Runtime Data Setup](docs/RUNTIME_DATA.md) for Windows migration and Hostinger configuration.
 
 
 ## Authentication
 
-Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
+Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in external runtime `auth-users.json`.
 
-`data/auth-users.json` is intentionally ignored by Git. Do not commit real usernames or password hashes.
+Runtime credentials are never read from the repository. Do not commit real usernames or password hashes.
+
+Authentication applies shared username and client-address throttles, audits failed and rate-limited attempts without passwords, and uses a constant-work dummy verification for unknown usernames. Authenticated sessions expire after 30 minutes of inactivity or 12 hours total by default. Login and every authenticated state-changing request require a session CSRF token. Session cookies are HttpOnly, SameSite Strict, and Secure whenever HTTPS is detected or forced by production configuration.
+
+Production deployments should set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Set `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when the hosting proxy reliably overwrites forwarded headers. Session and throttle defaults can be adjusted with the documented `HUMIDORHQ_SESSION_*` and `HUMIDORHQ_LOGIN_*` environment variables in [External Runtime Data Setup](docs/RUNTIME_DATA.md).
 
 Create or update a local user with:
 
@@ -74,7 +86,7 @@ Create or update a local user with:
 php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
 ```
 
-That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only. The committed `data/auth-users.json.placeholder` file documents the ignored runtime credential file that must exist in deployed environments.
+That command requires `HUMIDORHQ_DATA_ROOT` and atomically writes `auth-users.json` there. For an empty installation, copy `seed-data/` externally first, set the variable, then create the first user.
 
 Public routes:
 
@@ -90,32 +102,43 @@ Protected routes include `GET /api/sample-data` and future data-changing endpoin
 
 Signed-in users can add, edit, and delete records from the working navigation, Dashboard linked count rows, and Dashboard quick actions:
 
-- `Catalog` manages `data/catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
-- `Vendors` manages `data/vendors.json`.
-- `Humidors` manages `data/storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
-- `Humidor Sections` stores drawers, shelves, trays, and zones in `data/storage-sub-locations.json`; it is managed inline from the Humidors page.
-- `Purchases` manages purchase headers in `data/purchases.json`, including status values for in-route, partially received, and received orders.
-- `PO Lines` links a purchase, catalog cigar, humidor, and optional drawer/section in `data/purchase-lines.json`; it stays internally routable but is managed inline from the Purchases page.
+- `Catalog` manages external runtime `catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
+- `Vendors` manages external runtime `vendors.json`.
+- `Humidors` manages external runtime `storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
+- `Humidor Sections` stores drawers, shelves, trays, and zones in external runtime `storage-sub-locations.json`.
+- `Purchases` manages purchase headers in external runtime `purchases.json`.
+- `PO Lines` links purchases, cigars, and storage in external runtime `purchase-lines.json`.
 
 Creating or updating a PO Line automatically syncs the related inventory records and weighted purchase allocation fields:
 
-- `data/lots.json` receives the lot tied to the purchase line and catalog cigar.
-- `data/lot-location-balances.json` receives the current humidor and optional drawer/section balance.
-- `data/inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
+- `lots.json` receives the lot tied to the purchase line and catalog cigar.
+- `lot-location-balances.json` receives the current humidor and optional drawer/section balance.
+- `inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
 
-The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are calculated authoritatively in PHP and allocated across lines by weighted purchase price. Moves and removals also reconcile the affected Lot quantity cache from current positive balances. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
+
+This release supports `In Route` (`pending`) and `Received` purchases. `partially-received` is rejected rather than silently downgraded. Line-level partial receiving is deliberately deferred until a dedicated schema migration and idempotent receive/store endpoint can preserve ordered quantity, received quantity, receipt dates, and duplicate-receipt protection.
 
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 
 Lots, location balances, and inventory events are readable by the app for reports and quantity calculations, but direct writes stay controlled by purchase-line and inventory workflows.
 
+### Functional Stabilization Stage 0 Guardrails
+
+- An exact same-Humidor/same-section inventory move is rejected before balances, events, or counters are changed. The move form also prevents selecting the exact current destination.
+- Purchase lines attached to a received purchase, or to a purchase with Lots, balances, or InventoryEvents, are temporarily immutable except for notes. New lines cannot be added or reassigned to those purchases, including when an existing received line is incomplete and has no history of its own.
+- Received purchase headers with inventory history permit only non-inventory edits to invoice number, expected date, tracking number, and notes. Generic edits cannot reconstruct established receipt state.
+- Catalog cigars, Vendors, Humidors, and Humidor sections cannot be physically deleted while the relationships protected by the API still reference them. Purchase lines and purchases with inventory history cannot be physically deleted.
+- No existing runtime records are automatically migrated, repaired, cascaded, or reconstructed by these guardrails.
+- `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation, relationship, identifier, counter, move, journal, and purchase-total issues and never repairs data.
+
 ## Audit Trail
 
-HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
+HumidorHQ writes user activity to external runtime `audit-log.jsonl`. Each record includes date-time, user, page, and action. The file is created automatically by the PHP API.
 
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
-The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
+The audit log, lock files, temporary writes, credentials, and backups remain outside Git and the deployed code tree.
 
 ## Codex Setup Shortcut
 
@@ -129,18 +152,46 @@ The script prompts for the existing HumidorHQ project folder, validates that it 
 
 ## Local Development
 
-For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
+No package install or build command is required. Before starting PHP, create or copy an external runtime directory and set `HUMIDORHQ_DATA_ROOT`. Preview preservation of the current local records with:
+
+```powershell
+.\tools\copy-runtime-data.ps1 -SourceRoot '.\data' -DestinationRoot 'C:\HumidorHQ\runtime-data' -ManifestRoot 'C:\HumidorHQ\migration-manifests'
+```
+
+The copy utility is dry-run by default. The explicit apply command and complete Windows setup are documented in [docs/RUNTIME_DATA.md](docs/RUNTIME_DATA.md). This change does not automatically copy, move, or delete existing records.
 
 Recommended:
 
 ```powershell
+$env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
 .\start-local-server.ps1
 ```
 
 To import the rich historical workbook into the local JSON model:
 
 ```powershell
-.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx"
+.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test"
+```
+
+The importer and inventory rebuild utility require an explicit isolated `-DataRoot` for testing or a deliberate destructive override. They are not part of runtime initialization.
+
+Run the read-only integrity checker with:
+
+```powershell
+.\tools\check-data-integrity.ps1 # reads HUMIDORHQ_DATA_ROOT
+```
+
+`tools/repair-inventory-only.ps1` is a narrowly scoped offline migration for the confirmed Balance 66 location and Lots 30, 54, 65, and 70 quantity-cache corrections. It requires exact before-value matches, an external backup directory, an explicit apply confirmation, and an additional override for repository runtime data. Rehearse it only against a copied temporary data root. It does not use API synchronization, import, or rebuild logic and does not modify purchase, purchase-line, event, journal, counter, balance-quantity, or cost/MSRP snapshot data.
+
+`tools/repair-purchase-headers.ps1` is a separately guarded offline migration for the approved Purchases 1-40 subtotal population and negative-discount normalization. Stored `totalPaid` remains authoritative. The script is dry-run by default, requires exact header preconditions and an external verified backup, and changes only `subtotal` and negative `discount` fields in `purchases.json`. It does not resynchronize purchase lines or modify allocations, inventory, history, counters, quantities, IDs, or snapshots.
+
+The automated smoke, runtime-separation, transaction, and authentication-security tests create and remove external temporary data roots from tracked seed data; they do not use or overwrite current local runtime JSON. Run them with:
+
+```powershell
+.\tests\flat-file-smoke.ps1
+.\tests\runtime-data-separation.ps1
+.\tests\flat-file-transaction.ps1
+.\tests\auth-security.ps1
 ```
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.
@@ -151,7 +202,7 @@ To stop the local server:
 .\stop-local-server.ps1
 ```
 
-Manual PHP equivalent:
+Manual PHP equivalent after setting `HUMIDORHQ_DATA_ROOT`:
 
 ```powershell
 php -S 127.0.0.1:8000 -t .
@@ -167,12 +218,13 @@ http://127.0.0.1:8000/
 
 The intended deployment flow is:
 
-1. Push changes to GitHub.
-2. GitHub webhook or deployment automation sends the flat files to Hostinger.
-3. Hostinger serves `index.html`, static assets, PHP API files, and protected JSON data files.
-4. The frontend calls relative PHP API paths.
+1. Create and protect an external Hostinger runtime directory outside `public_html` and any Git deployment target.
+2. Configure `HUMIDORHQ_DATA_ROOT` persistently in Hostinger/PHP configuration.
+3. Push code and tracked seed data to GitHub.
+4. GitHub deployment replaces only the application tree; the external runtime directory is not a deployment target.
+5. The frontend calls relative PHP API paths, and PHP accesses the external JSON directory.
 
-No build artifact is required for deployment.
+No build artifact is required. Account-specific paths, runtime JSON, credentials, audit logs, manifests, and backups must remain outside Git. See [docs/RUNTIME_DATA.md](docs/RUNTIME_DATA.md) for Hostinger setup and permissions.
 
 ## Revision Policy
 
