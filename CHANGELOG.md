@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.2
+Revision: 1.10.3
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 ET
 -->
@@ -20,6 +20,35 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.10.3 - 2026-07-17
+
+Changed by: Jason (with Claude Code CLI)
+
+Remediation batch 2 — defensive `JsonStore` hardening (review item H-4). No approval or
+data migration needed; the happy path is behavior-identical. Verified with `php -l`, a
+direct `next_id` exercise, and a full `tests/flat-file-smoke.ps1` pass.
+
+### Review item H-4 — `next_id` could collide and could corrupt counters.json (remedied)
+
+- **Issue (collision):** `next_id()` defaulted a missing counter to `1` instead of deriving
+  from existing rows, so a regenerated / older-backup / import-populated `counters.json` would
+  re-issue ids `1, 2, 3...` that collide with existing records; subsequent
+  `find_by_id`/`update`/`delete` then act on the wrong row.
+- **Issue (corruption):** `next_id()` wrote `counters.json` with a direct `file_put_contents`
+  (no temp-file + rename, unlike `save_collection`), so a crash or full disk mid-write could
+  leave the file truncated → `load_collection('counters')` throws `STORE_INVALID_JSON` and
+  every subsequent create fails with a 500 until the file is manually repaired.
+- **Fix:** `next_id()` now assigns `max(stored_counter, max_existing_id + 1)` via a new
+  `max_existing_id()` helper, and writes `counters.json` atomically (temp + rename) under the
+  existing counters lock.
+- **Noteworthy:** On the normal path the stored counter is already ahead of every id, so
+  `next_id` returns the same value as before — **no behavior change and no data migration
+  needed**; the new logic only matters when the counter is missing/stale/restored, where it
+  self-heals instead of colliding. It adds one load of the target collection per create (a
+  small cost at this app's scale). This does **not** change the locking model and is
+  independent of review item **H-2** (lock-free read-modify-write across record collections),
+  which remains open and is the larger, review-gated change.
 
 ## 1.10.2 - 2026-07-17
 

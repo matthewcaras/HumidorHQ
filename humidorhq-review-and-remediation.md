@@ -118,7 +118,7 @@ Work top-to-bottom; stages are ordered by risk-reduction. Check items as complet
 
 ### Stage 3 — Durability & dates
 - [ ] **H-2** Hold an exclusive per-collection lock spanning read→write in all mutating handlers. **[BREAKS: every write path — test for deadlocks / Windows flock]**
-- [ ] **H-4** Derive `next_id` from existing rows when the counter is absent; write counters atomically. **[MIGRATION: verify counters > max id]**
+- [x] **H-4** ✅ **DONE (CHANGELOG 1.10.3)** — `next_id` now assigns `max(stored_counter, max_existing_id + 1)` and writes counters atomically. Self-heals collisions, so the earlier **[MIGRATION]** is no longer required; happy-path behavior unchanged. *(Independent of H-2, still open.)*
 - [ ] **H-1 + H-6** Replace the hardcoded date with the real date in one authoritative timezone; make server event dates and the frontend default consistent. **[APPROVAL: canonical timezone]** Bump the `app.js`/`app.css` `?v=` versions (smoke test asserts them).
 
 ### Stage 4 — Security hardening
