@@ -1,11 +1,13 @@
 /*
  * Filename: app.js
- * Revision: 1.9.4
+ * Revision: 1.10.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 19:25 ET
+ * Modified Date: 2026-07-17 6:23 AM ET
  */
 
 const API_BASE_URL = 'api'
+const SIDEBAR_COLLAPSED_KEY = 'humidorhq-sidebar-collapsed'
+const JASON_SHORTCUT_SEQUENCE = 'jnl'
 
 const state = {
   activePage: 'Dashboard',
@@ -21,6 +23,7 @@ const state = {
   formError: null,
   appMeta: null,
   isLoading: true,
+  sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   collectionSort: 'alpha',
   collectionDirection: 'asc',
   collectionHumidorFilterId: null,
@@ -196,6 +199,55 @@ function navigateToPage(pageId) {
   setActivePage(pageId)
   render()
   recordPageView(state.activePage)
+}
+
+function applySidebarCollapsed() {
+  const shell = document.querySelector('.app-shell')
+  const toggle = document.querySelector('#sidebar-toggle')
+  if (!shell || !toggle) {
+    return
+  }
+  shell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed)
+  toggle.setAttribute('aria-expanded', String(!state.sidebarCollapsed))
+  toggle.textContent = state.sidebarCollapsed ? 'Open' : 'Menu'
+  toggle.title = state.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'
+}
+
+function toggleSidebar() {
+  state.sidebarCollapsed = !state.sidebarCollapsed
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(state.sidebarCollapsed))
+  applySidebarCollapsed()
+  renderNav()
+}
+
+function installSidebarToggle() {
+  const toggle = document.querySelector('#sidebar-toggle')
+  if (!toggle || toggle.dataset.bound === 'true') {
+    return
+  }
+  toggle.dataset.bound = 'true'
+  toggle.addEventListener('click', toggleSidebar)
+}
+
+function shortcutShouldIgnore(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return true
+  }
+  const target = event.target
+  return Boolean(target?.closest?.('input, textarea, select, [contenteditable="true"]'))
+}
+
+function installKeyboardShortcuts() {
+  let keyBuffer = ''
+  window.addEventListener('keydown', (event) => {
+    if (shortcutShouldIgnore(event) || event.key.length !== 1) {
+      return
+    }
+    keyBuffer = `${keyBuffer}${event.key.toLowerCase()}`.slice(-JASON_SHORTCUT_SEQUENCE.length)
+    if (keyBuffer === JASON_SHORTCUT_SEQUENCE) {
+      window.location.href = 'j/'
+    }
+  })
 }
 
 function escapeHtml(value) {
@@ -784,7 +836,9 @@ function renderNav() {
       const button = document.createElement('button')
       button.type = 'button'
       button.className = page.id === state.activePage ? 'nav-item active' : 'nav-item'
-      button.textContent = page.label
+      button.textContent = state.sidebarCollapsed ? page.label.slice(0, 2) : page.label
+      button.title = page.label
+      button.setAttribute('aria-label', page.label)
       button.disabled = !isAuthenticated()
       button.addEventListener('click', () => navigateToPage(page.id))
       return button
@@ -3146,6 +3200,8 @@ function renderError(view) {
 }
 
 function render() {
+  installSidebarToggle()
+  applySidebarCollapsed()
   renderProjectMeta()
   renderSidebarAccount()
   renderNav()
@@ -3285,4 +3341,5 @@ window.addEventListener('hashchange', () => {
   })
 })
 
+installKeyboardShortcuts()
 init()
