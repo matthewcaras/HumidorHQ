@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.7.4
+Revision: 1.7.5
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 17:45 ET
+Modified Date: 2026-07-16 18:05 ET
 -->
 
 # HumidorHQ
@@ -22,7 +22,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
-- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, Todo, and an in-page mobile viewport preview.
+- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO.md, and an in-page mobile viewport preview.
 
 ## Current Target
 
@@ -48,6 +48,7 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `data/` - JSON data files used by the PHP API
 - `docs/` - design notes, migration notes, and conversion tracking
 - `CHANGELOG.md` - revisioned project change history
+- Changelog entries include `Changed by` labels derived from Git author history where the author can be identified.
 
 Legacy TypeScript, React, Vite, Node, and Prisma runtime files have been removed from the deployable app. Historical conversion notes may still reference those technologies for migration context only.
 
