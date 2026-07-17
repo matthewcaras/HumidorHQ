@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.9.6
+Revision: 1.9.7
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 18:25 ET
+Modified Date: 2026-07-16 18:45 ET
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.9.7 - 2026-07-16
+
+Changed by: Jason
+
+- Split the sidebar project modified timestamp into separate Modified, date, and time lines.
+- Reduced the sidebar width now that the footer metadata no longer needs a single wide timestamp line.
+- Bumped static asset versions so deployed browsers load the sidebar layout update.
 
 ## 1.9.6 - 2026-07-16
 

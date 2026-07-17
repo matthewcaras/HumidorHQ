@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.2
+ * Revision: 1.9.3
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 18:25 ET
+ * Modified Date: 2026-07-16 18:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -766,9 +766,14 @@ function renderProjectMeta() {
     meta.textContent = 'Rev loading...'
     return
   }
+  const modifiedParts = String(state.appMeta.modifiedEt || '').split(' ')
+  const modifiedDate = modifiedParts.shift() || ''
+  const modifiedTime = modifiedParts.join(' ')
   meta.innerHTML = `
     <span>Rev ${escapeHtml(state.appMeta.revision)}</span>
-    <span>Modified ${escapeHtml(state.appMeta.modifiedEt)}</span>
+    <span>Modified</span>
+    <span>${escapeHtml(modifiedDate)}</span>
+    <span>${escapeHtml(modifiedTime)}</span>
   `
 }
 

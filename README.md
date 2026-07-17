@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.7.6
+Revision: 1.7.7
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 18:25 ET
+Modified Date: 2026-07-16 18:45 ET
 -->
 
 # HumidorHQ
@@ -21,7 +21,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
-- Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
+- Signed-in user, logout controls, project revision, and a stacked modified date/time sit in the lower-left sidebar.
 - Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target
