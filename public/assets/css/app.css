@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.1
+ * Revision: 1.5.2
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 16:38 ET
+ * Modified Date: 2026-07-16 18:25 ET
  */
 
 :root {
@@ -898,6 +898,20 @@ h3 {
   background: rgba(255, 255, 255, 0.025);
 }
 
+
+.hidden-page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.hidden-page-tools .compact-button {
+  align-items: center;
+  display: inline-flex;
+  min-height: 36px;
+  text-decoration: none;
+}
 .markdown-panel {
   background: var(--bg-elevated);
   border: 1px solid var(--line);

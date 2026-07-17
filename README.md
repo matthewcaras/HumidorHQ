@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.7.5
+Revision: 1.7.6
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 18:05 ET
+Modified Date: 2026-07-16 18:25 ET
 -->
 
 # HumidorHQ
@@ -19,10 +19,10 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
-- `Audit`, `Changelog`, `Todo`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
+- `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user and logout controls sit in the lower-left sidebar with the project revision and modified timestamp.
-- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO.md, and an in-page mobile viewport preview.
+- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target
 

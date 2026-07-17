@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.0.0
-Description: Hidden Jason-only utility page with admin document links and mobile viewport preview controls.
-Modified Date: 2026-07-16 17:45 ET
+Revision: 1.1.0
+Description: Hidden Jason-only utility page with admin document links and full or mobile viewport preview controls.
+Modified Date: 2026-07-16 18:25 ET
 -->
 
 <!doctype html>
@@ -102,8 +102,15 @@ Modified Date: 2026-07-16 17:45 ET
         border: 0;
         border-radius: 18px;
         display: block;
-        height: 874px;
-        width: 402px;
+        height: 800px;
+        width: min(1200px, calc(100vw - 470px));
+      }
+      .device-frame.full-preview {
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .device-frame.full-preview iframe {
+        border-radius: 4px;
       }
       .size-readout { color: var(--muted); font-size: 0.82rem; margin: 10px 0 0; text-align: center; }
       .note { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
@@ -123,14 +130,15 @@ Modified Date: 2026-07-16 17:45 ET
           <a class="utility-link" href="../#Dashboard">Dashboard</a>
           <a class="utility-link" href="../#Changelog">Changelog</a>
           <a class="utility-link" href="../#Audit">Audit</a>
-          <a class="utility-link" href="../#Todo">TODO.md</a>
+          <a class="utility-link" href="../#Todo">TODO</a>
         </div>
 
-        <h2>Mobile Preview</h2>
+        <h2>Preview</h2>
         <div class="controls">
           <label>
-            Viewport preset
+            Preview mode
             <select id="device-select">
+              <option value="1200x800" data-mode="full">Full Web View - 1200 x 800</option>
               <option value="402x874">iPhone 16 Pro - 402 x 874</option>
               <option value="440x956">iPhone 16 Pro Max - 440 x 956</option>
               <option value="393x852">iPhone 15 Pro - 393 x 852</option>
@@ -138,19 +146,19 @@ Modified Date: 2026-07-16 17:45 ET
               <option value="768x1024">iPad Portrait - 768 x 1024</option>
             </select>
           </label>
-          <button id="apply-size" type="button">Apply selected mobile size</button>
+          <button id="apply-size" type="button">Apply selected view</button>
           <button id="reload-preview" type="button">Reload preview</button>
         </div>
 
-        <p class="muted note">This mimics the viewport inside the page. For real browser emulation, use Chrome DevTools device mode.</p>
+        <p class="muted note">This starts in full web view. Select a phone or tablet preset when you want a quick mobile ratio check.</p>
       </section>
 
-      <section class="panel preview-wrap" aria-label="Mobile viewport preview">
+      <section class="panel preview-wrap" aria-label="Site viewport preview">
         <div>
-          <div class="device-frame">
-            <iframe id="mobile-preview" src="../#Dashboard" title="HumidorHQ mobile preview"></iframe>
+          <div class="device-frame full-preview" id="device-frame">
+            <iframe id="mobile-preview" src="../#Dashboard" title="HumidorHQ site preview"></iframe>
           </div>
-          <p class="size-readout" id="size-readout">402 x 874</p>
+          <p class="size-readout" id="size-readout">Full Web View - 1200 x 800</p>
         </div>
       </section>
     </main>
@@ -158,13 +166,15 @@ Modified Date: 2026-07-16 17:45 ET
     <script>
       const select = document.querySelector('#device-select')
       const preview = document.querySelector('#mobile-preview')
+      const frame = document.querySelector('#device-frame')
       const readout = document.querySelector('#size-readout')
 
       function applySelectedSize() {
         const [width, height] = select.value.split('x').map(Number)
         preview.style.width = `${width}px`
         preview.style.height = `${height}px`
-        readout.textContent = `${width} x ${height}`
+        readout.textContent = select.options[select.selectedIndex].textContent
+        frame.classList.toggle('full-preview', select.options[select.selectedIndex].dataset.mode === 'full')
       }
 
       document.querySelector('#apply-size').addEventListener('click', applySelectedSize)

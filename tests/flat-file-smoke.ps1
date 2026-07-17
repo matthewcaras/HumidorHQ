@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.4
+# Revision : 1.10.5
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 17:45 ET
+# Modified Date : 2026-07-16 18:25 ET
 # Changelog :
+# 1.10.5 verify Jason utility back links, TODO label, full preview default, and latest asset versions
 # 1.10.4 verify hidden Jason utility page links and mobile preview controls
 # 1.10.3 skip binary screenshot and image assets during text metadata header validation
 # 1.10.2 verify empty humidor section cleanup during deletion
@@ -100,15 +101,15 @@ if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 $jasonPagePath = Join-Path $repoRoot 'j\index.html'
 if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.html.' }
 $jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
-foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO.md', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected mobile size')) {
+foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view')) {
     if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
 }
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -132,6 +133,9 @@ if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notm
 if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
 if ($index -match 'Flat-file collection manager' -or $appJs -match 'Smoked inventory events' -or $appJs -match 'Gifted inventory events') { throw 'Removed sidebar and consumption helper labels are still present.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
+foreach ($hiddenToolHook in @('renderHiddenPageTools', 'Jason Tools', 'href="j/"', "label: 'TODO'", 'pageLabel(state.activePage)')) {
+    if ($appJs -notmatch [regex]::Escape($hiddenToolHook)) { throw "Plain JavaScript app is missing hidden utility hook: $hiddenToolHook" }
+}
 foreach ($crudText in @('Vendors:', '/records/', 'apiPut', 'apiDelete', 'renderManagedForm', 'renderPurchaseLinesPanel', 'renderHumidorSectionsPanel')) {
     if ($appJs -notmatch [regex]::Escape($crudText)) { throw "Plain JavaScript app is missing CRUD UI hook: $crudText" }
 }

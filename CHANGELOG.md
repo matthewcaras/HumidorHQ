@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.9.5
+Revision: 1.9.6
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 18:05 ET
+Modified Date: 2026-07-16 18:25 ET
 -->
 
 # Changelog
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.9.6 - 2026-07-16
+
+Changed by: Jason
+
+- Added Jason Tools links back to `/j/` from the hidden Audit, Changelog, and TODO pages.
+- Renamed the hidden Todo page label to TODO while keeping the backing file as `TODO.md`.
+- Updated `/j/` to default to full web preview mode while retaining mobile and tablet preview presets.
+- Bumped static asset versions so deployed browsers load the hidden utility navigation update.
 
 ## 1.9.5 - 2026-07-16
 
