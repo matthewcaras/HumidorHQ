@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.11.0
+# Revision : 1.11.1
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 6:23 AM ET
+# Modified Date : 2026-07-17 6:56 AM ET
 # Changelog :
+# 1.11.1 verify mobile menu collapses vertically and footer moves below content
 # 1.11.0 verify collapsible main menu, /j utility menu, and j n l shortcut
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
@@ -127,7 +128,7 @@ if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still re
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer' -or $index -notmatch 'sidebar-toggle') { throw 'Sidebar account/footer/toggle containers are missing from index.html.' }
 if ($index -notmatch 'public/assets/js/app\.js\?v=1\.10\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.0') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.1') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -158,7 +159,7 @@ foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
 if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
-foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)')) {
+foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)', 'display: contents', 'order: 4', 'max-height: 42vh')) {
     if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($sidebarCssHook)) { throw "CSS is missing collapsible sidebar hook: $sidebarCssHook" }
 }
 foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.12rem', 'white-space: nowrap', '.lifetime-metric-grid .lifetime-quantity-card strong')) {

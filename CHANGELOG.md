@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.11.0
+Revision: 1.11.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:23 AM ET
+Modified Date: 2026-07-17 6:56 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.11.1 - 2026-07-17
+
+Changed by: Jason
+
+- Changed small-screen menu collapse to hide the menu vertically instead of shrinking to the desktop rail.
+- Kept the mobile navigation in two columns so it does not consume the full preview height.
+- Moved the signed-in account controls and project revision footer below the mobile content area.
+- Updated README, asset version, and smoke-test coverage for the mobile menu layout fix.
 
 ## 1.11.0 - 2026-07-17
 

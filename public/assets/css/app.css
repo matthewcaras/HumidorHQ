@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.6.0
+ * Revision: 1.6.1
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-17 6:23 AM ET
+ * Modified Date: 2026-07-17 6:56 AM ET
  */
 
 :root {
@@ -1020,19 +1020,62 @@ code {
 @media (max-width: 850px) {
   .app-shell,
   .app-shell.sidebar-collapsed {
+    display: flex;
+    flex-direction: column;
     grid-template-columns: 1fr;
+    min-height: 100vh;
   }
 
-  .sidebar {
-    padding: 18px;
+  .sidebar,
+  .app-shell.sidebar-collapsed .sidebar {
+    display: contents;
+    padding: 0;
+  }
+
+  .brand,
+  .app-shell.sidebar-collapsed .brand {
+    align-items: center;
+    background: #120d0b;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    margin: 0;
+    order: 1;
+    padding: 14px 16px;
+  }
+
+  .app-shell.sidebar-collapsed .brand h1 {
+    display: block;
   }
 
   .nav {
+    background: #120d0b;
+    border-bottom: 1px solid var(--line);
+    gap: 6px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 42vh;
+    order: 2;
+    overflow: auto;
+    padding: 0 16px 14px;
+  }
+
+  .app-shell.sidebar-collapsed .nav,
+  .app-shell.sidebar-collapsed .sidebar-footer {
+    display: none;
   }
 
   .main-content {
+    flex: 1 0 auto;
+    order: 3;
     padding: 16px;
+  }
+
+  .sidebar-footer {
+    background: #120d0b;
+    border-top: 1px solid var(--line);
+    margin-top: 0;
+    order: 4;
+    padding: 14px 16px;
   }
 
   .hero-panel {
@@ -1093,7 +1136,6 @@ code {
 }
 
 @media (max-width: 520px) {
-  .nav,
   .metric-grid,
   .metric-grid.compact,
   .dashboard-summary,
