@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.5
+ * Revision: 1.6.0
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 19:25 ET
+ * Modified Date: 2026-07-17 6:23 AM ET
  */
 
 :root {
@@ -46,6 +46,7 @@ textarea {
 .app-shell {
   display: grid;
   grid-template-columns: 165px minmax(0, 1fr);
+  transition: grid-template-columns 160ms ease;
   min-height: 100vh;
 }
 
@@ -60,6 +61,8 @@ textarea {
 
 .brand {
   border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
   margin-bottom: 18px;
   padding-bottom: 18px;
 }
@@ -70,6 +73,22 @@ textarea {
   letter-spacing: 0;
   line-height: 1.1;
   margin: 0;
+}
+.sidebar-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #d8c5b4;
+  cursor: pointer;
+  font-size: 0.74rem;
+  min-height: 28px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.sidebar-toggle:hover {
+  background: var(--panel-muted);
+  color: var(--accent-strong);
 }
 
 .brand p {
@@ -165,6 +184,36 @@ textarea {
   color: var(--accent-strong);
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  padding: 14px 8px;
+}
+
+.app-shell.sidebar-collapsed .brand {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.app-shell.sidebar-collapsed .brand h1,
+.app-shell.sidebar-collapsed .sidebar-account,
+.app-shell.sidebar-collapsed .project-meta,
+.app-shell.sidebar-collapsed .sidebar-footer {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-toggle,
+.app-shell.sidebar-collapsed .nav-item {
+  min-height: 34px;
+  padding: 5px 0;
+  text-align: center;
+}
+
+.app-shell.sidebar-collapsed .nav-item {
+  font-size: 0.68rem;
+}
 .main-content {
   display: grid;
   align-content: start;
@@ -969,7 +1018,8 @@ code {
 }
 
 @media (max-width: 850px) {
-  .app-shell {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 
