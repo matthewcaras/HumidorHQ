@@ -1,6 +1,6 @@
 <!--
 Filename: README.md
-Revision: 1.9.3
+Revision: 1.10.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 12:00 PM ET
 -->
@@ -30,7 +30,8 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 The target runtime is:
 
 - PHP for API endpoints
-- JSON files for persistent data and sample data
+- JSON files in an external configured directory for runtime data
+- Empty sample/initialization JSON tracked under `seed-data/`
 - Plain JavaScript for browser behavior
 - HTML and CSS for the frontend
 - No TypeScript
@@ -46,7 +47,8 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `index.html` - browser entry point
 - `public/` - static assets
 - `api/` - PHP API front controller and supporting libraries
-- `data/` - JSON data files used by the PHP API
+- `seed-data/` - tracked empty initialization JSON; never used directly at runtime
+- external `HUMIDORHQ_DATA_ROOT` - live JSON and credentials, outside Git and the deployed application
 - `docs/` - design notes, migration notes, and conversion tracking
 - `CHANGELOG.md` - revisioned project change history
 - Changelog entries include `Changed by` labels derived from Git author history where the author can be identified.
@@ -57,16 +59,16 @@ Temporary probe files are not part of the deployable app and should not be commi
 
 ## Data Model
 
-Runtime data is stored in JSON files under `data/`. These files also serve as sample data for local and deployed testing.
+Runtime data is stored in the external directory identified by `HUMIDORHQ_DATA_ROOT`. Startup fails safely if the variable is missing, the directory is inside the application tree, required JSON is missing or malformed, or PHP cannot read and write the directory.
 
-The browser app should not fetch raw JSON files directly. It should call PHP endpoints under `api/`, and the PHP layer should read and write the JSON files. This keeps the frontend contract stable and allows `data/.htaccess` to block direct web access to the backing files on Hostinger. `GET /api/sample-data` summarizes the current repo JSON files for the flat dashboard shell.
+The browser app never fetches raw JSON directly. It calls PHP endpoints under `api/`, and PHP reads and writes the external files. `seed-data/` contains empty Git-tracked initialization data and is blocked from browser access. See [External Runtime Data Setup](docs/RUNTIME_DATA.md) for Windows migration and Hostinger configuration.
 
 
 ## Authentication
 
-Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in `data/auth-users.json`.
+Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in external runtime `auth-users.json`.
 
-`data/auth-users.json` is intentionally ignored by Git. Do not commit real usernames or password hashes.
+Runtime credentials are never read from the repository. Do not commit real usernames or password hashes.
 
 Create or update a local user with:
 
@@ -74,7 +76,7 @@ Create or update a local user with:
 php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
 ```
 
-That command writes `data/auth-users.json`. Upload that file securely to Hostinger with the rest of the protected `data/` folder. The committed `data/auth-users.example.json` file shows the expected shape only. The committed `data/auth-users.json.placeholder` file documents the ignored runtime credential file that must exist in deployed environments.
+That command requires `HUMIDORHQ_DATA_ROOT` and atomically writes `auth-users.json` there. For an empty installation, copy `seed-data/` externally first, set the variable, then create the first user.
 
 Public routes:
 
@@ -90,20 +92,20 @@ Protected routes include `GET /api/sample-data` and future data-changing endpoin
 
 Signed-in users can add, edit, and delete records from the working navigation, Dashboard linked count rows, and Dashboard quick actions:
 
-- `Catalog` manages `data/catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
-- `Vendors` manages `data/vendors.json`.
-- `Humidors` manages `data/storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
-- `Humidor Sections` stores drawers, shelves, trays, and zones in `data/storage-sub-locations.json`; it is managed inline from the Humidors page.
-- `Purchases` manages purchase headers in `data/purchases.json`, including status values for in-route, partially received, and received orders.
-- `PO Lines` links a purchase, catalog cigar, humidor, and optional drawer/section in `data/purchase-lines.json`; it stays internally routable but is managed inline from the Purchases page.
+- `Catalog` manages external runtime `catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
+- `Vendors` manages external runtime `vendors.json`.
+- `Humidors` manages external runtime `storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
+- `Humidor Sections` stores drawers, shelves, trays, and zones in external runtime `storage-sub-locations.json`.
+- `Purchases` manages purchase headers in external runtime `purchases.json`.
+- `PO Lines` links purchases, cigars, and storage in external runtime `purchase-lines.json`.
 
 Creating or updating a PO Line automatically syncs the related inventory records and weighted purchase allocation fields:
 
-- `data/lots.json` receives the lot tied to the purchase line and catalog cigar.
-- `data/lot-location-balances.json` receives the current humidor and optional drawer/section balance.
-- `data/inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
+- `lots.json` receives the lot tied to the purchase line and catalog cigar.
+- `lot-location-balances.json` receives the current humidor and optional drawer/section balance.
+- `inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
 
-The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Runtime record JSON on Hostinger should be treated as live data; do not overwrite deployed `data/*.json` records from GitHub unless that overwrite is intentional.
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
 
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 
@@ -120,11 +122,11 @@ Lots, location balances, and inventory events are readable by the app for report
 
 ## Audit Trail
 
-HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
+HumidorHQ writes user activity to external runtime `audit-log.jsonl`. Each record includes date-time, user, page, and action. The file is created automatically by the PHP API.
 
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
-The committed `data/audit-log.jsonl.placeholder` file documents the ignored runtime audit file.
+The audit log, lock files, temporary writes, credentials, and backups remain outside Git and the deployed code tree.
 
 ## Codex Setup Shortcut
 
@@ -138,11 +140,18 @@ The script prompts for the existing HumidorHQ project folder, validates that it 
 
 ## Local Development
 
-For the final flat-file version, no package install or build command should be required. Serve the project with PHP so API routes are available.
+No package install or build command is required. Before starting PHP, create or copy an external runtime directory and set `HUMIDORHQ_DATA_ROOT`. Preview preservation of the current local records with:
+
+```powershell
+.\tools\copy-runtime-data.ps1 -SourceRoot '.\data' -DestinationRoot 'C:\HumidorHQ\runtime-data' -ManifestRoot 'C:\HumidorHQ\migration-manifests'
+```
+
+The copy utility is dry-run by default. The explicit apply command and complete Windows setup are documented in [docs/RUNTIME_DATA.md](docs/RUNTIME_DATA.md). This change does not automatically copy, move, or delete existing records.
 
 Recommended:
 
 ```powershell
+$env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
 .\start-local-server.ps1
 ```
 
@@ -152,19 +161,19 @@ To import the rich historical workbook into the local JSON model:
 .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test"
 ```
 
-The importer and inventory rebuild utility refuse to replace the repository `data/` directory by default. Use an explicit isolated `-DataRoot` for testing. Replacing repository data requires the deliberate `-ForceDestructive` override and should only be done after a verified backup.
+The importer and inventory rebuild utility require an explicit isolated `-DataRoot` for testing or a deliberate destructive override. They are not part of runtime initialization.
 
 Run the read-only integrity checker with:
 
 ```powershell
-.\tools\check-data-integrity.ps1
+.\tools\check-data-integrity.ps1 # reads HUMIDORHQ_DATA_ROOT
 ```
 
 `tools/repair-inventory-only.ps1` is a narrowly scoped offline migration for the confirmed Balance 66 location and Lots 30, 54, 65, and 70 quantity-cache corrections. It requires exact before-value matches, an external backup directory, an explicit apply confirmation, and an additional override for repository runtime data. Rehearse it only against a copied temporary data root. It does not use API synchronization, import, or rebuild logic and does not modify purchase, purchase-line, event, journal, counter, balance-quantity, or cost/MSRP snapshot data.
 
 `tools/repair-purchase-headers.ps1` is a separately guarded offline migration for the approved Purchases 1-40 subtotal population and negative-discount normalization. Stored `totalPaid` remains authoritative. The script is dry-run by default, requires exact header preconditions and an external verified backup, and changes only `subtotal` and negative `discount` fields in `purchases.json`. It does not resynchronize purchase lines or modify allocations, inventory, history, counters, quantities, IDs, or snapshots.
 
-The smoke test creates and removes its own temporary data root; it does not overwrite tracked `data/*.json` or the repository audit log.
+Both automated test scripts create and remove external temporary data roots from tracked seed data; they do not use or overwrite current local runtime JSON.
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.
 
@@ -174,7 +183,7 @@ To stop the local server:
 .\stop-local-server.ps1
 ```
 
-Manual PHP equivalent:
+Manual PHP equivalent after setting `HUMIDORHQ_DATA_ROOT`:
 
 ```powershell
 php -S 127.0.0.1:8000 -t .
@@ -190,12 +199,13 @@ http://127.0.0.1:8000/
 
 The intended deployment flow is:
 
-1. Push changes to GitHub.
-2. GitHub webhook or deployment automation sends the flat files to Hostinger.
-3. Hostinger serves `index.html`, static assets, PHP API files, and protected JSON data files.
-4. The frontend calls relative PHP API paths.
+1. Create and protect an external Hostinger runtime directory outside `public_html` and any Git deployment target.
+2. Configure `HUMIDORHQ_DATA_ROOT` persistently in Hostinger/PHP configuration.
+3. Push code and tracked seed data to GitHub.
+4. GitHub deployment replaces only the application tree; the external runtime directory is not a deployment target.
+5. The frontend calls relative PHP API paths, and PHP accesses the external JSON directory.
 
-No build artifact is required for deployment.
+No build artifact is required. Account-specific paths, runtime JSON, credentials, audit logs, manifests, and backups must remain outside Git. See [docs/RUNTIME_DATA.md](docs/RUNTIME_DATA.md) for Hostinger setup and permissions.
 
 ## Revision Policy
 

@@ -1,10 +1,11 @@
 # Filename: check-data-integrity.ps1
-# Revision : 1.0.0
+# Revision : 1.1.0
 # Description : Performs a read-only integrity review of HumidorHQ flat-file JSON data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
 # Modified Date : 2026-07-17
 # Changelog :
+# 1.1.0 resolve the default data root from HUMIDORHQ_DATA_ROOT instead of repository data
 # 1.0.0 initial read-only inventory, relationship, counter, and accounting checks
 
 param(
@@ -12,11 +13,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$configuredDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) { $env:HUMIDORHQ_DATA_ROOT } else { $DataRoot }
+if ([string]::IsNullOrWhiteSpace($configuredDataRoot)) {
+    throw 'DataRoot is required. Pass -DataRoot or set HUMIDORHQ_DATA_ROOT to the external runtime directory.'
+}
 $resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) {
-    [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'data'))
+    [System.IO.Path]::GetFullPath($configuredDataRoot)
 } else {
-    [System.IO.Path]::GetFullPath($DataRoot)
+    [System.IO.Path]::GetFullPath($configuredDataRoot)
 }
 
 $errorCount = 0
@@ -264,5 +268,5 @@ if ($errorCount -gt 0) { exit 1 }
 exit 0
 
 # Example Usage:
-#   .\tools\check-data-integrity.ps1
+#   .\tools\check-data-integrity.ps1 # uses HUMIDORHQ_DATA_ROOT
 #   .\tools\check-data-integrity.ps1 -DataRoot "C:\Temp\HumidorHQ-TestData"

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.5.1
+ * Revision: 1.6.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
  * Modified Date: 2026-07-17 12:00 ET
  */
@@ -30,7 +30,7 @@ function sample_data_collections(): array
         $rows = load_collection($collection);
         $summary[$collection] = [
             'count' => count($rows),
-            'source' => 'data/' . $collection . '.json',
+            'source' => 'external-runtime/' . $collection . '.json',
         ];
     }
 
@@ -56,7 +56,7 @@ function app_meta_payload(): array
         APP_ROOT . DIRECTORY_SEPARATOR . 'index.html',
         APP_ROOT . DIRECTORY_SEPARATOR . 'api',
         APP_ROOT . DIRECTORY_SEPARATOR . 'public',
-        APP_ROOT . DIRECTORY_SEPARATOR . 'data',
+        APP_ROOT . DIRECTORY_SEPARATOR . 'seed-data',
         APP_ROOT . DIRECTORY_SEPARATOR . 'tests',
         APP_ROOT . DIRECTORY_SEPARATOR . 'tools',
     ];

@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.11.3
+Revision: 1.12.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-17 12:00 PM ET
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.12.0 - 2026-07-17
+
+Changed by: Matt
+
+- Required `HUMIDORHQ_DATA_ROOT` to resolve to readable, writable runtime JSON outside the repository and deployed application tree.
+- Added tracked empty `seed-data/`, guarded external data-copy tooling, startup validation, and external-aware local/auth/integrity utilities.
+- Moved smoke fixtures to tracked seed data and added isolated coverage proving repeated code deployment leaves external runtime hashes unchanged.
+- Documented explicit Windows preservation and Hostinger setup; no current runtime JSON was automatically copied, moved, or modified.
 
 ## 1.11.3 - 2026-07-17
 

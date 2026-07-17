@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.11.1
-# Description : Verifies HumidorHQ behavior against an isolated temporary JSON data root, including Stage 0 data-loss guardrails.
+# Revision : 1.12.0
+# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-17 12:00 PM ET
 # Changelog :
+# 1.12.0 use tracked seed data and verify external runtime-root startup enforcement
 # 1.11.1 verify received-purchase line creation, reassignment, incomplete-line, and rejection hash guards
 # 1.11.0 isolate all runtime data and verify Stage 0 move, immutability, deletion, journal, and integrity protections
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
@@ -61,6 +62,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $repositoryDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'data'))
+$seedDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'seed-data'))
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('humidorhq-flat-file-smoke-' + [guid]::NewGuid().ToString('N'))
 $testDataRoot = Join-Path $testRoot 'data'
 $testRootFull = [System.IO.Path]::GetFullPath($testRoot)
@@ -90,7 +92,7 @@ function Assert-RepositoryDataHashes {
 }
 
 $sourceDataHashes = Get-RepositoryDataHashes
-Get-ChildItem -LiteralPath $repositoryDataRoot -Filter '*.json' -File | Where-Object { $_.Name -ne 'auth-users.json' } | ForEach-Object {
+Get-ChildItem -LiteralPath $seedDataRoot -Filter '*.json' -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $testDataRoot $_.Name)
 }
 
@@ -98,6 +100,7 @@ $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
+$bootstrapPath = Join-Path $repoRoot 'api\bootstrap.php'
 $authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
 $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $testDataRoot 'auth-users.json'
@@ -207,7 +210,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.6') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -226,6 +229,10 @@ if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'funct
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
 if ($apiIndex -notmatch 'RECEIVED_INVENTORY_IMMUTABLE' -or $apiIndex -notmatch 'RECORD_REFERENCED') { throw 'API is missing Stage 0 immutability or referential guards.' }
+$bootstrapSource = Get-Content -LiteralPath $bootstrapPath -Raw
+foreach ($startupGuard in @('DATA_ROOT_NOT_CONFIGURED', 'DATA_ROOT_MISSING', 'DATA_ROOT_INSIDE_APP', 'DATA_ROOT_NOT_WRITABLE', 'DATA_FILE_MISSING', 'DATA_FILE_NOT_WRITABLE', 'DATA_FILE_INVALID_JSON')) {
+    if ($bootstrapSource -notmatch [regex]::Escape($startupGuard)) { throw "Bootstrap is missing runtime startup guard: $startupGuard" }
+}
 if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
 if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
 if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
@@ -295,6 +302,22 @@ foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', 
 }
 
 $php = Get-PhpCommand
+$bootstrapRequirePath = $bootstrapPath.Replace('\\', '/').Replace("'", "\\'")
+$startupDataRoot = $env:HUMIDORHQ_DATA_ROOT
+try {
+    Remove-Item Env:HUMIDORHQ_DATA_ROOT -ErrorAction SilentlyContinue
+    $missingRootOutput = (& $php -r "require '$bootstrapRequirePath';" 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $missingRootOutput -notmatch 'DATA_ROOT_NOT_CONFIGURED') {
+        throw 'Bootstrap did not reject a missing HUMIDORHQ_DATA_ROOT.'
+    }
+    $env:HUMIDORHQ_DATA_ROOT = $repositoryDataRoot
+    $insideRootOutput = (& $php -r "require '$bootstrapRequirePath';" 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $insideRootOutput -notmatch 'DATA_ROOT_INSIDE_APP') {
+        throw 'Bootstrap did not reject runtime data inside the repository.'
+    }
+} finally {
+    $env:HUMIDORHQ_DATA_ROOT = $startupDataRoot
+}
 $hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 

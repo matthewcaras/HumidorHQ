@@ -1,14 +1,14 @@
 # Filename: audit-log.jsonl.placeholder
-# Revision: 1.0.0
-# Description: Tracked placeholder documenting an ignored runtime file.
-# Modified Date: 2026-07-15 00:13 ET
+# Revision: 1.1.0
+# Description: Legacy marker retained while local audit history is explicitly copied to external runtime storage.
+# Modified Date: 2026-07-17 11:30 ET
 
-This placeholder marks the intentionally ignored runtime audit file:
+This placeholder marks the legacy local audit file used only as an explicit migration source:
 
   data/audit-log.jsonl
 
-The PHP API creates this file automatically as users sign in, view pages, and perform actions.
+The application no longer reads this path. It creates and appends audit-log.jsonl under the external HUMIDORHQ_DATA_ROOT.
 
-Do not commit the live audit log. It may contain usernames and activity history.
+Do not commit the live audit log. Do not delete the legacy file until its external copy has been verified.
 
 

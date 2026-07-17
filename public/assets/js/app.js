@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.9.5
+ * Revision: 1.9.6
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-17 12:00 ET
  */
@@ -1462,7 +1462,7 @@ function renderManagedTable(view, pageConfig) {
   heading.innerHTML = `
     <div>
       <h3>${escapeHtml(pageConfig.title)} Records</h3>
-      <p class="muted">${formatCount(rows.length)} records in <code>data/${escapeHtml(collection)}.json</code>.</p>
+      <p class="muted">${formatCount(rows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
     </div>
   `
 
@@ -3058,7 +3058,7 @@ function renderAudit(view) {
   const rows = state.auditData?.records || []
   const summary = document.createElement('p')
   summary.className = 'muted'
-  summary.textContent = `${formatCount(state.auditData?.total || 0)} audit records tracked in data/audit-log.jsonl.`
+  summary.textContent = `${formatCount(state.auditData?.total || 0)} audit records tracked in the external runtime audit log.`
   const table = document.createElement('table')
   table.className = 'data-table'
   table.innerHTML = `
