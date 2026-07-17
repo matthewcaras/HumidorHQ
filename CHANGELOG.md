@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.1
+Revision: 1.11.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-07-17 12:00 PM ET
 -->
 
 # Changelog
@@ -20,6 +20,28 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.11.1 - 2026-07-17
+
+Changed by: Matt
+
+- Blocked new purchase lines from being added to received purchases or purchases with existing inventory history.
+- Blocked draft lines from being reassigned to those purchases before any line, counter, inventory, or audit mutation.
+- Applied notes-only immutability and deletion protection to incomplete lines already attached to received purchases.
+- Added isolated regression coverage for rejected creation, reassignment, structural edits, deletion, unchanged hashes/counters, and the preserved pending-purchase workflow.
+
+## 1.11.0 - 2026-07-17
+
+Changed by: Matt
+
+- Rejected exact same-location moves in PHP before any balance, event, audit, or counter mutation and prevented the same selection in the existing move form.
+- Made received purchase inventory history immutable through generic edits and deletion while leaving isolated draft-line deletion available.
+- Added referential deletion guards for linked Catalog cigars, Vendors, Humidors, Humidor sections, purchases, purchase lines, and Smoking Journal history.
+- Prevented generic purchase synchronization from resetting existing received Lots, balances, or receipt events.
+- Made the smoke test use a disposable data root and added isolated regression checks for the Stage 0 safeguards.
+- Required an isolated data root or deliberate destructive override for import and inventory-rebuild tools.
+- Added a read-only integrity checker for quantity, relationship, ID, counter, move, journal, and purchase-total defects.
+- Documented that no existing records were automatically repaired or migrated.
 
 ## 1.10.1 - 2026-07-17
 

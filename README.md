@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.8.1
+Revision: 1.9.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-07-17 12:00 PM ET
 -->
 
 # HumidorHQ
@@ -16,7 +16,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
-- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while inventory is assigned, cleanup of empty linked sections during deletion, and drawer/shelf/tray/zone setup.
+- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
 - `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
@@ -109,6 +109,15 @@ Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast
 
 Lots, location balances, and inventory events are readable by the app for reports and quantity calculations, but direct writes stay controlled by purchase-line and inventory workflows.
 
+### Functional Stabilization Stage 0 Guardrails
+
+- An exact same-Humidor/same-section inventory move is rejected before balances, events, or counters are changed. The move form also prevents selecting the exact current destination.
+- Purchase lines attached to a received purchase, or to a purchase with Lots, balances, or InventoryEvents, are temporarily immutable except for notes. New lines cannot be added or reassigned to those purchases, including when an existing received line is incomplete and has no history of its own.
+- Received purchase headers with inventory history permit only non-inventory edits to invoice number, expected date, tracking number, and notes. Generic edits cannot reconstruct established receipt state.
+- Catalog cigars, Vendors, Humidors, and Humidor sections cannot be physically deleted while the relationships protected by the API still reference them. Purchase lines and purchases with inventory history cannot be physically deleted.
+- No existing runtime records are automatically migrated, repaired, cascaded, or reconstructed by these guardrails.
+- `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation, relationship, identifier, counter, move, journal, and purchase-total issues and never repairs data.
+
 ## Audit Trail
 
 HumidorHQ writes user activity to `data/audit-log.jsonl`. Each record includes date-time, user, page, and action. The live audit file is ignored by Git and created automatically by the PHP API.
@@ -140,8 +149,18 @@ Recommended:
 To import the rich historical workbook into the local JSON model:
 
 ```powershell
-.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx"
+.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test"
 ```
+
+The importer and inventory rebuild utility refuse to replace the repository `data/` directory by default. Use an explicit isolated `-DataRoot` for testing. Replacing repository data requires the deliberate `-ForceDestructive` override and should only be done after a verified backup.
+
+Run the read-only integrity checker with:
+
+```powershell
+.\tools\check-data-integrity.ps1
+```
+
+The smoke test creates and removes its own temporary data root; it does not overwrite tracked `data/*.json` or the repository audit log.
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.
 

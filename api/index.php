@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.4.3
+ * Revision: 1.5.1
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-16 16:38 ET
+ * Modified Date: 2026-07-17 12:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -305,6 +305,151 @@ function purchase_line_ids_for_purchase(int $purchaseId): array
     ));
 }
 
+function normalized_relationship_id(mixed $value): ?int
+{
+    if ($value === null || trim((string) $value) === '') {
+        return null;
+    }
+    $normalized = (int) $value;
+    return $normalized > 0 ? $normalized : null;
+}
+
+function row_references_id(array $row, array $fields, int $id): bool
+{
+    foreach ($fields as $field) {
+        if (normalized_relationship_id($row[$field] ?? null) === $id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function collection_references_id(string $collection, array $fields, int $id): bool
+{
+    foreach (load_collection($collection) as $row) {
+        if (is_array($row) && row_references_id($row, $fields, $id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function purchase_line_relationship_summary(int $purchaseLineId): array
+{
+    $lots = array_values(array_filter(
+        load_collection('lots'),
+        static fn (mixed $row): bool => is_array($row) && (int) ($row['purchaseLineId'] ?? 0) === $purchaseLineId
+    ));
+    $lotIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $lots);
+    $balances = array_values(array_filter(
+        load_collection('lot-location-balances'),
+        static fn (mixed $row): bool => is_array($row) && (
+            (int) ($row['purchaseLineId'] ?? 0) === $purchaseLineId
+            || in_array((int) ($row['lotId'] ?? 0), $lotIds, true)
+        )
+    ));
+    $events = array_values(array_filter(
+        load_collection('inventory-events'),
+        static fn (mixed $row): bool => is_array($row) && (
+            (int) ($row['purchaseLineId'] ?? 0) === $purchaseLineId
+            || in_array((int) ($row['lotId'] ?? 0), $lotIds, true)
+        )
+    ));
+    $eventIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $events);
+    $journalEntries = array_values(array_filter(
+        load_collection('smoking-journal-entries'),
+        static fn (mixed $row): bool => is_array($row)
+            && in_array((int) ($row['inventoryEventId'] ?? 0), $eventIds, true)
+    ));
+
+    return [
+        'lots' => $lots,
+        'balances' => $balances,
+        'events' => $events,
+        'journalEntries' => $journalEntries,
+        'hasHistory' => count($lots) > 0 || count($balances) > 0 || count($events) > 0 || count($journalEntries) > 0,
+    ];
+}
+
+function purchase_relationship_summary(int $purchaseId): array
+{
+    $lines = purchase_line_ids_for_purchase($purchaseId);
+    $lineIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $lines);
+    $lots = array_values(array_filter(
+        load_collection('lots'),
+        static fn (mixed $row): bool => is_array($row) && (
+            (int) ($row['purchaseId'] ?? 0) === $purchaseId
+            || in_array((int) ($row['purchaseLineId'] ?? 0), $lineIds, true)
+        )
+    ));
+    $lotIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $lots);
+    $balances = array_values(array_filter(
+        load_collection('lot-location-balances'),
+        static fn (mixed $row): bool => is_array($row) && (
+            (int) ($row['purchaseId'] ?? 0) === $purchaseId
+            || in_array((int) ($row['purchaseLineId'] ?? 0), $lineIds, true)
+            || in_array((int) ($row['lotId'] ?? 0), $lotIds, true)
+        )
+    ));
+    $events = array_values(array_filter(
+        load_collection('inventory-events'),
+        static fn (mixed $row): bool => is_array($row) && (
+            (int) ($row['purchaseId'] ?? 0) === $purchaseId
+            || in_array((int) ($row['purchaseLineId'] ?? 0), $lineIds, true)
+            || in_array((int) ($row['lotId'] ?? 0), $lotIds, true)
+        )
+    ));
+    return [
+        'lines' => $lines,
+        'lots' => $lots,
+        'balances' => $balances,
+        'events' => $events,
+        'hasRelationships' => count($lines) > 0 || count($lots) > 0 || count($balances) > 0 || count($events) > 0,
+        'hasInventory' => count($lots) > 0 || count($balances) > 0 || count($events) > 0,
+    ];
+}
+
+function purchase_inventory_is_locked(int $purchaseId): bool
+{
+    $purchase = find_by_id('purchases', $purchaseId);
+    if ($purchase === null) {
+        return false;
+    }
+    if (normalize_purchase_status_value((string) ($purchase['status'] ?? 'pending')) === 'received') {
+        return true;
+    }
+    return (purchase_relationship_summary($purchaseId)['hasInventory'] ?? false) === true;
+}
+
+function purchase_line_is_inventory_locked(array $line, int $purchaseLineId): bool
+{
+    if ((purchase_line_relationship_summary($purchaseLineId)['hasHistory'] ?? false) === true) {
+        return true;
+    }
+    $purchaseId = (int) ($line['purchaseId'] ?? 0);
+    return $purchaseId > 0 && purchase_inventory_is_locked($purchaseId);
+}
+
+function managed_fields_changed(array $before, array $after, array $fields): array
+{
+    $changed = [];
+    foreach ($fields as $field) {
+        $beforeValue = $before[$field] ?? null;
+        $afterValue = $after[$field] ?? null;
+        if (in_array($field, ['purchaseId', 'catalogCigarId', 'storageLocationId', 'storageSubLocationId', 'quantity', 'vendorId'], true)) {
+            $isChanged = normalized_relationship_id($beforeValue) !== normalized_relationship_id($afterValue);
+        } elseif ($field === 'status') {
+            $isChanged = normalize_purchase_status_value((string) $beforeValue) !== normalize_purchase_status_value((string) $afterValue);
+        } else {
+            $isChanged = (string) ($beforeValue ?? '') !== (string) ($afterValue ?? '');
+        }
+        if ($isChanged) {
+            $changed[] = $field;
+        }
+    }
+    return $changed;
+}
+
 function sync_purchase_inventory(int $purchaseId): void
 {
     $purchase = find_by_id('purchases', $purchaseId);
@@ -339,6 +484,10 @@ function sync_purchase_inventory(int $purchaseId): void
     $updatedLinesById = [];
     foreach ($purchaseLines as $line) {
         $lineId = (int) $line['id'];
+        if ((purchase_line_relationship_summary($lineId)['hasHistory'] ?? false) === true) {
+            $updatedLinesById[$lineId] = $line;
+            continue;
+        }
         $quantity = max(1, (int) ($line['quantity'] ?? 0));
         $subtotalCents = line_subtotal_cents($line);
         $trueCostBasisCents = $subtotalCents
@@ -395,14 +544,16 @@ function sync_purchase_inventory(int $purchaseId): void
         }
     }
 
-    $activePurchaseLineIds = [];
     foreach ($updatedLinesById as $lineId => $line) {
         $hasAssignedLocation = (int) ($line['storageLocationId'] ?? 0) > 0;
         if (!$isReceived || !$hasAssignedLocation) {
             continue;
         }
 
-        $activePurchaseLineIds[$lineId] = true;
+        if ((purchase_line_relationship_summary($lineId)['hasHistory'] ?? false) === true) {
+            continue;
+        }
+
         $catalog = $catalogById[(int) ($line['catalogCigarId'] ?? 0)] ?? null;
         $resolvedMsrp = $line['msrpPerCigarResolved'] ?? ($catalog['msrp'] ?? null);
         $lotRecord = [
@@ -485,28 +636,6 @@ function sync_purchase_inventory(int $purchaseId): void
         }
     }
 
-    $lots = array_values(array_filter(
-        $lots,
-        static fn (mixed $row): bool => !is_array($row)
-            || (int) ($row['purchaseId'] ?? 0) !== $purchaseId
-            || isset($activePurchaseLineIds[(int) ($row['purchaseLineId'] ?? 0)])
-    ));
-    $balances = array_values(array_filter(
-        $balances,
-        static fn (mixed $row): bool => !is_array($row)
-            || (int) ($row['purchaseId'] ?? 0) !== $purchaseId
-            || (int) ($row['purchaseLineId'] ?? 0) === 0
-            || isset($activePurchaseLineIds[(int) ($row['purchaseLineId'] ?? 0)])
-    ));
-    $events = array_values(array_filter(
-        $events,
-        static fn (mixed $row): bool => !is_array($row)
-            || (int) ($row['purchaseId'] ?? 0) !== $purchaseId
-            || (int) ($row['purchaseLineId'] ?? 0) === 0
-            || (string) ($row['eventType'] ?? '') !== 'purchase-receipt'
-            || isset($activePurchaseLineIds[(int) ($row['purchaseLineId'] ?? 0)])
-    ));
-
     save_collection('lots', $lots);
     save_collection('lot-location-balances', $balances);
     save_collection('inventory-events', $events);
@@ -514,19 +643,12 @@ function sync_purchase_inventory(int $purchaseId): void
 
 function delete_purchase_line_inventory(int $purchaseLineId): void
 {
-    $collections = [
-        'lots' => 'purchaseLineId',
-        'lot-location-balances' => 'purchaseLineId',
-        'inventory-events' => 'purchaseLineId',
-    ];
-
-    foreach ($collections as $collection => $field) {
-        $rows = load_collection($collection);
-        $rows = array_values(array_filter(
-            $rows,
-            static fn (mixed $row): bool => !is_array($row) || (int) ($row[$field] ?? 0) !== $purchaseLineId
-        ));
-        save_collection($collection, $rows);
+    if ((purchase_line_relationship_summary($purchaseLineId)['hasHistory'] ?? false) === true) {
+        throw new ApiError(
+            'RECEIVED_INVENTORY_IMMUTABLE',
+            'Received inventory history cannot be deleted. Use the future adjustment workflow to correct it.',
+            409
+        );
     }
 }
 
@@ -546,6 +668,19 @@ function move_inventory(array $input): array
     $currentQuantity = (int) ($sourceBalance['quantity'] ?? 0);
     if ($currentQuantity < $quantity) {
         throw new ApiError('VALIDATION_ERROR', 'Move quantity cannot exceed the current balance quantity.', 422);
+    }
+
+    $sourceStorageLocationId = normalized_relationship_id($sourceBalance['storageLocationId'] ?? null);
+    $sourceStorageSubLocationId = normalized_relationship_id($sourceBalance['storageSubLocationId'] ?? null);
+    if (
+        $sourceStorageLocationId === normalized_relationship_id($toStorageLocationId)
+        && $sourceStorageSubLocationId === normalized_relationship_id($toStorageSubLocationId)
+    ) {
+        throw new ApiError(
+            'VALIDATION_ERROR',
+            'Destination must be different from the current Humidor and section.',
+            400
+        );
     }
 
     $destinationHumidor = find_by_id('storage-locations', $toStorageLocationId);
@@ -888,6 +1023,13 @@ function create_managed_record(string $collection, array $input): array
     }
     $rows = load_collection($collection);
     $record = clean_managed_record($collection, $input);
+    if ($collection === 'purchase-lines' && purchase_inventory_is_locked((int) ($record['purchaseId'] ?? 0))) {
+        throw new ApiError(
+            'RECEIVED_INVENTORY_IMMUTABLE',
+            'New purchase lines cannot be added to a received purchase or a purchase with inventory history.',
+            409
+        );
+    }
     $record['id'] = next_id($collection);
     $rows[] = $record;
     save_collection($collection, $rows);
@@ -915,22 +1057,103 @@ function update_managed_record(string $collection, int $id, array $input): array
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
-            $updated = clean_managed_record($collection, $input, $row);
+            $mergedInput = array_merge($row, $input);
+            $lineInventoryLocked = $collection === 'purchase-lines' && purchase_line_is_inventory_locked($row, $id);
+            if ($collection === 'purchase-lines') {
+                $originalPurchaseId = (int) ($row['purchaseId'] ?? 0);
+                $requestedPurchaseId = (int) ($mergedInput['purchaseId'] ?? 0);
+                if (
+                    $requestedPurchaseId !== $originalPurchaseId
+                    && $requestedPurchaseId > 0
+                    && purchase_inventory_is_locked($requestedPurchaseId)
+                ) {
+                    throw new ApiError(
+                        'RECEIVED_INVENTORY_IMMUTABLE',
+                        'A purchase line cannot be reassigned to a received purchase or a purchase with inventory history.',
+                        409
+                    );
+                }
+            }
+            if ($lineInventoryLocked) {
+                $protectedFields = array_values(array_diff(
+                    array_merge($config['text'], $config['int'], $config['money']),
+                    ['notes']
+                ));
+                if (count(managed_fields_changed($row, $mergedInput, $protectedFields)) > 0) {
+                    throw new ApiError(
+                        'RECEIVED_INVENTORY_IMMUTABLE',
+                        'Purchase lines attached to received purchases or inventory history allow notes-only edits until an adjustment workflow exists.',
+                        409
+                    );
+                }
+            }
+            if ($collection === 'purchases' && (purchase_relationship_summary($id)['hasInventory'] ?? false) === true) {
+                $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
+                $protectedFields = array_values(array_diff(
+                    array_merge($config['text'], $config['int'], $config['money']),
+                    $safeHeaderFields
+                ));
+                if (count(managed_fields_changed($row, $mergedInput, $protectedFields)) > 0) {
+                    throw new ApiError(
+                        'RECEIVED_INVENTORY_IMMUTABLE',
+                        'Received purchase inventory cannot be changed through generic purchase editing. Use the future adjustment workflow.',
+                        409
+                    );
+                }
+            }
+            $updated = clean_managed_record($collection, $mergedInput, $row);
             $updated['id'] = $id;
+            $skipInventorySync = false;
+            if ($collection === 'purchase-lines') {
+                if ($lineInventoryLocked) {
+                    $protectedFields = array_values(array_diff(
+                        array_merge($config['text'], $config['int'], $config['money']),
+                        ['notes']
+                    ));
+                    $changedFields = managed_fields_changed($row, $updated, $protectedFields);
+                    if (count($changedFields) > 0) {
+                        throw new ApiError(
+                            'RECEIVED_INVENTORY_IMMUTABLE',
+                            'Purchase lines attached to received purchases or inventory history allow notes-only edits until an adjustment workflow exists.',
+                            409
+                        );
+                    }
+                    $skipInventorySync = true;
+                }
+            }
+            if ($collection === 'purchases') {
+                $relationships = purchase_relationship_summary($id);
+                if (($relationships['hasInventory'] ?? false) === true) {
+                    $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
+                    $protectedFields = array_values(array_diff(
+                        array_merge($config['text'], $config['int'], $config['money']),
+                        $safeHeaderFields
+                    ));
+                    $changedFields = managed_fields_changed($row, $updated, $protectedFields);
+                    if (count($changedFields) > 0) {
+                        throw new ApiError(
+                            'RECEIVED_INVENTORY_IMMUTABLE',
+                            'Received purchase inventory cannot be changed through generic purchase editing. Use the future adjustment workflow.',
+                            409
+                        );
+                    }
+                    $skipInventorySync = true;
+                }
+            }
             $rows[$index] = $updated;
             save_collection($collection, $rows);
             if ($collection === 'purchase-lines') {
                 $originalPurchaseId = (int) ($row['purchaseId'] ?? 0);
                 $newPurchaseId = (int) ($updated['purchaseId'] ?? 0);
-                if ($originalPurchaseId > 0) {
+                if (!$skipInventorySync && $originalPurchaseId > 0) {
                     sync_purchase_inventory($originalPurchaseId);
                 }
-                if ($newPurchaseId > 0 && $newPurchaseId !== $originalPurchaseId) {
+                if (!$skipInventorySync && $newPurchaseId > 0 && $newPurchaseId !== $originalPurchaseId) {
                     sync_purchase_inventory($newPurchaseId);
                 }
                 $updated = find_by_id('purchase-lines', $id) ?? $updated;
             }
-            if ($collection === 'purchases') {
+            if ($collection === 'purchases' && !$skipInventorySync) {
                 sync_purchase_inventory($id);
             }
             audit_record($config['page'], 'update ' . $config['label'], ['collection' => $collection, 'id' => $id]);
@@ -949,50 +1172,56 @@ function delete_managed_record(string $collection, int $id): array
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
-            if ($collection === 'purchases' && count(purchase_line_ids_for_purchase($id)) > 0) {
-                throw new ApiError('VALIDATION_ERROR', 'Delete linked purchase lines before deleting this purchase.', 409);
+            if ($collection === 'purchases' && (purchase_relationship_summary($id)['hasRelationships'] ?? false) === true) {
+                throw new ApiError(
+                    'RECORD_REFERENCED',
+                    'A received or linked purchase cannot be deleted while purchase lines, Lots, balances, or events exist.',
+                    409
+                );
+            }
+            if ($collection === 'catalog-cigars') {
+                $isReferenced = collection_references_id('purchase-lines', ['catalogCigarId'], $id)
+                    || collection_references_id('lots', ['catalogCigarId'], $id)
+                    || collection_references_id('lot-location-balances', ['catalogCigarId'], $id)
+                    || collection_references_id('inventory-events', ['catalogCigarId'], $id);
+                if ($isReferenced) {
+                    throw new ApiError('RECORD_REFERENCED', 'This Catalog cigar is linked to purchase or inventory history and cannot be deleted.', 409);
+                }
+            }
+            if ($collection === 'vendors' && collection_references_id('purchases', ['vendorId'], $id)) {
+                throw new ApiError('RECORD_REFERENCED', 'This Vendor is linked to a purchase and cannot be deleted.', 409);
             }
             if ($collection === 'storage-locations') {
-                $hasInventory = count(array_filter(
-                    load_collection('lot-location-balances'),
-                    static fn (mixed $balance): bool => is_array($balance)
-                        && (int) ($balance['storageLocationId'] ?? 0) === $id
-                        && (float) ($balance['quantity'] ?? 0) > 0
-                )) > 0;
-                $sections = load_collection('storage-sub-locations');
-                $linkedSectionIds = array_map(
-                    static fn (array $section): int => (int) ($section['id'] ?? 0),
-                    array_values(array_filter(
-                        $sections,
-                        static fn (mixed $section): bool => is_array($section) && (int) ($section['storageLocationId'] ?? 0) === $id
-                    ))
-                );
-                $hasLines = count(array_filter(
-                    load_collection('purchase-lines'),
-                    static fn (mixed $line): bool => is_array($line) && (
-                        (int) ($line['storageLocationId'] ?? 0) === $id
-                        || in_array((int) ($line['storageSubLocationId'] ?? 0), $linkedSectionIds, true)
-                    )
-                )) > 0;
-                if ($hasInventory || $hasLines) {
-                    throw new ApiError('VALIDATION_ERROR', 'Move assigned cigars before deleting this humidor.', 409);
-                }
-                if (count($linkedSectionIds) > 0) {
-                    $sections = array_values(array_filter(
-                        $sections,
-                        static fn (mixed $section): bool => !is_array($section) || (int) ($section['storageLocationId'] ?? 0) !== $id
-                    ));
-                    save_collection('storage-sub-locations', $sections);
+                $isReferenced = collection_references_id('storage-sub-locations', ['storageLocationId'], $id)
+                    || collection_references_id('purchase-lines', ['storageLocationId'], $id)
+                    || collection_references_id('lot-location-balances', ['storageLocationId'], $id)
+                    || collection_references_id(
+                        'inventory-events',
+                        ['storageLocationId', 'fromStorageLocationId', 'toStorageLocationId'],
+                        $id
+                    );
+                if ($isReferenced) {
+                    throw new ApiError('RECORD_REFERENCED', 'This Humidor is linked to sections, purchase lines, balances, or events and cannot be deleted.', 409);
                 }
             }
             if ($collection === 'storage-sub-locations') {
-                $hasLines = count(array_filter(
-                    load_collection('purchase-lines'),
-                    static fn (mixed $line): bool => is_array($line) && (int) ($line['storageSubLocationId'] ?? 0) === $id
-                )) > 0;
-                if ($hasLines) {
-                    throw new ApiError('VALIDATION_ERROR', 'Delete linked purchase lines before deleting this humidor section.', 409);
+                $isReferenced = collection_references_id('purchase-lines', ['storageSubLocationId'], $id)
+                    || collection_references_id('lot-location-balances', ['storageSubLocationId'], $id)
+                    || collection_references_id(
+                        'inventory-events',
+                        ['storageSubLocationId', 'fromStorageSubLocationId', 'toStorageSubLocationId'],
+                        $id
+                    );
+                if ($isReferenced) {
+                    throw new ApiError('RECORD_REFERENCED', 'This Humidor section is linked to purchase lines, balances, or events and cannot be deleted.', 409);
                 }
+            }
+            if ($collection === 'purchase-lines' && purchase_line_is_inventory_locked($row, $id)) {
+                throw new ApiError(
+                    'RECEIVED_INVENTORY_IMMUTABLE',
+                    'A purchase line attached to a received purchase or inventory history cannot be deleted.',
+                    409
+                );
             }
             $deleted = $row;
             array_splice($rows, $index, 1);

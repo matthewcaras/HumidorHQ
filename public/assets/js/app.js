@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.4
+ * Revision: 1.9.5
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 19:25 ET
+ * Modified Date: 2026-07-17 12:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -1193,7 +1193,7 @@ function renderCollectionPage(view) {
                           <button type="button" class="secondary-button compact-button" data-move-toggle-id="${balance.balance.id}">Move</button>
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED">Give</button>
                         </div>
-                        <form class="inline-move-form" data-balance-id="${balance.balance.id}">
+                        <form class="inline-move-form" data-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <label class="form-field">
                             <span>Qty</span>
@@ -1260,17 +1260,36 @@ function renderCollectionPage(view) {
   table.querySelectorAll('form[data-balance-id]').forEach((form) => {
     const humidorSelect = form.querySelector('[data-destination-humidor]')
     const sectionSelect = form.querySelector('[data-destination-section]')
+    const submitButton = form.querySelector('button[type="submit"]')
+    const currentLocationId = Number(form.dataset.currentLocationId || 0)
+    const currentSectionId = Number(form.dataset.currentSectionId || 0)
+    const destinationIsCurrent = () => Number(humidorSelect.value || 0) === currentLocationId
+      && Number(sectionSelect.value || 0) === currentSectionId
+    const updateMoveAvailability = () => {
+      submitButton.disabled = !Number(humidorSelect.value || 0) || destinationIsCurrent()
+    }
     const fillSections = () => {
-      sectionSelect.replaceChildren(new Option('General', ''))
+      const generalOption = new Option('General', '')
+      generalOption.disabled = Number(humidorSelect.value || 0) === currentLocationId && currentSectionId === 0
+      sectionSelect.replaceChildren(generalOption)
       records('storage-sub-locations')
         .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
-        .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
+        .forEach((section) => {
+          const option = new Option(sectionName(section), String(section.id))
+          option.disabled = Number(humidorSelect.value || 0) === currentLocationId && Number(section.id) === currentSectionId
+          sectionSelect.append(option)
+        })
+      updateMoveAvailability()
     }
     humidorSelect.addEventListener('change', fillSections)
+    sectionSelect.addEventListener('change', updateMoveAvailability)
     fillSections()
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
       try {
+        if (destinationIsCurrent()) {
+          throw new Error('Destination must be different from the current Humidor and section.')
+        }
         const data = new FormData(form)
         await apiPost('/inventory/move', {
           sourceBalanceId: String(data.get('sourceBalanceId') || '').trim(),

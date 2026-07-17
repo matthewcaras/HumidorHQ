@@ -1,11 +1,17 @@
 # Filename: rebuild-inventory-state.ps1
-# Revision : 1.0.0
+# Revision : 1.1.0
 # Description : Rebuilds lot balances and purchase-receipt inventory events from purchases, purchase lines, lots, and non-receipt events.
 # Author : OpenAI Codex
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-16
+# Modified Date : 2026-07-17
 # Changelog :
+# 1.1.0 require an isolated data root or explicit destructive override
 # 1.0.0 initial rebuild utility after purchase-sync scoping fix
+
+param(
+    [string]$DataRoot,
+    [switch]$ForceDestructive
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -56,12 +62,27 @@ function Ensure-BalanceBucket {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$purchasesPath = Join-Path $repoRoot 'data\purchases.json'
-$linesPath = Join-Path $repoRoot 'data\purchase-lines.json'
-$lotsPath = Join-Path $repoRoot 'data\lots.json'
-$eventsPath = Join-Path $repoRoot 'data\inventory-events.json'
-$balancesPath = Join-Path $repoRoot 'data\lot-location-balances.json'
-$countersPath = Join-Path $repoRoot 'data\counters.json'
+$repositoryDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'data'))
+$resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+    $repositoryDataRoot
+} else {
+    [System.IO.Path]::GetFullPath($DataRoot)
+}
+if ($resolvedDataRoot -eq $repositoryDataRoot -and -not $ForceDestructive) {
+    throw 'SAFETY STOP: rebuilding the repository data directory is destructive. Supply -DataRoot with an isolated temporary/test directory, or deliberately pass -ForceDestructive.'
+}
+if (-not (Test-Path -LiteralPath $resolvedDataRoot -PathType Container)) {
+    throw "Data root does not exist: $resolvedDataRoot"
+}
+if ($ForceDestructive) {
+    Write-Warning "DESTRUCTIVE OVERRIDE ENABLED: balances, inventory events, and counters under $resolvedDataRoot will be replaced."
+}
+$purchasesPath = Join-Path $resolvedDataRoot 'purchases.json'
+$linesPath = Join-Path $resolvedDataRoot 'purchase-lines.json'
+$lotsPath = Join-Path $resolvedDataRoot 'lots.json'
+$eventsPath = Join-Path $resolvedDataRoot 'inventory-events.json'
+$balancesPath = Join-Path $resolvedDataRoot 'lot-location-balances.json'
+$countersPath = Join-Path $resolvedDataRoot 'counters.json'
 
 $purchases = @(Load-JsonFile $purchasesPath)
 $purchaseLines = @(Load-JsonFile $linesPath)
@@ -188,3 +209,7 @@ Save-JsonFile -Path $eventsPath -Data $allEvents
 Save-JsonFile -Path $countersPath -Data $counters
 
 Write-Host "Rebuilt $($rebuiltBalances.Count) balance rows and $($allEvents.Count) inventory events." -ForegroundColor Green
+
+# Example Usage:
+#   .\tools\rebuild-inventory-state.ps1 -DataRoot "$env:TEMP\humidorhq-rebuild-test"
+#   .\tools\rebuild-inventory-state.ps1 -ForceDestructive

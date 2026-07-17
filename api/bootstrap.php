@@ -2,14 +2,17 @@
 declare(strict_types=1);
 /*
  * Filename: bootstrap.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Modified Date: 2026-07-17 12:00 ET
  */
 
 define('APP_ROOT', dirname(__DIR__));
 define('API_ROOT', __DIR__);
-define('DATA_ROOT', APP_ROOT . DIRECTORY_SEPARATOR . 'data');
+$configuredDataRoot = trim((string) getenv('HUMIDORHQ_DATA_ROOT'));
+define('DATA_ROOT', $configuredDataRoot !== ''
+    ? rtrim($configuredDataRoot, "\\/")
+    : APP_ROOT . DIRECTORY_SEPARATOR . 'data');
 
 require_once API_ROOT . '/lib/Errors.php';
 require_once API_ROOT . '/lib/Response.php';
