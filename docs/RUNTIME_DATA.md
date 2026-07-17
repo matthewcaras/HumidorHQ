@@ -1,8 +1,8 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.0.0
+Revision: 1.2.0
 Description: Windows and Hostinger setup for HumidorHQ external runtime JSON storage.
-Modified Date: 2026-07-17 11:30 ET
+Modified Date: 2026-07-17 19:00 ET
 -->
 
 # External Runtime Data Setup
@@ -63,6 +63,7 @@ Do not delete or reset the legacy `data/` directory until the external copy, man
 2. Copy verified runtime JSON into that directory using SFTP/SSH or a separately rehearsed migration. Do not initialize it by deploying repository `data/`.
 3. Restrict ownership to the account/PHP worker. A typical target is directory mode `700` and file mode `600`, adjusted only if Hostinger's PHP worker requires a shared group.
 4. Configure `HUMIDORHQ_DATA_ROOT=/home/ACCOUNT/humidorhq-runtime` in Hostinger's persistent environment/PHP configuration. If Hostinger requires Apache `SetEnv`, add it through the server-managed configuration and keep the account-specific absolute path out of Git.
+   Also set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Enable `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when Hostinger's proxy overwrites `X-Forwarded-Proto` and `X-Forwarded-For` rather than accepting client-supplied values.
 5. Confirm PHP can read and write the directory and required JSON. The API returns HTTP 503 with a `DATA_ROOT_*` error until configuration is valid.
 6. Keep backups and copy manifests outside both `public_html` and the runtime directory.
 7. Deploy only code and tracked `seed-data/`. Never make the external runtime directory a webhook, Git checkout, release-extraction, or synchronization target.
@@ -85,6 +86,20 @@ The external directory must contain readable, writable JSON files named:
 - `vendors.json`
 
 `audit-log.jsonl` is optional at startup and is created on the first audited action. If it exists, it must also be readable and writable.
+
+The optional `.auth-login-state.json` and its lock are created automatically in the external runtime directory after login activity. The state contains hashed throttle keys and timestamps, never passwords or password hashes.
+
+## Authentication environment controls
+
+- `HUMIDORHQ_FORCE_SECURE_COOKIES=1`: always marks the session cookie Secure; recommended for Hostinger HTTPS.
+- `HUMIDORHQ_TRUST_PROXY_HEADERS=1`: trusts forwarded protocol/client headers; use only behind a trusted, overwriting proxy.
+- `HUMIDORHQ_SESSION_IDLE_SECONDS`: inactivity limit, default `1800`.
+- `HUMIDORHQ_SESSION_ABSOLUTE_SECONDS`: total session limit, default `43200`.
+- `HUMIDORHQ_LOGIN_USERNAME_LIMIT`: failures per username window, default `5`.
+- `HUMIDORHQ_LOGIN_CLIENT_LIMIT`: failures per client window, default `20`.
+- `HUMIDORHQ_LOGIN_WINDOW_SECONDS`: failure-count window, default `900`.
+- `HUMIDORHQ_LOGIN_LOCK_SECONDS`: throttle duration, default `900`.
+- `HUMIDORHQ_TIMEZONE`: local calendar timezone for inventory event dates, default `America/Indiana/Indianapolis`.
 
 ## Startup failures
 

@@ -1,10 +1,12 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.12.0
+# Revision : 1.14.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 12:00 PM ET
+# Modified Date : 2026-07-17 7:00 PM ET
 # Changelog :
+# 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
+# 1.13.0 verify CSRF session tokens and authenticated mutation compatibility
 # 1.12.0 use tracked seed data and verify external runtime-root startup enforcement
 # 1.11.1 verify received-purchase line creation, reassignment, incomplete-line, and rejection hash guards
 # 1.11.0 isolate all runtime data and verify Stage 0 move, immutability, deletion, journal, and integrity protections
@@ -210,7 +212,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.6') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.8') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -234,6 +236,10 @@ foreach ($startupGuard in @('DATA_ROOT_NOT_CONFIGURED', 'DATA_ROOT_MISSING', 'DA
     if ($bootstrapSource -notmatch [regex]::Escape($startupGuard)) { throw "Bootstrap is missing runtime startup guard: $startupGuard" }
 }
 if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
+if ($appJs -match "return '2026-07-16'" -or $appJs -match 'toISOString\(\)\.slice\(0, 10\)' -or $appJs -notmatch 'today\.getFullYear\(\)') { throw 'Date defaults must use the current local calendar date.' }
+foreach ($moneyCompletenessHook in @('function hasKnownMoney', 'function sumMoneyValues', "return 'Unknown'", 'knownCostQuantity', 'costComplete')) {
+    if ($appJs -notmatch [regex]::Escape($moneyCompletenessHook)) { throw "Unknown-money handling is missing hook: $moneyCompletenessHook" }
+}
 if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
 if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
 if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
@@ -351,9 +357,13 @@ try {
     $anonymousSample = Invoke-WebRequest "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session -SkipHttpErrorCheck
     if ($anonymousSample.StatusCode -ne 401) { throw "Sample-data should require authentication. Expected 401, got $($anonymousSample.StatusCode)." }
 
+    if (-not $anonymousSession.data.csrfToken) { throw 'Anonymous session did not return a CSRF token.' }
+    $session.Headers['X-CSRF-Token'] = [string]$anonymousSession.data.csrfToken
     $loginBody = @{ username = 'testuser'; password = 'testpass' } | ConvertTo-Json
     $login = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $session
     if ($login.data.authenticated -ne $true -or $login.data.user.username -ne 'testuser') { throw 'Login did not return an authenticated test user.' }
+    if (-not $login.data.csrfToken) { throw 'Authenticated session did not return a CSRF token.' }
+    $session.Headers['X-CSRF-Token'] = [string]$login.data.csrfToken
 
     $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session
     if ($null -eq $sample.data.collections) { throw 'Sample-data endpoint did not return collection summaries.' }
@@ -386,6 +396,40 @@ try {
 
     $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+
+    $invalidPurchaseBase = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-02-30'; status = 'pending'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidPurchaseBase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $invalidMoneyPurchase = $invalidPurchaseBase.Clone(); $invalidMoneyPurchase.purchaseDate = '2026-07-17'; $invalidMoneyPurchase.discount = '-1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidMoneyPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $invalidPrecisionPurchase = $invalidPurchaseBase.Clone(); $invalidPrecisionPurchase.purchaseDate = '2026-07-17'; $invalidPrecisionPurchase.shipping = '0.001'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidPrecisionPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $partialStatusPurchase = $invalidPurchaseBase.Clone(); $partialStatusPurchase.purchaseDate = '2026-07-17'; $partialStatusPurchase.status = 'partially-received'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $partialStatusPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+
+    $authoritativePurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; shipping = '1'; exciseTax = '0'; salesTax = '0'; discount = '1'; totalPaid = '999' }
+    $authoritativePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($authoritativePurchaseBody | ConvertTo-Json) -WebSession $session
+    if ($authoritativePurchase.data.totalPaid -ne 10) { throw 'PHP did not override the client totalPaid with the authoritative formula.' }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($authoritativePurchase.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $unknownPurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; totalPaid = '999' }
+    $unknownPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($unknownPurchaseBody | ConvertTo-Json) -WebSession $session
+    if ($null -ne $unknownPurchase.data.totalPaid) { throw 'Missing purchase adjustments must keep totalPaid unknown.' }
+    $unknownLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{ purchaseId = [string]$unknownPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10' } | ConvertTo-Json) -WebSession $session
+    if ($null -ne $unknownLine.data.trueCostBasis -or $null -ne $unknownLine.data.trueCostPerCigar) { throw 'Missing header money must keep allocated line cost unknown.' }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($unknownLine.data.id)" -Method Delete -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($unknownPurchase.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $pennyPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body (@{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '0.03'; shipping = '0.01'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '0' } | ConvertTo-Json) -WebSession $session
+    $pennyLines = @()
+    1..3 | ForEach-Object {
+        $pennyLines += Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{ purchaseId = [string]$pennyPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '0.01'; unitCost = '0.01' } | ConvertTo-Json) -WebSession $session
+    }
+    $storedPennyLines = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') | ConvertFrom-Json) | Where-Object { $_.purchaseId -eq $pennyPurchase.data.id } | Sort-Object id)
+    if (($storedPennyLines | Measure-Object -Property allocatedShipping -Sum).Sum -ne 0.01 -or $storedPennyLines[0].allocatedShipping -ne 0.01 -or $storedPennyLines[1].allocatedShipping -ne 0 -or $storedPennyLines[2].allocatedShipping -ne 0) {
+        throw 'Deterministic largest-remainder allocation did not reconcile the penny to stable line-ID order.'
+    }
+    foreach ($line in $pennyLines) { Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($line.data.id)" -Method Delete -WebSession $session | Out-Null }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($pennyPurchase.data.id)" -Method Delete -WebSession $session | Out-Null
 
     $emptyHumidorBody = @{ name = 'Empty Smoke Humidor'; type = 'Cabinet'; capacity = '10'; notes = 'temporary empty humidor' } | ConvertTo-Json
     $emptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $emptyHumidorBody -WebSession $session
@@ -555,6 +599,9 @@ try {
 
     $removeBody = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; notes = 'journal guard smoke test' } | ConvertTo-Json
     $removed = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
+    $lotAfterRemoval = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $lotBalanceQuantity = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($lotAfterRemoval.currentQuantity -ne $lotBalanceQuantity.Sum) { throw 'Lot currentQuantity did not reconcile to positive balances after removal.' }
     $journalBody = @{ rating = 8; notes = 'must remain linked' } | ConvertTo-Json
     $journal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body $journalBody -WebSession $session
     if ($journal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Smoking Journal entry did not link to the smoked event.' }

@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: bootstrap.php
- * Revision: 1.2.0
+ * Revision: 1.5.0
  * Description: Defines and validates the external HumidorHQ runtime data root before loading the API.
- * Modified Date: 2026-07-17 12:00 ET
+ * Modified Date: 2026-07-17 19:00 ET
  */
 
 define('APP_ROOT', dirname(__DIR__));
@@ -20,6 +20,9 @@ function data_root_startup_failure(string $code, string $message): never
         http_response_code(503);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: SAMEORIGIN');
+        header('Referrer-Policy: no-referrer');
     }
     echo json_encode([
         'error' => [
@@ -101,14 +104,19 @@ $configuredDataRoot = trim((string) getenv('HUMIDORHQ_DATA_ROOT'));
 if ($configuredDataRoot === '') {
     data_root_startup_failure('DATA_ROOT_NOT_CONFIGURED', 'Set HUMIDORHQ_DATA_ROOT to an external runtime data directory.');
 }
+require_once API_ROOT . '/lib/Errors.php';
+require_once API_ROOT . '/lib/JsonStore.php';
 $resolvedDataRoot = normalized_runtime_path($configuredDataRoot);
+try {
+    recover_interrupted_data_transaction($resolvedDataRoot);
+} catch (Throwable) {
+    data_root_startup_failure('DATA_TRANSACTION_RECOVERY_FAILED', 'An interrupted runtime data transaction could not be recovered safely.');
+}
 validate_runtime_data_root($resolvedDataRoot);
 define('DATA_ROOT', $resolvedDataRoot);
 
-require_once API_ROOT . '/lib/Errors.php';
 require_once API_ROOT . '/lib/Response.php';
 require_once API_ROOT . '/lib/Validation.php';
-require_once API_ROOT . '/lib/JsonStore.php';
 require_once API_ROOT . '/lib/DataRepository.php';
 require_once API_ROOT . '/lib/Auth.php';
 require_once API_ROOT . '/lib/Audit.php';
@@ -156,6 +164,21 @@ function request_json(): array
 function now_iso(): string
 {
     return gmdate('Y-m-d\TH:i:s\Z');
+}
+
+function application_timezone(): DateTimeZone
+{
+    $configured = trim((string) getenv('HUMIDORHQ_TIMEZONE'));
+    try {
+        return new DateTimeZone($configured !== '' ? $configured : 'America/Indiana/Indianapolis');
+    } catch (Throwable) {
+        throw new ApiError('CONFIG_INVALID_TIMEZONE', 'HUMIDORHQ_TIMEZONE is not a valid timezone identifier.', 500);
+    }
+}
+
+function today_local_date(): string
+{
+    return (new DateTimeImmutable('now', application_timezone()))->format('Y-m-d');
 }
 
 

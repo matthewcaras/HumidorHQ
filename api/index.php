@@ -2,13 +2,14 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.6.0
+ * Revision: 1.9.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-17 12:00 ET
+ * Modified Date: 2026-07-17 19:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
+send_security_headers();
 
 function sample_data_collections(): array
 {
@@ -202,7 +203,12 @@ function managed_collection_config(string $collection): array
 
 function clean_text_field(array $input, string $field): string
 {
-    return trim((string) ($input[$field] ?? ''));
+    $value = trim((string) ($input[$field] ?? ''));
+    $limit = $field === 'notes' ? 5000 : ($field === 'website' ? 2048 : 255);
+    if (strlen($value) > $limit) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' is too long.', 422);
+    }
+    return $value;
 }
 
 function clean_optional_int(array $input, string $field): ?int
@@ -211,7 +217,7 @@ function clean_optional_int(array $input, string $field): ?int
     if ($value === '') {
         return null;
     }
-    if (!preg_match('/^-?[0-9]+$/', $value)) {
+    if (!preg_match('/^[0-9]+$/', $value)) {
         throw new ApiError('VALIDATION_ERROR', $field . ' must be a whole number.', 422);
     }
     return (int) $value;
@@ -223,19 +229,33 @@ function clean_optional_money(array $input, string $field): ?float
     if ($value === '') {
         return null;
     }
-    if (!is_numeric($value)) {
-        throw new ApiError('VALIDATION_ERROR', $field . ' must be a number.', 422);
+    if (!preg_match('/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?$/', $value)) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' must be a non-negative amount with no more than two decimal places.', 422);
     }
-    return round((float) $value, 2);
+    $cents = money_text_to_cents($value, $field);
+    if ($cents > 10000000000) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' is too large.', 422);
+    }
+    return cents_to_money($cents);
 }
 
-function money_to_cents(mixed $value): int
+function money_text_to_cents(string $value, string $field = 'amount'): int
+{
+    if (!preg_match('/^(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/', $value, $matches)) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' is not a valid monetary amount.', 422);
+    }
+    $whole = (int) $matches[1];
+    $fraction = str_pad((string) ($matches[2] ?? ''), 2, '0');
+    return ($whole * 100) + (int) $fraction;
+}
+
+function money_to_cents(mixed $value): ?int
 {
     if ($value === null || $value === '') {
-        return 0;
+        return null;
     }
-
-    return (int) round((float) $value * 100);
+    $text = is_float($value) ? number_format($value, 2, '.', '') : trim((string) $value);
+    return money_text_to_cents($text);
 }
 
 function cents_to_money(int $value): float
@@ -243,12 +263,13 @@ function cents_to_money(int $value): float
     return round($value / 100, 2);
 }
 
-function line_subtotal_cents(array $line): int
+function line_subtotal_cents(array $line): ?int
 {
     if (isset($line['purchasePrice']) && $line['purchasePrice'] !== null && $line['purchasePrice'] !== '') {
         return money_to_cents($line['purchasePrice']);
     }
-    return (int) ($line['quantity'] ?? 0) * money_to_cents($line['unitCost'] ?? null);
+    $unitCost = money_to_cents($line['unitCost'] ?? null);
+    return $unitCost === null ? null : (int) ($line['quantity'] ?? 0) * $unitCost;
 }
 
 function purchase_lookup_index(array $rows): array
@@ -269,32 +290,65 @@ function allocate_cents_by_weight(int $totalCents, array $weightsByKey): array
         return [];
     }
 
-    $totalWeight = array_sum(array_map(
-        static fn (mixed $weight): float => max(0.0, (float) $weight),
-        array_values($weightsByKey)
-    ));
+    $normalizedWeights = [];
+    foreach ($weightsByKey as $key => $weight) {
+        $normalizedWeights[$key] = max(0, (int) $weight);
+    }
+    $totalWeight = array_sum($normalizedWeights);
 
     if ($totalWeight <= 0) {
-        $totalWeight = (float) count($keys);
-        $weightsByKey = array_fill_keys($keys, 1.0);
+        $totalWeight = count($keys);
+        $normalizedWeights = array_fill_keys($keys, 1);
     }
 
     $allocated = [];
+    $remainders = [];
     $running = 0;
-    $lastKey = $keys[array_key_last($keys)];
-
     foreach ($keys as $key) {
-        if ($key === $lastKey) {
-            $allocated[$key] = $totalCents - $running;
+        $weighted = $totalCents * $normalizedWeights[$key];
+        $allocated[$key] = intdiv($weighted, $totalWeight);
+        $remainders[$key] = $weighted % $totalWeight;
+        $running += $allocated[$key];
+    }
+    $remainderCents = $totalCents - $running;
+    uksort($remainders, static function (string|int $left, string|int $right) use ($remainders): int {
+        $comparison = $remainders[$right] <=> $remainders[$left];
+        return $comparison !== 0 ? $comparison : ((int) $left <=> (int) $right);
+    });
+    foreach (array_keys($remainders) as $key) {
+        if ($remainderCents <= 0) {
             break;
         }
-
-        $share = (int) round($totalCents * ((float) $weightsByKey[$key] / $totalWeight));
-        $allocated[$key] = $share;
-        $running += $share;
+        $allocated[$key]++;
+        $remainderCents--;
     }
 
     return $allocated;
+}
+
+function allocate_optional_cents(?int $totalCents, array $weightsByKey): array
+{
+    if ($totalCents === null) {
+        return array_fill_keys(array_keys($weightsByKey), null);
+    }
+    return allocate_cents_by_weight($totalCents, $weightsByKey);
+}
+
+function validate_iso_date(?string $value, string $field, bool $required = false): ?string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        if ($required) {
+            throw new ApiError('VALIDATION_ERROR', $field . ' is required.', 422);
+        }
+        return null;
+    }
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+    $errors = DateTimeImmutable::getLastErrors();
+    if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) || $date->format('Y-m-d') !== $value) {
+        throw new ApiError('VALIDATION_ERROR', $field . ' must be a valid date in YYYY-MM-DD format.', 422);
+    }
+    return $value;
 }
 
 function purchase_line_ids_for_purchase(int $purchaseId): array
@@ -473,13 +527,13 @@ function sync_purchase_inventory(int $purchaseId): void
     $weights = [];
     foreach ($purchaseLines as $line) {
         $subtotal = line_subtotal_cents($line);
-        $weights[(int) $line['id']] = $subtotal > 0 ? $subtotal : max(1, (int) ($line['quantity'] ?? 0));
+        $weights[(int) $line['id']] = $subtotal !== null && $subtotal > 0 ? $subtotal : max(1, (int) ($line['quantity'] ?? 0));
     }
 
-    $allocatedShipping = allocate_cents_by_weight(money_to_cents($purchase['shipping'] ?? null), $weights);
-    $allocatedExciseTax = allocate_cents_by_weight(money_to_cents($purchase['exciseTax'] ?? null), $weights);
-    $allocatedSalesTax = allocate_cents_by_weight(money_to_cents($purchase['salesTax'] ?? null), $weights);
-    $allocatedDiscount = allocate_cents_by_weight(money_to_cents($purchase['discount'] ?? null), $weights);
+    $allocatedShipping = allocate_optional_cents(money_to_cents($purchase['shipping'] ?? null), $weights);
+    $allocatedExciseTax = allocate_optional_cents(money_to_cents($purchase['exciseTax'] ?? null), $weights);
+    $allocatedSalesTax = allocate_optional_cents(money_to_cents($purchase['salesTax'] ?? null), $weights);
+    $allocatedDiscount = allocate_optional_cents(money_to_cents($purchase['discount'] ?? null), $weights);
 
     $updatedLinesById = [];
     foreach ($purchaseLines as $line) {
@@ -490,21 +544,28 @@ function sync_purchase_inventory(int $purchaseId): void
         }
         $quantity = max(1, (int) ($line['quantity'] ?? 0));
         $subtotalCents = line_subtotal_cents($line);
-        $trueCostBasisCents = $subtotalCents
-            + ($allocatedShipping[$lineId] ?? 0)
-            + ($allocatedExciseTax[$lineId] ?? 0)
-            + ($allocatedSalesTax[$lineId] ?? 0)
-            - ($allocatedDiscount[$lineId] ?? 0);
+        $allocationParts = [
+            $allocatedShipping[$lineId] ?? null,
+            $allocatedExciseTax[$lineId] ?? null,
+            $allocatedSalesTax[$lineId] ?? null,
+            $allocatedDiscount[$lineId] ?? null,
+        ];
+        $hasCompleteCost = $subtotalCents !== null && !in_array(null, $allocationParts, true);
+        $trueCostBasisCents = $hasCompleteCost
+            ? $subtotalCents + $allocationParts[0] + $allocationParts[1] + $allocationParts[2] - $allocationParts[3]
+            : null;
         $catalog = $catalogById[(int) ($line['catalogCigarId'] ?? 0)] ?? null;
         $resolvedMsrp = $line['msrpPerCigar'] ?? ($catalog['msrp'] ?? null);
 
-        $line['lineSubtotal'] = cents_to_money($subtotalCents);
-        $line['allocatedShipping'] = cents_to_money($allocatedShipping[$lineId] ?? 0);
-        $line['allocatedExciseTax'] = cents_to_money($allocatedExciseTax[$lineId] ?? 0);
-        $line['allocatedSalesTax'] = cents_to_money($allocatedSalesTax[$lineId] ?? 0);
-        $line['allocatedDiscount'] = cents_to_money($allocatedDiscount[$lineId] ?? 0);
-        $line['trueCostBasis'] = cents_to_money($trueCostBasisCents);
-        $line['trueCostPerCigar'] = cents_to_money((int) round($trueCostBasisCents / $quantity));
+        $line['lineSubtotal'] = $subtotalCents === null ? null : cents_to_money($subtotalCents);
+        $line['allocatedShipping'] = $allocationParts[0] === null ? null : cents_to_money($allocationParts[0]);
+        $line['allocatedExciseTax'] = $allocationParts[1] === null ? null : cents_to_money($allocationParts[1]);
+        $line['allocatedSalesTax'] = $allocationParts[2] === null ? null : cents_to_money($allocationParts[2]);
+        $line['allocatedDiscount'] = $allocationParts[3] === null ? null : cents_to_money($allocationParts[3]);
+        $line['trueCostBasis'] = $trueCostBasisCents === null ? null : cents_to_money($trueCostBasisCents);
+        $line['trueCostPerCigar'] = $trueCostBasisCents === null
+            ? null
+            : cents_to_money(intdiv($trueCostBasisCents + intdiv($quantity, 2), $quantity));
         $line['msrpPerCigarResolved'] = $resolvedMsrp === null || $resolvedMsrp === '' ? null : round((float) $resolvedMsrp, 2);
         $line['updatedAt'] = $now;
         $updatedLinesById[$lineId] = $line;
@@ -652,8 +713,33 @@ function delete_purchase_line_inventory(int $purchaseLineId): void
     }
 }
 
+function synchronize_lot_quantity_cache(int $lotId, array $balances, string $updatedAt): void
+{
+    $currentQuantity = 0;
+    foreach ($balances as $balance) {
+        if (is_array($balance) && (int) ($balance['lotId'] ?? 0) === $lotId) {
+            $currentQuantity += max(0, (int) ($balance['quantity'] ?? 0));
+        }
+    }
+    $lots = load_collection('lots');
+    foreach ($lots as $index => $lot) {
+        if (is_array($lot) && (int) ($lot['id'] ?? 0) === $lotId) {
+            if ((int) ($lot['currentQuantity'] ?? 0) !== $currentQuantity) {
+                $lots[$index]['currentQuantity'] = $currentQuantity;
+                $lots[$index]['updatedAt'] = $updatedAt;
+                save_collection('lots', $lots);
+            }
+            return;
+        }
+    }
+    throw new ApiError('VALIDATION_ERROR', 'The affected Lot was not found.', 404);
+}
+
 function move_inventory(array $input): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => move_inventory($input));
+    }
     $sourceBalanceId = positive_int_param($input['sourceBalanceId'] ?? null, 'source balance id', 'VALIDATION_ERROR');
     $quantity = positive_int_param($input['quantity'] ?? null, 'quantity', 'VALIDATION_ERROR');
     $toStorageLocationId = positive_int_param($input['toStorageLocationId'] ?? null, 'destination humidor id', 'VALIDATION_ERROR');
@@ -756,6 +842,7 @@ function move_inventory(array $input): array
         static fn (mixed $row): bool => !is_array($row) || (int) ($row['quantity'] ?? 0) > 0
     ));
     save_collection('lot-location-balances', $allBalances);
+    synchronize_lot_quantity_cache($lotId, $allBalances, $now);
 
     $events = load_collection('inventory-events');
     $events[] = [
@@ -770,7 +857,7 @@ function move_inventory(array $input): array
         'toStorageLocationId' => $toStorageLocationId,
         'toStorageSubLocationId' => $toStorageSubLocationId,
         'quantity' => $quantity,
-        'eventDate' => substr($now, 0, 10),
+        'eventDate' => today_local_date(),
         'occurredAt' => $now,
         'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
@@ -799,6 +886,9 @@ function move_inventory(array $input): array
 
 function remove_inventory(array $input): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => remove_inventory($input));
+    }
     $sourceBalanceId = positive_int_param($input['sourceBalanceId'] ?? null, 'source balance id', 'VALIDATION_ERROR');
     $quantity = positive_int_param($input['quantity'] ?? null, 'quantity', 'VALIDATION_ERROR');
     $eventTypeInput = strtoupper(trim((string) ($input['eventType'] ?? '')));
@@ -846,6 +936,7 @@ function remove_inventory(array $input): array
         static fn (mixed $row): bool => !is_array($row) || (int) ($row['quantity'] ?? 0) > 0
     ));
     save_collection('lot-location-balances', $balances);
+    synchronize_lot_quantity_cache($lotId, $balances, $now);
 
     $events = load_collection('inventory-events');
     $event = [
@@ -858,7 +949,7 @@ function remove_inventory(array $input): array
         'fromStorageLocationId' => $sourceBalance['storageLocationId'] ?? null,
         'fromStorageSubLocationId' => $sourceBalance['storageSubLocationId'] ?? null,
         'quantity' => $quantity,
-        'eventDate' => substr($now, 0, 10),
+        'eventDate' => today_local_date(),
         'occurredAt' => $now,
         'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
@@ -905,12 +996,15 @@ function clean_managed_record(string $collection, array $input, ?array $existing
         }
     }
 
+    validate_managed_numeric_ranges($collection, $record);
+
     if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
         throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
     }
     if ($collection === 'purchases') {
         $record['status'] = normalize_purchase_status_value((string) ($record['status'] ?? ''));
         validate_purchase_status($record);
+        normalize_purchase_dates_and_total($record);
     }
     if ($collection === 'storage-sub-locations') {
         validate_storage_sub_location_links($record);
@@ -931,7 +1025,7 @@ function normalize_purchase_status_value(string $value): string
 {
     $normalized = trim(strtolower($value));
     return match ($normalized) {
-        '', 'in-route', 'partially-received' => 'pending',
+        '', 'in-route' => 'pending',
         default => $normalized,
     };
 }
@@ -942,6 +1036,66 @@ function validate_purchase_status(array $record): void
     if (!in_array((string) ($record['status'] ?? ''), $allowed, true)) {
         throw new ApiError('VALIDATION_ERROR', 'status must be pending or received.', 422);
     }
+}
+
+function validate_managed_numeric_ranges(string $collection, array $record): void
+{
+    $constraints = [
+        'catalog-cigars' => ['ringGauge' => [1, 200]],
+        'storage-locations' => ['capacity' => [0, 1000000]],
+        'storage-sub-locations' => ['storageLocationId' => [1, PHP_INT_MAX], 'capacity' => [0, 1000000]],
+        'purchases' => ['vendorId' => [1, PHP_INT_MAX]],
+        'purchase-lines' => [
+            'purchaseId' => [1, PHP_INT_MAX],
+            'catalogCigarId' => [1, PHP_INT_MAX],
+            'storageLocationId' => [1, PHP_INT_MAX],
+            'storageSubLocationId' => [1, PHP_INT_MAX],
+            'quantity' => [1, 1000000],
+        ],
+    ];
+    foreach ($constraints[$collection] ?? [] as $field => [$minimum, $maximum]) {
+        if (($record[$field] ?? null) === null || $record[$field] === '') {
+            continue;
+        }
+        $value = (int) $record[$field];
+        if ($value < $minimum || $value > $maximum) {
+            throw new ApiError('VALIDATION_ERROR', $field . ' is outside the allowed range.', 422);
+        }
+    }
+}
+
+function normalize_purchase_dates_and_total(array &$record): void
+{
+    $purchaseDate = validate_iso_date((string) ($record['purchaseDate'] ?? ''), 'purchaseDate', true);
+    $expectedDate = validate_iso_date((string) ($record['expectedDate'] ?? ''), 'expectedDate');
+    $isReceived = normalize_purchase_status_value((string) ($record['status'] ?? '')) === 'received';
+    $receivedDate = validate_iso_date((string) ($record['receivedDate'] ?? ''), 'receivedDate', $isReceived);
+    if (!$isReceived && $receivedDate !== null) {
+        throw new ApiError('VALIDATION_ERROR', 'receivedDate may only be set when status is received.', 422);
+    }
+    if ($receivedDate !== null && $purchaseDate !== null && $receivedDate < $purchaseDate) {
+        throw new ApiError('VALIDATION_ERROR', 'receivedDate cannot be earlier than purchaseDate.', 422);
+    }
+    $record['purchaseDate'] = $purchaseDate;
+    $record['expectedDate'] = $expectedDate ?? '';
+    $record['receivedDate'] = $receivedDate ?? '';
+
+    if (($record['subtotal'] ?? null) === null) {
+        throw new ApiError('VALIDATION_ERROR', 'subtotal is required and must remain distinct from zero.', 422);
+    }
+    $parts = [];
+    foreach (['subtotal', 'shipping', 'exciseTax', 'salesTax', 'discount'] as $field) {
+        $parts[$field] = money_to_cents($record[$field] ?? null);
+    }
+    if (in_array(null, $parts, true)) {
+        $record['totalPaid'] = null;
+        return;
+    }
+    $totalCents = $parts['subtotal'] + $parts['shipping'] + $parts['exciseTax'] + $parts['salesTax'] - $parts['discount'];
+    if ($totalCents < 0) {
+        throw new ApiError('VALIDATION_ERROR', 'discount cannot exceed subtotal plus charges.', 422);
+    }
+    $record['totalPaid'] = cents_to_money($totalCents);
 }
 
 function validate_storage_sub_location_links(array $record): void
@@ -1017,6 +1171,9 @@ function list_managed_records(string $collection): array
 
 function create_managed_record(string $collection, array $input): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => create_managed_record($collection, $input));
+    }
     $config = managed_collection_config($collection);
     if ((bool) ($config['readOnly'] ?? false)) {
         throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
@@ -1050,6 +1207,9 @@ function create_managed_record(string $collection, array $input): array
 
 function update_managed_record(string $collection, int $id, array $input): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => update_managed_record($collection, $id, $input));
+    }
     $config = managed_collection_config($collection);
     if ((bool) ($config['readOnly'] ?? false)) {
         throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
@@ -1165,6 +1325,9 @@ function update_managed_record(string $collection, int $id, array $input): array
 
 function delete_managed_record(string $collection, int $id): array
 {
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => delete_managed_record($collection, $id));
+    }
     $config = managed_collection_config($collection);
     if ((bool) ($config['readOnly'] ?? false)) {
         throw new ApiError('COLLECTION_READ_ONLY', 'This collection is read-only through this endpoint.', 405);
@@ -1257,14 +1420,22 @@ try {
     }
 
     if ($path === '/login' && $method === 'POST') {
+        require_csrf();
         $payload = login_with_credentials(request_json());
         audit_record('Authentication', 'login');
         json_success($payload);
     }
 
     if ($path === '/logout' && $method === 'POST') {
+        require_auth();
+        require_csrf();
         audit_record('Authentication', 'logout');
         json_success(logout_current_user());
+    }
+
+    if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+        require_auth();
+        require_csrf();
     }
 
     if ($path === '/sample-data' && $method === 'GET') {
@@ -1339,12 +1510,14 @@ try {
             json_success(get_smoking_journal($inventoryEventId));
         }
         if ($method === 'PUT') {
+            $result = upsert_smoking_journal($inventoryEventId, request_json());
             audit_record('Smoking Journal', 'save', ['inventoryEventId' => $inventoryEventId]);
-            json_success(upsert_smoking_journal($inventoryEventId, request_json()));
+            json_success($result);
         }
         if ($method === 'DELETE') {
+            $result = delete_smoking_journal($inventoryEventId);
             audit_record('Smoking Journal', 'delete', ['inventoryEventId' => $inventoryEventId]);
-            json_success(delete_smoking_journal($inventoryEventId));
+            json_success($result);
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }

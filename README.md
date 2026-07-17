@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.10.0
+Revision: 1.13.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 12:00 PM ET
+Modified Date: 2026-07-17 7:00 PM ET
 -->
 
 # HumidorHQ
@@ -61,6 +61,12 @@ Temporary probe files are not part of the deployable app and should not be commi
 
 Runtime data is stored in the external directory identified by `HUMIDORHQ_DATA_ROOT`. Startup fails safely if the variable is missing, the directory is inside the application tree, required JSON is missing or malformed, or PHP cannot read and write the directory.
 
+Data-changing API workflows use one serialized transaction boundary. Collections are reloaded while that lock is held, IDs are allocated with their records, all changed JSON is staged before replacement, and exact backups plus a recovery journal restore the prior state after a write failure or interrupted process. Successful mutation audit entries are delayed until the JSON commit completes.
+
+Purchase dates use the browser's local calendar by default and are validated as real `YYYY-MM-DD` dates by PHP. Inventory event dates use `HUMIDORHQ_TIMEZONE`, defaulting to `America/Indiana/Indianapolis`.
+
+PHP is authoritative for purchase totals and weighted allocations. Monetary calculations use integer cents and a stable line-ID largest-remainder allocation. Known zero remains `$0.00`; missing adjustments, costs, and MSRP values remain `Unknown` rather than being included as zero in complete-looking totals.
+
 The browser app never fetches raw JSON directly. It calls PHP endpoints under `api/`, and PHP reads and writes the external files. `seed-data/` contains empty Git-tracked initialization data and is blocked from browser access. See [External Runtime Data Setup](docs/RUNTIME_DATA.md) for Windows migration and Hostinger configuration.
 
 
@@ -69,6 +75,10 @@ The browser app never fetches raw JSON directly. It calls PHP endpoints under `a
 Public deployments require sign-in before data routes can be read or changed. The PHP API uses server-side sessions and verifies users against password hashes in external runtime `auth-users.json`.
 
 Runtime credentials are never read from the repository. Do not commit real usernames or password hashes.
+
+Authentication applies shared username and client-address throttles, audits failed and rate-limited attempts without passwords, and uses a constant-work dummy verification for unknown usernames. Authenticated sessions expire after 30 minutes of inactivity or 12 hours total by default. Login and every authenticated state-changing request require a session CSRF token. Session cookies are HttpOnly, SameSite Strict, and Secure whenever HTTPS is detected or forced by production configuration.
+
+Production deployments should set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Set `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when the hosting proxy reliably overwrites forwarded headers. Session and throttle defaults can be adjusted with the documented `HUMIDORHQ_SESSION_*` and `HUMIDORHQ_LOGIN_*` environment variables in [External Runtime Data Setup](docs/RUNTIME_DATA.md).
 
 Create or update a local user with:
 
@@ -105,7 +115,9 @@ Creating or updating a PO Line automatically syncs the related inventory records
 - `lot-location-balances.json` receives the current humidor and optional drawer/section balance.
 - `inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
 
-The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are allocated across lines by weighted purchase price. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are calculated authoritatively in PHP and allocated across lines by weighted purchase price. Moves and removals also reconcile the affected Lot quantity cache from current positive balances. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
+
+This release supports `In Route` (`pending`) and `Received` purchases. `partially-received` is rejected rather than silently downgraded. Line-level partial receiving is deliberately deferred until a dedicated schema migration and idempotent receive/store endpoint can preserve ordered quantity, received quantity, receipt dates, and duplicate-receipt protection.
 
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 
@@ -173,7 +185,14 @@ Run the read-only integrity checker with:
 
 `tools/repair-purchase-headers.ps1` is a separately guarded offline migration for the approved Purchases 1-40 subtotal population and negative-discount normalization. Stored `totalPaid` remains authoritative. The script is dry-run by default, requires exact header preconditions and an external verified backup, and changes only `subtotal` and negative `discount` fields in `purchases.json`. It does not resynchronize purchase lines or modify allocations, inventory, history, counters, quantities, IDs, or snapshots.
 
-Both automated test scripts create and remove external temporary data roots from tracked seed data; they do not use or overwrite current local runtime JSON.
+The automated smoke, runtime-separation, transaction, and authentication-security tests create and remove external temporary data roots from tracked seed data; they do not use or overwrite current local runtime JSON. Run them with:
+
+```powershell
+.\tests\flat-file-smoke.ps1
+.\tests\runtime-data-separation.ps1
+.\tests\flat-file-transaction.ps1
+.\tests\auth-security.ps1
+```
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.
 

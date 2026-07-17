@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.12.0
+Revision: 1.15.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 12:00 PM ET
+Modified Date: 2026-07-17 7:00 PM ET
 -->
 
 # Changelog
@@ -20,6 +20,34 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.15.0 - 2026-07-17
+
+Changed by: Matt
+
+- Replaced the fixed/UTC browser date defaults with local-calendar dates and added strict server validation for purchase, expected, and received dates plus local-timezone inventory event dates.
+- Made PHP authoritative for purchase totals and deterministic integer-cent largest-remainder allocations; rejected negative, over-precision, out-of-range, and invalid numeric inputs.
+- Preserved unknown purchase adjustments and cost/MSRP values as unknown through allocations, dashboards, purchase summaries, and removal reports while keeping known zero as `$0.00`.
+- Synchronized each affected Lot `currentQuantity` from positive balances during move/removal transactions and added regression coverage for exact reconciliation.
+- Explicitly rejected unsupported partially received status instead of silently treating it as pending; line-level partial receiving remains deferred to a separately migrated, idempotent workflow.
+
+## 1.14.0 - 2026-07-17
+
+Changed by: Matt
+
+- Added shared username/client login throttling with bounded inputs, constant-work unknown-user verification, and failed/rate-limited attempt auditing that never records passwords.
+- Added 30-minute idle and 12-hour absolute session limits, strict session mode, CSRF tokens for login and every authenticated mutation, and token rotation at login.
+- Added configurable forced/proxy-aware Secure-cookie detection plus API and Apache content, framing, referrer, permissions, cache, and content-type response defenses.
+- Added isolated regression coverage for throttling, audit safety, CSRF rejection/acceptance, cookie flags, security headers, and both session-expiration policies.
+
+## 1.13.0 - 2026-07-17
+
+Changed by: Matt
+
+- Serialized runtime mutations behind one external-data transaction lock so reads, relationship validation, ID allocation, and writes use one consistent snapshot.
+- Staged every changed JSON collection before replacement and added exact backups plus a recovery journal that rolls back failed commits and is recovered automatically after an interrupted process.
+- Moved counter allocation into the same transaction as its records and delayed mutation success-audit entries until the data commit succeeds.
+- Added isolated concurrent-writer, injected-failure rollback, and simulated-process-interruption recovery tests without touching current runtime JSON.
 
 ## 1.12.0 - 2026-07-17
 
