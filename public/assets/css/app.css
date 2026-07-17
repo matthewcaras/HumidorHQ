@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.4
+ * Revision: 1.5.5
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 19:05 ET
+ * Modified Date: 2026-07-16 19:25 ET
  */
 
 :root {
@@ -45,7 +45,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 165px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -111,6 +111,20 @@ textarea {
 }
 
 .sidebar-logout:hover {
+  background: var(--panel-muted);
+  color: var(--accent-strong);
+}
+.sidebar-mobile-link {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #d8c5b4;
+  font-size: 0.74rem;
+  min-height: 28px;
+  padding: 5px 8px;
+  text-decoration: none;
+}
+
+.sidebar-mobile-link:hover {
   background: var(--panel-muted);
   color: var(--accent-strong);
 }
@@ -270,13 +284,13 @@ h3 {
   grid-row: 1 / span 2;
 }
 .lifetime-metric-grid .metric-card strong {
-  font-size: 1.28rem;
+  font-size: 1.12rem;
   line-height: 1.08;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .lifetime-metric-grid .lifetime-quantity-card strong {
-  font-size: 1.45rem;
+  font-size: 1.32rem;
 }
 
 .dashboard-body {

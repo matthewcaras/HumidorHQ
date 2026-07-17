@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.7
+# Revision : 1.10.8
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 19:05 ET
+# Modified Date : 2026-07-16 19:25 ET
 # Changelog :
+# 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
 # 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
 # 1.10.6 verify stacked sidebar modified timestamp and narrower sidebar assets
 # 1.10.5 verify Jason utility back links, TODO label, full preview default, and latest asset versions
@@ -106,12 +107,21 @@ $jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
 foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view')) {
     if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
 }
+$mobilePagePath = Join-Path $repoRoot 'mobile\index.html'
+if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.html.' }
+$mobilePage = Get-Content -LiteralPath $mobilePagePath -Raw
+foreach ($mobilePageHook in @('Mobile Preview', '../#Dashboard', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
+    if ($mobilePage -notmatch [regex]::Escape($mobilePageHook)) { throw "Visible Mobile preview page is missing hook: $mobilePageHook" }
+}
+foreach ($privateMobileHook in @('../#Changelog', '../#Audit', '../#Todo', 'Jason Tools')) {
+    if ($mobilePage -match [regex]::Escape($privateMobileHook)) { throw "Visible Mobile preview page should not expose Jason-only hook: $privateMobileHook" }
+}
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.3') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.4') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.4') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -123,7 +133,7 @@ if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaS
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
-if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout') { throw 'Signed-in controls must render in the sidebar footer.' }
+if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
@@ -138,8 +148,8 @@ if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 
 foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
-if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 220px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 220px.' }
-foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.28rem', 'overflow-wrap: anywhere', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
+if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
+foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.12rem', 'white-space: nowrap', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
     if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
 }
 foreach ($hiddenToolHook in @('renderHiddenPageTools', 'Jason Tools', 'href="j/"', "label: 'TODO'", 'pageLabel(state.activePage)')) {

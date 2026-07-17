@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.3
+ * Revision: 1.9.4
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-16 18:45 ET
+ * Modified Date: 2026-07-16 19:25 ET
  */
 
 const API_BASE_URL = 'api'
@@ -827,7 +827,12 @@ function renderSidebarAccount() {
     render()
   })
 
-  account.append(label, logoutButton)
+  const mobileLink = document.createElement('a')
+  mobileLink.className = 'sidebar-mobile-link'
+  mobileLink.href = 'mobile/'
+  mobileLink.textContent = 'Mobile'
+
+  account.append(label, logoutButton, mobileLink)
 }
 
 function metricCard(label, value, detail, moneyMode = false) {
