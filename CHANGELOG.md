@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.11.1
+Revision: 1.12.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 6:56 AM ET
+Modified Date: 2026-07-17 7:34 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.12.0 - 2026-07-17
+
+Changed by: Jason
+
+- Added prefixed keyboard shortcuts for Dashboard, Collection, Catalog, Vendors, Purchases, Humidors, and Reports.
+- Required the `!` prefix so page shortcuts do not trigger from normal page typing.
+- Kept shortcut handling disabled while focus is inside form fields or editable content.
+- Updated README, asset version, and smoke-test coverage for the keyboard shortcut workflow.
 
 ## 1.11.1 - 2026-07-17
 
