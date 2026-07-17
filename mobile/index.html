@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.0.0
-Description: Visible mobile preview utility page with full, phone, and tablet viewport presets.
-Modified Date: 2026-07-16 19:25 ET
+Revision: 1.1.0
+Description: Visible mobile preview utility page with phone and tablet viewport presets.
+Modified Date: 2026-07-17 6:13 AM ET
 -->
 
 <!doctype html>
@@ -86,19 +86,14 @@ Modified Date: 2026-07-16 19:25 ET
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
         padding: 14px;
       }
-      .device-frame.full-preview {
-        border-radius: 8px;
-        padding: 8px;
-      }
       iframe {
         background: var(--bg);
         border: 0;
         border-radius: 18px;
         display: block;
-        height: 800px;
-        width: min(1200px, calc(100vw - 400px));
+        height: 874px;
+        width: 402px;
       }
-      .device-frame.full-preview iframe { border-radius: 4px; }
       .size-readout { color: var(--muted); font-size: 0.82rem; margin: 10px 0 0; text-align: center; }
       @media (max-width: 900px) {
         .shell { grid-template-columns: 1fr; padding: 14px; }
@@ -119,7 +114,6 @@ Modified Date: 2026-07-16 19:25 ET
           <label>
             Preview mode
             <select id="device-select">
-              <option value="1200x800" data-mode="full">Full Web View - 1200 x 800</option>
               <option value="402x874">iPhone 16 Pro - 402 x 874</option>
               <option value="440x956">iPhone 16 Pro Max - 440 x 956</option>
               <option value="393x852">iPhone 15 Pro - 393 x 852</option>
@@ -134,10 +128,10 @@ Modified Date: 2026-07-16 19:25 ET
 
       <section class="panel preview-wrap" aria-label="Site viewport preview">
         <div>
-          <div class="device-frame full-preview" id="device-frame">
+          <div class="device-frame" id="device-frame">
             <iframe id="site-preview" src="../#Dashboard" title="HumidorHQ site preview"></iframe>
           </div>
-          <p class="size-readout" id="size-readout">Full Web View - 1200 x 800</p>
+          <p class="size-readout" id="size-readout">iPhone 16 Pro - 402 x 874</p>
         </div>
       </section>
     </main>
@@ -145,7 +139,6 @@ Modified Date: 2026-07-16 19:25 ET
     <script>
       const select = document.querySelector('#device-select')
       const preview = document.querySelector('#site-preview')
-      const frame = document.querySelector('#device-frame')
       const readout = document.querySelector('#size-readout')
 
       function applySelectedSize() {
@@ -153,7 +146,6 @@ Modified Date: 2026-07-16 19:25 ET
         preview.style.width = `${width}px`
         preview.style.height = `${height}px`
         readout.textContent = select.options[select.selectedIndex].textContent
-        frame.classList.toggle('full-preview', select.options[select.selectedIndex].dataset.mode === 'full')
       }
 
       document.querySelector('#apply-size').addEventListener('click', applySelectedSize)

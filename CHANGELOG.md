@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.10.0
+Revision: 1.10.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 19:25 ET
+Modified Date: 2026-07-17 6:13 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.10.1 - 2026-07-17
+
+Changed by: Jason
+
+- Removed the Full Web View preset from the visible `/mobile/` preview page.
+- Set `/mobile/` to default to the iPhone 16 Pro viewport on page load.
+- Updated README and smoke-test coverage for the visible mobile preview behavior.
 
 ## 1.10.0 - 2026-07-16
 

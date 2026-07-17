@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.8.0
+Revision: 1.8.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 19:25 ET
+Modified Date: 2026-07-17 6:13 AM ET
 -->
 
 # HumidorHQ
@@ -22,7 +22,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.
-- `Mobile` opens `/mobile/`, a visible viewport preview page for full web, phone, and tablet widths without exposing Jason-only utility links.
+- `Mobile` opens `/mobile/`, a visible viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
 - Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target

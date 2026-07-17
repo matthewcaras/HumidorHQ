@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.8
+# Revision : 1.10.9
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 19:25 ET
+# Modified Date : 2026-07-17 6:13 AM ET
 # Changelog :
+# 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
 # 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
 # 1.10.6 verify stacked sidebar modified timestamp and narrower sidebar assets
@@ -110,12 +111,16 @@ foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../
 $mobilePagePath = Join-Path $repoRoot 'mobile\index.html'
 if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.html.' }
 $mobilePage = Get-Content -LiteralPath $mobilePagePath -Raw
-foreach ($mobilePageHook in @('Mobile Preview', '../#Dashboard', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
+foreach ($mobilePageHook in @('Mobile Preview', '../#Dashboard', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
     if ($mobilePage -notmatch [regex]::Escape($mobilePageHook)) { throw "Visible Mobile preview page is missing hook: $mobilePageHook" }
 }
 foreach ($privateMobileHook in @('../#Changelog', '../#Audit', '../#Todo', 'Jason Tools')) {
     if ($mobilePage -match [regex]::Escape($privateMobileHook)) { throw "Visible Mobile preview page should not expose Jason-only hook: $privateMobileHook" }
 }
+foreach ($removedMobileHook in @('Full Web View - 1200 x 800', 'data-mode="full"', 'device-frame full-preview')) {
+    if ($mobilePage -match [regex]::Escape($removedMobileHook)) { throw "Visible Mobile preview page should not expose removed full-web hook: $removedMobileHook" }
+}
+if ($mobilePage -notmatch [regex]::Escape('<p class="size-readout" id="size-readout">iPhone 16 Pro - 402 x 874</p>')) { throw 'Visible Mobile preview should default to iPhone 16 Pro readout.' }
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
