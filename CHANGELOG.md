@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.12.3
+Revision: 1.12.4
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 8:45 AM ET
+Modified Date: 2026-07-17 9:03 AM ET
 -->
 
 # Changelog
@@ -21,6 +21,12 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.12.4 - 2026-07-17
+
+Changed by: Jason
+
+- Changed the sidebar collapse control labels from `Menu` and `Open` to `Close Menu` and `Open Menu` for clearer spacing review.
+- Bumped the JavaScript asset version and smoke-test coverage for the toggle labels.
 ## 1.12.3 - 2026-07-17
 
 Changed by: Jason

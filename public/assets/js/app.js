@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.11.2
+ * Revision: 1.11.3
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 8:28 AM ET
+ * Modified Date: 2026-07-17 9:03 AM ET
  */
 
 const API_BASE_URL = 'api'
@@ -220,8 +220,8 @@ function applySidebarCollapsed() {
   }
   shell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed)
   toggle.setAttribute('aria-expanded', String(!state.sidebarCollapsed))
-  toggle.textContent = state.sidebarCollapsed ? 'Open' : 'Menu'
-  toggle.title = state.sidebarCollapsed ? 'Expand menu' : 'Collapse menu'
+  toggle.textContent = state.sidebarCollapsed ? 'Open Menu' : 'Close Menu'
+  toggle.title = state.sidebarCollapsed ? 'Open Menu' : 'Close Menu'
 }
 
 function toggleSidebar() {
