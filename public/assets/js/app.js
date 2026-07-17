@@ -1,13 +1,24 @@
 /*
  * Filename: app.js
- * Revision: 1.10.0
+ * Revision: 1.11.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 6:23 AM ET
+ * Modified Date: 2026-07-17 7:34 AM ET
  */
 
 const API_BASE_URL = 'api'
 const SIDEBAR_COLLAPSED_KEY = 'humidorhq-sidebar-collapsed'
-const JASON_SHORTCUT_SEQUENCE = 'jnl'
+const SHORTCUT_PREFIX = '!'
+const PRIVATE_PAGE_SHORTCUT = { token: 'jnl', path: 'j/' }
+const PAGE_SHORTCUTS = [
+  { token: 'das', page: 'Dashboard' },
+  { token: 'col', page: 'Collection' },
+  { token: 'cat', page: 'Catalog' },
+  { token: 'ven', page: 'Vendors' },
+  { token: 'pur', page: 'Purchases' },
+  { token: 'hum', page: 'Humidors' },
+  { token: 'rep', page: 'Reports' },
+]
+const MAX_SHORTCUT_LENGTH = Math.max(PRIVATE_PAGE_SHORTCUT.token.length, ...PAGE_SHORTCUTS.map((shortcut) => shortcut.token.length))
 
 const state = {
   activePage: 'Dashboard',
@@ -238,14 +249,50 @@ function shortcutShouldIgnore(event) {
 }
 
 function installKeyboardShortcuts() {
-  let keyBuffer = ''
+  let commandBuffer = ''
   window.addEventListener('keydown', (event) => {
-    if (shortcutShouldIgnore(event) || event.key.length !== 1) {
+    if (shortcutShouldIgnore(event)) {
+      commandBuffer = ''
       return
     }
-    keyBuffer = `${keyBuffer}${event.key.toLowerCase()}`.slice(-JASON_SHORTCUT_SEQUENCE.length)
-    if (keyBuffer === JASON_SHORTCUT_SEQUENCE) {
-      window.location.href = 'j/'
+    if (event.key === 'Escape') {
+      commandBuffer = ''
+      return
+    }
+    if (event.key.length !== 1) {
+      return
+    }
+
+    const key = event.key.toLowerCase()
+    if (key === SHORTCUT_PREFIX) {
+      commandBuffer = SHORTCUT_PREFIX
+      return
+    }
+    if (!commandBuffer.startsWith(SHORTCUT_PREFIX)) {
+      return
+    }
+    if (!/^[a-z0-9]$/.test(key)) {
+      commandBuffer = ''
+      return
+    }
+
+    commandBuffer = `${commandBuffer}${key}`.slice(0, MAX_SHORTCUT_LENGTH + 1)
+    const token = commandBuffer.slice(1)
+    const pageShortcut = PAGE_SHORTCUTS.find((shortcut) => shortcut.token === token)
+    if (pageShortcut) {
+      event.preventDefault()
+      commandBuffer = ''
+      navigateToPage(pageShortcut.page)
+      return
+    }
+    if (token === PRIVATE_PAGE_SHORTCUT.token) {
+      event.preventDefault()
+      commandBuffer = ''
+      window.location.href = PRIVATE_PAGE_SHORTCUT.path
+      return
+    }
+    if (token.length >= MAX_SHORTCUT_LENGTH) {
+      commandBuffer = ''
     }
   })
 }
