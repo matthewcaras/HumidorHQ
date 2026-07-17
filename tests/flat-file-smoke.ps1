@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.10.6
+# Revision : 1.10.7
 # Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-16 18:45 ET
+# Modified Date : 2026-07-16 19:05 ET
 # Changelog :
+# 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
 # 1.10.6 verify stacked sidebar modified timestamp and narrower sidebar assets
 # 1.10.5 verify Jason utility back links, TODO label, full preview default, and latest asset versions
 # 1.10.4 verify hidden Jason utility page links and mobile preview controls
@@ -110,7 +111,7 @@ if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still re
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
 if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.3') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.4') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -138,6 +139,9 @@ foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
 if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 220px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 220px.' }
+foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.28rem', 'overflow-wrap: anywhere', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
+    if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
+}
 foreach ($hiddenToolHook in @('renderHiddenPageTools', 'Jason Tools', 'href="j/"', "label: 'TODO'", 'pageLabel(state.activePage)')) {
     if ($appJs -notmatch [regex]::Escape($hiddenToolHook)) { throw "Plain JavaScript app is missing hidden utility hook: $hiddenToolHook" }
 }

@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.9.7
+Revision: 1.9.8
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-16 18:45 ET
+Modified Date: 2026-07-16 19:05 ET
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.9.8 - 2026-07-16
+
+Changed by: Jason
+
+- Reduced only the Consumption Totals dashboard number sizes so cost and MSRP values stay inside their cards.
+- Added wrapping protection for Consumption Totals values while leaving the other dashboard metric card numbers unchanged.
+- Bumped the CSS asset version so deployed browsers load the Consumption Totals layout fix.
 
 ## 1.9.7 - 2026-07-16
 
