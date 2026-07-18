@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.11.0
+ * Revision: 1.12.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-18 09:30 ET
+ * Modified Date: 2026-07-18 10:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -376,6 +376,16 @@ function normalized_relationship_id(mixed $value): ?int
     }
     $normalized = (int) $value;
     return $normalized > 0 ? $normalized : null;
+}
+
+function record_is_active(?array $record): bool
+{
+    return $record !== null && ($record['isActive'] ?? true) !== false;
+}
+
+function lifecycle_managed_collections(): array
+{
+    return ['catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations'];
 }
 
 function row_references_id(array $row, array $fields, int $id): bool
@@ -783,6 +793,9 @@ function move_inventory(array $input): array
     if (!$destinationHumidor) {
         throw new ApiError('VALIDATION_ERROR', 'Destination humidor was not found.', 422);
     }
+    if (!record_is_active($destinationHumidor)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Destination humidor is archived and cannot receive inventory.', 409);
+    }
 
     if ($toStorageSubLocationId !== null) {
         $destinationSection = find_by_id('storage-sub-locations', $toStorageSubLocationId);
@@ -791,6 +804,9 @@ function move_inventory(array $input): array
         }
         if ((int) ($destinationSection['storageLocationId'] ?? 0) !== $toStorageLocationId) {
             throw new ApiError('VALIDATION_ERROR', 'Destination drawer or section does not belong to the selected humidor.', 422);
+        }
+        if (!record_is_active($destinationSection)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Destination drawer or section is archived and cannot receive inventory.', 409);
         }
     }
 
@@ -1052,8 +1068,15 @@ function clean_managed_record(string $collection, array $input, ?array $existing
 
     validate_managed_numeric_ranges($collection, $record);
 
-    if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
-        throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
+    if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null) {
+        $vendor = find_by_id('vendors', (int) $record['vendorId']);
+        if (!$vendor) {
+            throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
+        }
+        $vendorChanged = $existing === null || (int) ($existing['vendorId'] ?? 0) !== (int) $record['vendorId'];
+        if ($vendorChanged && !record_is_active($vendor)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected vendor is archived and cannot be assigned to a purchase.', 409);
+        }
     }
     if ($collection === 'purchases') {
         $record['status'] = normalize_purchase_status_value((string) ($record['status'] ?? ''));
@@ -1061,10 +1084,10 @@ function clean_managed_record(string $collection, array $input, ?array $existing
         normalize_purchase_dates_and_total($record);
     }
     if ($collection === 'storage-sub-locations') {
-        validate_storage_sub_location_links($record);
+        validate_storage_sub_location_links($record, $existing);
     }
     if ($collection === 'purchase-lines') {
-        validate_purchase_line_links($record);
+        validate_purchase_line_links($record, $existing);
         hydrate_purchase_line_msrp($record, $existing);
     }
 
@@ -1161,15 +1184,20 @@ function normalize_purchase_dates_and_total(array &$record): void
     $record['totalPaid'] = cents_to_money($totalCents);
 }
 
-function validate_storage_sub_location_links(array $record): void
+function validate_storage_sub_location_links(array $record, ?array $existing = null): void
 {
     $id = (int) ($record['storageLocationId'] ?? 0);
-    if ($id < 1 || !find_by_id('storage-locations', $id)) {
+    $location = $id > 0 ? find_by_id('storage-locations', $id) : null;
+    if ($location === null) {
         throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    }
+    $locationChanged = $existing === null || (int) ($existing['storageLocationId'] ?? 0) !== $id;
+    if ($locationChanged && !record_is_active($location)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Selected humidor is archived and cannot receive new sections.', 409);
     }
 }
 
-function validate_purchase_line_links(array $record): void
+function validate_purchase_line_links(array $record, ?array $existing = null): void
 {
     $quantity = (int) ($record['quantity'] ?? 0);
     if ($quantity < 1) {
@@ -1182,14 +1210,26 @@ function validate_purchase_line_links(array $record): void
     ];
     foreach ($links as $field => $link) {
         $id = (int) ($record[$field] ?? 0);
-        if ($id < 1 || !find_by_id($link['collection'], $id)) {
+        $linkedRecord = $id > 0 ? find_by_id($link['collection'], $id) : null;
+        if ($linkedRecord === null) {
             throw new ApiError('VALIDATION_ERROR', $link['label'] . ' was not found.', 422);
+        }
+        $changed = $existing === null || (int) ($existing[$field] ?? 0) !== $id;
+        if ($changed && $link['collection'] === 'catalog-cigars' && !record_is_active($linkedRecord)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected Catalog cigar is archived and cannot be assigned to a purchase line.', 409);
         }
     }
 
     $storageLocationId = (int) ($record['storageLocationId'] ?? 0);
-    if ($storageLocationId > 0 && !find_by_id('storage-locations', $storageLocationId)) {
-        throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    if ($storageLocationId > 0) {
+        $storageLocation = find_by_id('storage-locations', $storageLocationId);
+        if (!$storageLocation) {
+            throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+        }
+        $changed = $existing === null || (int) ($existing['storageLocationId'] ?? 0) !== $storageLocationId;
+        if ($changed && !record_is_active($storageLocation)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected humidor is archived and cannot be assigned to a purchase line.', 409);
+        }
     }
 
     $subLocationId = (int) ($record['storageSubLocationId'] ?? 0);
@@ -1203,6 +1243,10 @@ function validate_purchase_line_links(array $record): void
         }
         if ((int) ($subLocation['storageLocationId'] ?? 0) !== $storageLocationId) {
             throw new ApiError('VALIDATION_ERROR', 'Selected humidor section does not belong to the selected humidor.', 422);
+        }
+        $changed = $existing === null || (int) ($existing['storageSubLocationId'] ?? 0) !== $subLocationId;
+        if ($changed && !record_is_active($subLocation)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected humidor section is archived and cannot be assigned to a purchase line.', 409);
         }
     }
 }
@@ -1243,6 +1287,9 @@ function create_managed_record(string $collection, array $input): array
     }
     $rows = load_collection($collection);
     $record = clean_managed_record($collection, $input);
+    if (in_array($collection, lifecycle_managed_collections(), true)) {
+        $record['isActive'] = true;
+    }
     if ($collection === 'purchase-lines' && purchase_inventory_is_locked((int) ($record['purchaseId'] ?? 0))) {
         throw new ApiError(
             'RECEIVED_INVENTORY_IMMUTABLE',
@@ -1280,6 +1327,9 @@ function update_managed_record(string $collection, int $id, array $input): array
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
+            if (in_array($collection, lifecycle_managed_collections(), true) && !record_is_active($row)) {
+                throw new ApiError('RECORD_ARCHIVED', 'Restore this archived record before editing it.', 409);
+            }
             $mergedInput = array_merge($row, $input);
             if ($collection === 'purchases'
                 && normalize_purchase_status_value((string) ($mergedInput['status'] ?? ''))
@@ -1390,6 +1440,66 @@ function update_managed_record(string $collection, int $id, array $input): array
             audit_record($config['page'], 'update ' . $config['label'], ['collection' => $collection, 'id' => $id]);
             return $updated;
         }
+    }
+    throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
+}
+
+function set_managed_record_active_state(string $collection, int $id, bool $isActive): array
+{
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => set_managed_record_active_state($collection, $id, $isActive));
+    }
+    $config = managed_collection_config($collection);
+    if (!in_array($collection, lifecycle_managed_collections(), true)) {
+        throw new ApiError('ARCHIVE_NOT_SUPPORTED', 'Archive and restore are not supported for this collection.', 405);
+    }
+    $rows = load_collection($collection);
+    foreach ($rows as $index => $row) {
+        if (!is_array($row) || (int) ($row['id'] ?? 0) !== $id) {
+            continue;
+        }
+        if (!$isActive && in_array($collection, ['storage-locations', 'storage-sub-locations'], true)) {
+            $relationshipField = $collection === 'storage-locations' ? 'storageLocationId' : 'storageSubLocationId';
+            foreach (load_collection('lot-location-balances') as $balance) {
+                if (is_array($balance)
+                    && (int) ($balance[$relationshipField] ?? 0) === $id
+                    && (int) ($balance['quantity'] ?? 0) > 0) {
+                    throw new ApiError(
+                        'ACTIVE_INVENTORY_ASSIGNED',
+                        'Move all current inventory out of this storage record before archiving it.',
+                        409
+                    );
+                }
+            }
+        }
+        if (!$isActive && $collection === 'storage-locations') {
+            foreach (load_collection('storage-sub-locations') as $section) {
+                if (is_array($section)
+                    && (int) ($section['storageLocationId'] ?? 0) === $id
+                    && record_is_active($section)) {
+                    throw new ApiError(
+                        'ACTIVE_SECTIONS_ASSIGNED',
+                        'Archive this Humidor\'s active sections before archiving the Humidor.',
+                        409
+                    );
+                }
+            }
+        }
+        if ($isActive && $collection === 'storage-sub-locations') {
+            $parent = find_by_id('storage-locations', (int) ($row['storageLocationId'] ?? 0));
+            if (!record_is_active($parent)) {
+                throw new ApiError('RECORD_ARCHIVED', 'Restore the parent Humidor before restoring this section.', 409);
+            }
+        }
+        if (record_is_active($row) === $isActive) {
+            return $row;
+        }
+        $rows[$index]['isActive'] = $isActive;
+        $rows[$index]['updatedAt'] = now_iso();
+        save_collection($collection, $rows);
+        $action = $isActive ? 'restore ' : 'archive ';
+        audit_record($config['page'], $action . $config['label'], ['collection' => $collection, 'id' => $id]);
+        return $rows[$index];
     }
     throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
 }
@@ -1577,6 +1687,15 @@ try {
         }
         if ($method === 'DELETE') {
             json_success(delete_managed_record($collection, $id));
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+    if (preg_match('#^/records/([a-z0-9\-]+)/([1-9][0-9]*)/(archive|restore)$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'PATCH') {
+            $collection = $matches[1];
+            $id = positive_int_param($matches[2], 'record id');
+            json_success(set_managed_record_active_state($collection, $id, $matches[3] === 'restore'));
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }

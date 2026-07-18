@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.11.0
+ * Revision: 1.12.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-18 09:30 ET
+ * Modified Date: 2026-07-18 10:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -35,6 +35,7 @@ const state = {
   receiptKeys: {},
   removalKeys: {},
   pendingSmokingJournalEventId: null,
+  showArchivedRecords: {},
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -258,6 +259,14 @@ function records(collection) {
   return state.records[collection] || []
 }
 
+function recordIsActive(record) {
+  return record?.isActive !== false
+}
+
+function collectionSupportsArchive(collection) {
+  return ['catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations'].includes(collection)
+}
+
 function recordById(collection, id) {
   const numericId = Number(id || 0)
   return records(collection).find((row) => Number(row.id) === numericId) || null
@@ -296,7 +305,7 @@ function sectionLabel(section) {
 }
 
 function humidorSectionCount(storageLocationId) {
-  return records('storage-sub-locations').filter((row) => Number(row.storageLocationId) === Number(storageLocationId)).length
+  return records('storage-sub-locations').filter((row) => recordIsActive(row) && Number(row.storageLocationId) === Number(storageLocationId)).length
 }
 
 function purchasedQuantityForCatalog(catalogCigarId) {
@@ -681,7 +690,7 @@ function currentCollectionMetrics(useCollectionFilters = true) {
     items,
     totalQuantity,
     uniqueCigarCount: items.length,
-    humidorCount: records('storage-locations').length,
+    humidorCount: records('storage-locations').filter(recordIsActive).length,
     currentCostBasis: costComplete ? knownCostTotal : null,
     currentMsrpValue: msrpComplete ? knownMsrpTotal : null,
     currentSavings: costComplete && msrpComplete ? knownMsrpTotal - knownCostTotal : null,
@@ -725,7 +734,7 @@ function removalMetrics(type) {
 
 function buildHumidorSummaries() {
   const summaries = new Map()
-  records('storage-locations').forEach((humidor) => {
+  records('storage-locations').filter(recordIsActive).forEach((humidor) => {
     summaries.set(Number(humidor.id), {
       humidor,
       totalQuantity: 0,
@@ -981,6 +990,13 @@ function formatPercent(value) {
   return `${numericValue(value).toFixed(1)}%`
 }
 
+function apiPatch(path, payload = null) {
+  return apiRequest(path, {
+    method: 'PATCH',
+    body: payload === null ? undefined : JSON.stringify(payload),
+  })
+}
+
 function removalActionLabel(type) {
   return ({ SMOKED: 'Smoke', GIFTED: 'Give', DISCARDED: 'Discard / Damage' })[normalizeEventType(type)] || 'Remove'
 }
@@ -1219,7 +1235,7 @@ function renderCollectionPage(view) {
   const items = sortCollectionItems(metrics.items)
   const selectedCigarId = Number(state.selectedCollectionCigarId || 0)
   const availableSections = records('storage-sub-locations')
-    .filter((section) => !state.collectionHumidorFilterId || Number(section.storageLocationId) === Number(state.collectionHumidorFilterId))
+    .filter((section) => recordIsActive(section) && (!state.collectionHumidorFilterId || Number(section.storageLocationId) === Number(state.collectionHumidorFilterId)))
     .sort((left, right) => sectionName(left).localeCompare(sectionName(right)))
 
   const controls = document.createElement('div')
@@ -1252,6 +1268,7 @@ function renderCollectionPage(view) {
   const humidorFilterSelect = document.createElement('select')
   humidorFilterSelect.append(new Option('All Humidors', ''))
   records('storage-locations')
+    .filter(recordIsActive)
     .slice()
     .sort((left, right) => (left.name || '').localeCompare(right.name || ''))
     .forEach((humidor) => humidorFilterSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id))))
@@ -1419,7 +1436,7 @@ function renderCollectionPage(view) {
                             <span>Humidor</span>
                             <select name="toStorageLocationId" required data-destination-humidor>
                               <option value="">Select...</option>
-                              ${records('storage-locations').map((humidor) => `<option value="${humidor.id}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}</option>`).join('')}
+                              ${records('storage-locations').filter(recordIsActive).map((humidor) => `<option value="${humidor.id}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}</option>`).join('')}
                             </select>
                           </label>
                           <label class="form-field">
@@ -1515,7 +1532,7 @@ function renderCollectionPage(view) {
       generalOption.disabled = Number(humidorSelect.value || 0) === currentLocationId && currentSectionId === 0
       sectionSelect.replaceChildren(generalOption)
       records('storage-sub-locations')
-        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
+        .filter((section) => recordIsActive(section) && Number(section.storageLocationId) === Number(humidorSelect.value || 0))
         .forEach((section) => {
           const option = new Option(sectionName(section), String(section.id))
           option.disabled = Number(humidorSelect.value || 0) === currentLocationId && Number(section.id) === currentSectionId
@@ -1592,12 +1609,14 @@ function renderField(field, record) {
         select.append(item)
       })
     } else {
-      records(field.collection).forEach((option) => {
+      records(field.collection)
+        .filter((option) => recordIsActive(option) || Number(option.id) === Number(record?.[field.name] || 0))
+        .forEach((option) => {
         const item = document.createElement('option')
         item.value = String(option.id)
         item.textContent = typeof field.optionLabel === 'function' ? field.optionLabel(option) : option[field.optionLabel] || `Record ${option.id}`
-        select.append(item)
-      })
+          select.append(item)
+        })
     }
     select.value = fieldValue(record, field)
     label.append(select)
@@ -1699,16 +1718,31 @@ function renderManagedForm(view, pageConfig) {
 
 function renderManagedTable(view, pageConfig) {
   const collection = pageConfig.collection
-  const rows = collection === 'purchases' ? sortPurchasesNewest(records(collection)) : records(collection)
+  const supportsArchive = collectionSupportsArchive(collection)
+  const allRows = collection === 'purchases' ? sortPurchasesNewest(records(collection)) : records(collection)
+  const showArchived = supportsArchive && state.showArchivedRecords[collection] === true
+  const rows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
   const inlineEdit = pageConfig.inlineEdit === true
   const heading = document.createElement('div')
   heading.className = 'section-heading'
   heading.innerHTML = `
     <div>
       <h3>${escapeHtml(pageConfig.title)} Records</h3>
-      <p class="muted">${formatCount(rows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
+      <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
     </div>
   `
+  if (supportsArchive) {
+    const toggleArchived = document.createElement('button')
+    toggleArchived.type = 'button'
+    toggleArchived.className = 'secondary-button'
+    toggleArchived.textContent = showArchived ? 'Hide Archived' : 'Show Archived'
+    toggleArchived.addEventListener('click', () => {
+      state.showArchivedRecords[collection] = !showArchived
+      state.editing[collection] = null
+      render()
+    })
+    heading.append(toggleArchived)
+  }
 
   if (rows.length === 0) {
     const empty = document.createElement('div')
@@ -1741,10 +1775,13 @@ function renderManagedTable(view, pageConfig) {
       cell.textContent = column.value(record)
       row.append(cell)
     })
+    if (supportsArchive && !recordIsActive(record) && row.firstElementChild) {
+      row.firstElementChild.textContent += ' — Archived'
+    }
     const actions = document.createElement('td')
     actions.className = 'row-actions'
 
-    if (!(collection === 'purchases' && purchaseIsReceived(record))) {
+    if (recordIsActive(record) && !(collection === 'purchases' && purchaseIsReceived(record))) {
       const edit = document.createElement('button')
       edit.type = 'button'
       edit.className = 'secondary-button compact-button'
@@ -1758,6 +1795,43 @@ function renderManagedTable(view, pageConfig) {
         render()
       })
       actions.append(edit)
+    }
+
+    if (supportsArchive) {
+      const lifecycleButton = document.createElement('button')
+      lifecycleButton.type = 'button'
+      lifecycleButton.className = 'secondary-button compact-button'
+      lifecycleButton.textContent = recordIsActive(record) ? 'Archive' : 'Restore'
+      if (recordIsActive(record) && collection === 'storage-locations') {
+        const assignedQuantity = humidorCurrentCount(record.id)
+        const activeSectionCount = humidorSectionCount(record.id)
+        if (assignedQuantity > 0 || activeSectionCount > 0) {
+          lifecycleButton.disabled = true
+          lifecycleButton.title = assignedQuantity > 0
+            ? `Move all ${formatCount(assignedQuantity)} assigned cigars before archiving this humidor.`
+            : `Archive all ${formatCount(activeSectionCount)} active sections before archiving this humidor.`
+        }
+      }
+      lifecycleButton.addEventListener('click', async () => {
+        const action = recordIsActive(record) ? 'archive' : 'restore'
+        if (!confirm(`${action === 'archive' ? 'Archive' : 'Restore'} this ${pageConfig.title.toLowerCase()} record?`)) {
+          return
+        }
+        try {
+          await apiPatch(`/records/${collection}/${record.id}/${action}`)
+          state.records[collection] = null
+          state.editing[collection] = null
+          if (collection === 'storage-locations' && action === 'archive' && Number(state.selectedHumidorId) === Number(record.id)) {
+            state.selectedHumidorId = null
+          }
+          await ensureRecords(collection)
+          await refreshSampleData()
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(lifecycleButton)
     }
 
     const remove = document.createElement('button')
@@ -1787,7 +1861,9 @@ function renderManagedTable(view, pageConfig) {
       render()
     })
 
-    actions.append(remove)
+    if (!supportsArchive || !recordIsActive(record)) {
+      actions.append(remove)
+    }
     row.append(actions)
     tbody.append(row)
 
@@ -1963,6 +2039,7 @@ function renderPurchaseOrderForm(view) {
   const cigarSelect = document.createElement('select')
   cigarSelect.append(new Option('Select...', ''))
   records('catalog-cigars')
+    .filter(recordIsActive)
     .slice()
     .sort((left, right) => cigarName(left).localeCompare(cigarName(right)))
     .forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
@@ -2210,7 +2287,7 @@ function renderPurchaseRecordInlineEdit(container, purchase) {
     humidorSelect.name = 'storageLocationId'
     humidorSelect.required = true
     humidorSelect.append(new Option('Select humidor...', ''))
-    records('storage-locations').forEach((humidor) => {
+    records('storage-locations').filter(recordIsActive).forEach((humidor) => {
       humidorSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id)))
     })
 
@@ -2219,7 +2296,7 @@ function renderPurchaseRecordInlineEdit(container, purchase) {
     function fillSections() {
       sectionSelect.replaceChildren(new Option('General', ''))
       records('storage-sub-locations')
-        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
+        .filter((section) => recordIsActive(section) && Number(section.storageLocationId) === Number(humidorSelect.value || 0))
         .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
     }
     humidorSelect.addEventListener('change', fillSections)
@@ -2345,7 +2422,9 @@ function renderPurchaseLineForm(container, purchase) {
   cigarSelect.name = 'catalogCigarId'
   cigarSelect.required = true
   cigarSelect.append(new Option('Select...', ''))
-  records('catalog-cigars').forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
+  records('catalog-cigars')
+    .filter((cigar) => recordIsActive(cigar) || Number(cigar.id) === Number(editingLine?.catalogCigarId || 0))
+    .forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
   cigarSelect.value = editingLine ? String(editingLine.catalogCigarId || '') : (state.purchaseLineCatalogId ? String(state.purchaseLineCatalogId) : '')
   const addCatalogButton = document.createElement('button')
   addCatalogButton.type = 'button'
@@ -2870,7 +2949,8 @@ function renderHumidorSectionForm(container, humidorId) {
 }
 
 function renderHumidorSectionsPanel(view) {
-  const humidors = records('storage-locations')
+  const humidors = records('storage-locations').filter(recordIsActive)
+  const showArchivedSections = state.showArchivedRecords['storage-sub-locations'] === true
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
 
@@ -2894,7 +2974,16 @@ function renderHumidorSectionsPanel(view) {
     state.editingHumidorSectionId = null
     render()
   })
-  header.append(humidorSelect)
+  const toggleArchived = document.createElement('button')
+  toggleArchived.type = 'button'
+  toggleArchived.className = 'secondary-button'
+  toggleArchived.textContent = showArchivedSections ? 'Hide Archived Sections' : 'Show Archived Sections'
+  toggleArchived.addEventListener('click', () => {
+    state.showArchivedRecords['storage-sub-locations'] = !showArchivedSections
+    state.editingHumidorSectionId = null
+    render()
+  })
+  header.append(humidorSelect, toggleArchived)
   panel.append(header)
 
   if (!state.selectedHumidorId) {
@@ -2903,7 +2992,10 @@ function renderHumidorSectionsPanel(view) {
     return
   }
 
-  const sections = records('storage-sub-locations').filter((row) => Number(row.storageLocationId) === Number(state.selectedHumidorId))
+  const sections = records('storage-sub-locations').filter((row) => (
+    (showArchivedSections || recordIsActive(row))
+    && Number(row.storageLocationId) === Number(state.selectedHumidorId)
+  ))
   const table = document.createElement('table')
   table.className = 'data-table'
   table.innerHTML = `
@@ -2925,7 +3017,7 @@ function renderHumidorSectionsPanel(view) {
       .reduce((sum, entry) => sum + entry.quantity, 0)
     const row = document.createElement('tr')
     row.innerHTML = `
-      <td>${escapeHtml(sectionName(section))}</td>
+      <td>${escapeHtml(sectionName(section))}${recordIsActive(section) ? '' : ' — Archived'}</td>
       <td>${escapeHtml(section.type || '')}</td>
       <td>${formatCount(count)}</td>
       <td>${escapeHtml(String(section.capacity || ''))}</td>
@@ -2956,7 +3048,45 @@ function renderHumidorSectionsPanel(view) {
       }
       render()
     })
-    actions.append(edit, remove)
+    if (recordIsActive(section)) {
+      const archive = document.createElement('button')
+      archive.type = 'button'
+      archive.className = 'secondary-button compact-button'
+      archive.textContent = 'Archive'
+      if (count > 0) {
+        archive.disabled = true
+        archive.title = `Move all ${formatCount(count)} assigned cigars before archiving this section.`
+      }
+      archive.addEventListener('click', async () => {
+        if (!confirm('Archive this drawer / section?')) {
+          return
+        }
+        try {
+          await apiPatch(`/records/storage-sub-locations/${section.id}/archive`)
+          state.editingHumidorSectionId = null
+          await refreshCollections(['storage-sub-locations'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(edit, archive)
+    } else {
+      const restore = document.createElement('button')
+      restore.type = 'button'
+      restore.className = 'secondary-button compact-button'
+      restore.textContent = 'Restore'
+      restore.addEventListener('click', async () => {
+        try {
+          await apiPatch(`/records/storage-sub-locations/${section.id}/restore`)
+          await refreshCollections(['storage-sub-locations'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(restore, remove)
+    }
     tbody.append(row)
   })
 

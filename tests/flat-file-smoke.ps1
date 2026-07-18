@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.16.0
+# Revision : 1.17.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-18 9:30 AM ET
+# Modified Date : 2026-07-18 10:00 AM ET
 # Changelog :
+# 1.17.0 verify history-preserving archive/restore and active-only workflow destinations
 # 1.16.0 verify dated idempotent smoke/gift/discard removals, source locations, metrics, and journal history
 # 1.15.0 verify transactional idempotent partial receiving, status derivation, split placement, and over-receipt guards
 # 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
@@ -164,7 +165,7 @@ function Invoke-ExpectedApiError {
 function Get-TestDataHashSnapshot {
     param([string]$DataRoot)
     $snapshot = @{}
-    foreach ($name in @('purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'audit-log.jsonl')) {
+    foreach ($name in @('catalog-cigars.json', 'vendors.json', 'storage-locations.json', 'storage-sub-locations.json', 'purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'audit-log.jsonl')) {
         $path = Join-Path $DataRoot $name
         $snapshot[$name] = if (Test-Path -LiteralPath $path -PathType Leaf) {
             (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
@@ -214,7 +215,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.12\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -232,6 +233,9 @@ if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Acti
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 foreach ($removalHook in @('Discard / Damage', 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
     if ($appJs -notmatch [regex]::Escape($removalHook)) { throw "Removal and journal workflow is missing hook: $removalHook" }
+}
+foreach ($archiveHook in @('Show Archived', 'Hide Archived', 'apiPatch', '/archive', '/restore', 'recordIsActive')) {
+    if ($appJs -notmatch [regex]::Escape($archiveHook)) { throw "Archive and restore workflow is missing hook: $archiveHook" }
 }
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
@@ -393,6 +397,17 @@ try {
     $updatedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Put -ContentType 'application/json' -Body $updatedVendorBody -WebSession $session
     if ($updatedVendor.data.name -ne 'Smoke Test Vendor Updated') { throw 'Vendor update endpoint did not return the updated record.' }
 
+    $archivedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedVendor.data.isActive -ne $false) { throw 'Vendor archive endpoint did not preserve the record as inactive.' }
+    $archivedVendorHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $archivedVendorReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedVendorReplay.data.isActive -ne $false) { throw 'Repeated Vendor archive did not return the inactive record.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorHashes -Context 'Repeated Vendor archive'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Put -Session $session -Body @{ notes = 'blocked while archived' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorHashes -Context 'Archived Vendor edit'
+    $restoredVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/restore" -Method Patch -WebSession $session
+    if ($restoredVendor.data.isActive -ne $true) { throw 'Vendor restore endpoint did not reactivate the record.' }
+
     $deletedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Delete -WebSession $session
     if ($deletedVendor.data.id -ne $createdVendor.data.id) { throw 'Vendor delete endpoint did not return the deleted record.' }
 
@@ -401,6 +416,12 @@ try {
 
     $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedVendorAssignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorAssignmentHashes -Context 'Archived Vendor purchase assignment'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
 
     $invalidPurchaseBase = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-02-30'; status = 'pending'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10' }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidPurchaseBase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
@@ -414,6 +435,11 @@ try {
     $authoritativePurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; shipping = '1'; exciseTax = '0'; salesTax = '0'; discount = '1'; totalPaid = '999' }
     $authoritativePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($authoritativePurchaseBody | ConvertTo-Json) -WebSession $session
     if ($authoritativePurchase.data.totalPaid -ne 10) { throw 'PHP did not override the client totalPaid with the authoritative formula.' }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedCatalogAssignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -Session $session -Body @{ purchaseId = [string]$authoritativePurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedCatalogAssignmentHashes -Context 'Archived Catalog purchase-line assignment'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/restore" -Method Patch -WebSession $session | Out-Null
     Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($authoritativePurchase.data.id)" -Method Delete -WebSession $session | Out-Null
 
     $unknownPurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; totalPaid = '999' }
@@ -440,6 +466,19 @@ try {
     $emptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $emptyHumidorBody -WebSession $session
     $emptySectionBody = @{ storageLocationId = "$($emptyHumidor.data.id)"; name = 'Empty Drawer'; type = 'Drawer'; capacity = '10'; notes = 'temporary empty section' } | ConvertTo-Json
     $emptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $emptySectionBody -WebSession $session
+    $activeSectionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_SECTIONS_ASSIGNED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $activeSectionHashes -Context 'Humidor archive with active section'
+    $archivedEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedEmptySection.data.isActive -ne $false) { throw 'Empty Humidor section was not archived.' }
+    $archivedEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedEmptyHumidor.data.isActive -ne $false) { throw 'Empty Humidor was not archived.' }
+    $archivedStorageHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -Session $session -Body @{ storageLocationId = [string]$emptyHumidor.data.id; name = 'Blocked Archived Parent'; type = 'Drawer'; capacity = '1'; notes = '' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedStorageHashes -Context 'Section creation under archived Humidor'
+    $restoredEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/restore" -Method Patch -WebSession $session
+    $restoredEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)/restore" -Method Patch -WebSession $session
+    if ($restoredEmptyHumidor.data.isActive -ne $true -or $restoredEmptySection.data.isActive -ne $true) { throw 'Humidor or section restore did not reactivate its record.' }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
     $deletedEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)" -Method Delete -WebSession $session
     if ($deletedEmptySection.data.id -ne $emptySection.data.id) { throw 'Unreferenced Humidor section deletion should remain permitted.' }
@@ -472,6 +511,17 @@ try {
         quantity = '2'; receivedDate = '2026-07-17'; storageLocationId = [string]$createdHumidor.data.id
         storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-partial-0001'; notes = 'first carton'
     }
+    $archivedReceiptHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body (@{ name = 'Archived Receipt Destination'; type = 'Cabinet'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $archivedReceiptBody = $firstReceiptBody.Clone()
+    $archivedReceiptBody.storageLocationId = [string]$archivedReceiptHumidor.data.id
+    $archivedReceiptBody.storageSubLocationId = ''
+    $archivedReceiptBody.idempotencyKey = 'receipt-archived-location-001'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $archivedReceiptBody -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedReceiptHashes -Context 'Receipt into archived Humidor'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)" -Method Delete -WebSession $session | Out-Null
     $firstReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($firstReceiptBody | ConvertTo-Json) -WebSession $session
     if ($firstReceipt.data.idempotentReplay -ne $false -or $firstReceipt.data.receivedQuantity -ne 2 -or $firstReceipt.data.remainingQuantity -ne 3) {
         throw 'First partial receipt did not return the expected quantities.'
@@ -591,6 +641,27 @@ try {
     $linkedEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
     if (-not $linkedEvent -or $linkedEvent.quantity -ne 5 -or $linkedEvent.storageSubLocationId -ne $createdSection.data.id -or $linkedEvent.costPerCigarAtEvent -ne 10 -or $linkedEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Received purchase line did not create the expected purchase-receipt inventory event.' }
 
+    $activeStorageHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($createdHumidor.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_INVENTORY_ASSIGNED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-sub-locations/$($createdSection.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_INVENTORY_ASSIGNED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $activeStorageHashes -Context 'Storage archive with current inventory'
+
+    $archiveDestination = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body (@{ name = 'Archived Move Destination'; type = 'Cabinet'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedDestinationHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/move" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; toStorageLocationId = [string]$archiveDestination.data.id; toStorageSubLocationId = ''; notes = 'blocked archived destination' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedDestinationHashes -Context 'Move to archived Humidor'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $archiveSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body (@{ storageLocationId = [string]$createdHumidor.data.id; name = 'Archived Move Section'; type = 'Drawer'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedSectionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/move" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; toStorageLocationId = [string]$createdHumidor.data.id; toStorageSubLocationId = [string]$archiveSection.data.id; notes = 'blocked archived section' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedSectionHashes -Context 'Move to archived section'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)" -Method Delete -WebSession $session | Out-Null
+
     $guardedPaths = @(
         (Join-Path $testDataRoot 'lot-location-balances.json'),
         (Join-Path $testDataRoot 'inventory-events.json'),
@@ -626,6 +697,20 @@ try {
     }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -Session $session -Body $locationEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+
+    $historyIdentityPaths = @('purchases.json', 'purchase-lines.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'counters.json') | ForEach-Object { Join-Path $testDataRoot $_ }
+    $historyIdentityHashes = @{}
+    foreach ($path in $historyIdentityPaths) { $historyIdentityHashes[$path] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
+    $archivedLinkedCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/archive" -Method Patch -WebSession $session
+    $archivedLinkedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedLinkedCigar.data.isActive -ne $false -or $archivedLinkedVendor.data.isActive -ne $false) { throw 'Linked Catalog or Vendor record did not archive in place.' }
+    foreach ($path in $historyIdentityPaths) {
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $historyIdentityHashes[$path]) { throw "Archiving a linked identity changed historical data: $path" }
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
 
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null

@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.15.0
+Revision: 1.16.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 9:30 AM ET
+Modified Date: 2026-07-18 10:00 AM ET
 -->
 
 # HumidorHQ
@@ -13,11 +13,11 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 - `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded/damaged totals with per-cigar averages, and each humidor's current count with oldest inventory date.
 - `Collection` shows the cigars currently on hand, can sort them alphabetically or by humidor location, and provides quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating and tasting notes.
-- `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
-- `Vendors` manages vendor contact records used by purchases.
+- `Catalog` manages active and archived master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines.
+- `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
-- `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup.
-- `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
+- `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory.
+- `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
 - `Reports` provides filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, shows Smoking Journal ratings/notes, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
@@ -130,6 +130,8 @@ Lots, location balances, and inventory events are readable by the app for report
 - Purchase lines attached to a received purchase, or to a purchase with Lots, balances, or InventoryEvents, are temporarily immutable except for notes. New lines cannot be added or reassigned to those purchases, including when an existing received line is incomplete and has no history of its own.
 - Received purchase headers with inventory history permit only non-inventory edits to invoice number, expected date, tracking number, and notes. Generic edits cannot reconstruct established receipt state.
 - Catalog cigars, Vendors, Humidors, and Humidor sections cannot be physically deleted while the relationships protected by the API still reference them. Purchase lines and purchases with inventory history cannot be physically deleted.
+- Catalog cigars, Vendors, Humidors, and Humidor sections can be archived and restored without changing their IDs or linked history. Existing records without an `isActive` field are treated as active; no runtime migration is performed automatically.
+- Archived records are excluded from new purchase, receiving, movement, and storage-selection workflows. Humidors and sections with positive balances must be emptied before archive, and a Humidor's active sections must be archived first.
 - No existing runtime records are automatically migrated, repaired, cascaded, or reconstructed by these guardrails.
 - `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation, relationship, identifier, counter, move, journal, and purchase-total issues and never repairs data.
 

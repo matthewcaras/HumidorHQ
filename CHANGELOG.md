@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.17.0
+Revision: 1.18.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 9:30 AM ET
+Modified Date: 2026-07-18 10:00 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.18.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added transactional archive/restore lifecycle routes for Catalog cigars, Vendors, Humidors, and Humidor sections without deleting or rewriting historical relationships.
+- Treated existing records without `isActive` as active, marked newly created lifecycle records active, and avoided any automatic runtime-data migration.
+- Kept archived identities available to Collection and report history while excluding them from new purchase, receipt, move, Humidor filter, and section choices.
+- Blocked archiving Humidors or sections with positive inventory, required active sections to be archived before their Humidor, and rejected direct API assignment, receiving, or movement into archived records.
+- Added active/archived management toggles and archive/restore controls using the existing interface design; permanent deletion remains protected for every linked record.
+- Added isolated coverage for lifecycle retries, linked-history preservation, active-inventory guards, archived destination rejection, and rejected-request hash stability.
 
 ## 1.17.0 - 2026-07-18
 

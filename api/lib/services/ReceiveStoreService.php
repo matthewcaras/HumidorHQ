@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: ReceiveStoreService.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: Transactional, idempotent purchase-line receiving and storage workflow.
- * Modified Date: 2026-07-18 00:45 ET
+ * Modified Date: 2026-07-18 10:00 ET
  */
 
 function receipt_normalized_optional_id(mixed $value): ?int
@@ -51,8 +51,12 @@ function purchase_line_received_quantity_from_events(array $events, int $purchas
 
 function validate_receipt_location(int $storageLocationId, ?int $storageSubLocationId): void
 {
-    if (!find_by_id('storage-locations', $storageLocationId)) {
+    $storageLocation = find_by_id('storage-locations', $storageLocationId);
+    if (!$storageLocation) {
         throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    }
+    if (!record_is_active($storageLocation)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Selected humidor is archived and cannot receive inventory.', 409);
     }
     if ($storageSubLocationId === null) {
         return;
@@ -63,6 +67,9 @@ function validate_receipt_location(int $storageLocationId, ?int $storageSubLocat
     }
     if ((int) ($section['storageLocationId'] ?? 0) !== $storageLocationId) {
         throw new ApiError('VALIDATION_ERROR', 'Selected humidor section does not belong to the selected humidor.', 422);
+    }
+    if (!record_is_active($section)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Selected humidor section is archived and cannot receive inventory.', 409);
     }
 }
 
