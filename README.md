@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.14.0
+Revision: 1.15.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 1:30 AM ET
+Modified Date: 2026-07-18 9:30 AM ET
 -->
 
 # HumidorHQ
@@ -11,14 +11,14 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 ## Page Functions And Features
 
-- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked and gifted totals with per-cigar averages, and each humidor's current count with oldest inventory date.
-- `Collection` shows the cigars currently on hand and can sort them alphabetically or by humidor location.
+- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded/damaged totals with per-cigar averages, and each humidor's current count with oldest inventory date.
+- `Collection` shows the cigars currently on hand, can sort them alphabetically or by humidor location, and provides quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating and tasting notes.
 - `Catalog` manages master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records.
 - `Vendors` manages vendor contact records used by purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
 - `Humidors` manages storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page.
-- `Reports` provides filterable smoked and gifted removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, and keeps recent inventory activity below the report.
+- `Reports` provides filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, shows Smoking Journal ratings/notes, and keeps recent inventory activity below the report.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.

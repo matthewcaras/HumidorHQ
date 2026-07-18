@@ -1,8 +1,8 @@
 <!--
 Filename: TODO.md
-Revision: 1.5.0
+Revision: 1.6.0
 Description: Future development backlog for HumidorHQ.
-Modified Date: 2026-07-18 1:30 AM ET
+Modified Date: 2026-07-18 9:30 AM ET
 -->
 
 # TODO
@@ -17,9 +17,7 @@ Future development items for HumidorHQ.
    - Add archive/restore workflows for linked Catalog, Vendor, Humidor, and section records instead of physical deletion.
 
 2. Continue functional stabilization after transaction-safe persistence.
-   - Complete discard/damage, Smoking Journal, archive/restore, and report/history workflow parity.
+   - Complete archive/restore and remaining report/history workflow parity.
 
-3. Expand smoked-cigar ratings.
-   - When a cigar is marked as smoked, allow the user to rate it from 1-10.
-   - Include tasting comments and buying notes for future purchase decisions.
+3. Expand smoked-cigar journal visibility.
    - Surface prior ratings/comments when viewing catalog cigars, lots, and smoking journal history.

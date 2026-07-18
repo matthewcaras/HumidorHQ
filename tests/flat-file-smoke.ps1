@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.15.0
+# Revision : 1.16.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-18 1:15 AM ET
+# Modified Date : 2026-07-18 9:30 AM ET
 # Changelog :
+# 1.16.0 verify dated idempotent smoke/gift/discard removals, source locations, metrics, and journal history
 # 1.15.0 verify transactional idempotent partial receiving, status derivation, split placement, and over-receipt guards
 # 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
 # 1.13.0 verify CSRF session tokens and authenticated mutation compatibility
@@ -163,7 +164,7 @@ function Invoke-ExpectedApiError {
 function Get-TestDataHashSnapshot {
     param([string]$DataRoot)
     $snapshot = @{}
-    foreach ($name in @('purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'audit-log.jsonl')) {
+    foreach ($name in @('purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'audit-log.jsonl')) {
         $path = Join-Path $DataRoot $name
         $snapshot[$name] = if (Test-Path -LiteralPath $path -PathType Leaf) {
             (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
@@ -213,7 +214,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.10\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -229,6 +230,9 @@ if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
+foreach ($removalHook in @('Discard / Damage', 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
+    if ($appJs -notmatch [regex]::Escape($removalHook)) { throw "Removal and journal workflow is missing hook: $removalHook" }
+}
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
 if ($apiIndex -notmatch 'RECEIVED_INVENTORY_IMMUTABLE' -or $apiIndex -notmatch 'RECORD_REFERENCED') { throw 'API is missing Stage 0 immutability or referential guards.' }
@@ -703,14 +707,47 @@ try {
         }
     }
 
-    $removeBody = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; notes = 'journal guard smoke test' } | ConvertTo-Json
+    $removalGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $earlyRemoval = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2020-01-01'; notes = 'too early'; idempotencyKey = 'removal-smoke-test-early-0001' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $earlyRemoval -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $futureRemoval = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2099-01-01'; notes = 'future'; idempotencyKey = 'removal-smoke-test-future-001' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $futureRemoval -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $removalGuardHashes -Context 'Rejected removal dates'
+
+    $removeRequest = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2026-07-17'; notes = 'journal guard smoke test'; idempotencyKey = 'removal-smoke-test-valid-0001' }
+    $removeBody = $removeRequest | ConvertTo-Json
     $removed = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
+    if ($removed.data.idempotentReplay -ne $false -or $removed.data.inventoryEvent.eventDate -ne '2026-07-17') { throw 'Removal did not preserve the requested historical event date.' }
+    if ($removed.data.inventoryEvent.fromStorageLocationId -ne $createdHumidor.data.id -or $null -ne $removed.data.inventoryEvent.fromStorageSubLocationId) { throw 'Removal event did not preserve its exact General source location.' }
+    $firstRemovalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $replayedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
+    if ($replayedRemoval.data.idempotentReplay -ne $true -or $replayedRemoval.data.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Exact removal replay did not return the original event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstRemovalHashes -Context 'Exact removal replay'
+    $conflictingRemoval = $removeRequest.Clone()
+    $conflictingRemoval.quantity = '2'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $conflictingRemoval -StatusCode 409 -ErrorCode 'REMOVAL_IDEMPOTENCY_CONFLICT' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstRemovalHashes -Context 'Conflicting removal replay'
+
+    $giftRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'GIFTED'; eventDate = '2026-07-18'; notes = 'gift workflow test'; idempotencyKey = 'removal-gift-test-valid-00001' }
+    $giftedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($giftRemoval | ConvertTo-Json) -WebSession $session
+    $discardRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'DISCARDED'; eventDate = '2026-07-18'; notes = 'damage workflow test'; idempotencyKey = 'removal-discard-test-valid-01' }
+    $discardedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($discardRemoval | ConvertTo-Json) -WebSession $session
+    if ($giftedRemoval.data.eventType -ne 'GIFTED' -or $discardedRemoval.data.eventType -ne 'DISCARDED') { throw 'Gift or discard removal did not create the requested event type.' }
+    $removalEvents = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id -and $_.eventType -in @('SMOKED', 'GIFTED', 'DISCARDED') })
+    if (($removalEvents | Measure-Object -Property quantity -Sum).Sum -ne 3 -or @($removalEvents | Where-Object { $_.eventType -eq 'DISCARDED' }).Count -ne 1) { throw 'Smoke, gift, and discard events did not reconcile to three exact removals.' }
+    $lotAfterAllRemovals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $balanceAfterAllRemovals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($lotAfterAllRemovals.currentQuantity -ne 2 -or $balanceAfterAllRemovals.Sum -ne 2) { throw 'Removal workflows did not decrease inventory exactly once per cigar.' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 5; notes = 'not smoked' } -StatusCode 409 -ErrorCode 'JOURNAL_EVENT_NOT_SMOKED' | Out-Null
     $lotAfterRemoval = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
     $lotBalanceQuantity = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
     if ($lotAfterRemoval.currentQuantity -ne $lotBalanceQuantity.Sum) { throw 'Lot currentQuantity did not reconcile to positive balances after removal.' }
     $journalBody = @{ rating = 8; notes = 'must remain linked' } | ConvertTo-Json
     $journal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body $journalBody -WebSession $session
     if ($journal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Smoking Journal entry did not link to the smoked event.' }
+    if ($journal.data.inventoryEvent.sourceLocation.storageLocationId -ne $createdHumidor.data.id -or $journal.data.inventoryEvent.sourceLocation.storageSubLocationName -ne 'General') { throw 'Smoking Journal did not retain the smoked event General source location.' }
+    $journalRecords = Invoke-RestMethod "http://127.0.0.1:$port/api/records/smoking-journal-entries" -Method Get -WebSession $session
+    if (-not ($journalRecords.data.records | Where-Object { $_.inventoryEventId -eq $removed.data.inventoryEventId })) { throw 'Smoking Journal entry was not available to the read-only report collection.' }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
     $journalAfterBlockedDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterBlockedDelete.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Blocked purchase-line deletion orphaned or removed its Smoking Journal entry.' }

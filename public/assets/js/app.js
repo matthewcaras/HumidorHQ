@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.10.0
+ * Revision: 1.11.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-18 01:30 ET
+ * Modified Date: 2026-07-18 09:30 ET
  */
 
 const API_BASE_URL = 'api'
@@ -33,6 +33,8 @@ const state = {
   purchaseDraftOrder: null,
   purchaseDraftEntry: null,
   receiptKeys: {},
+  removalKeys: {},
+  pendingSmokingJournalEventId: null,
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -65,11 +67,11 @@ const purchaseStatusOptions = [
 ]
 
 const pageDependencies = {
-  Dashboard: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
-  Collection: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
+  Dashboard: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
+  Collection: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
   Purchases: ['purchases', 'vendors', 'catalog-cigars', 'purchase-lines', 'storage-locations', 'storage-sub-locations', 'lots', 'lot-location-balances', 'inventory-events'],
   Humidors: ['storage-locations', 'storage-sub-locations', 'catalog-cigars', 'purchase-lines', 'purchases', 'lots', 'lot-location-balances', 'inventory-events'],
-  Reports: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
+  Reports: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
 }
 
 const managedPages = {
@@ -979,6 +981,32 @@ function formatPercent(value) {
   return `${numericValue(value).toFixed(1)}%`
 }
 
+function removalActionLabel(type) {
+  return ({ SMOKED: 'Smoke', GIFTED: 'Give', DISCARDED: 'Discard / Damage' })[normalizeEventType(type)] || 'Remove'
+}
+
+function removalEventLabel(type) {
+  return ({ SMOKED: 'Smoked', GIFTED: 'Gifted', DISCARDED: 'Discarded / Damaged' })[normalizeEventType(type)] || 'Removed'
+}
+
+function removalIdempotencyKey(balanceId, type) {
+  const cacheKey = `${Number(balanceId)}:${normalizeEventType(type)}`
+  if (!state.removalKeys[cacheKey]) {
+    const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    state.removalKeys[cacheKey] = `removal-${unique}`
+  }
+  return state.removalKeys[cacheKey]
+}
+
+function clearRemovalIdempotencyKey(balanceId, type) {
+  delete state.removalKeys[`${Number(balanceId)}:${normalizeEventType(type)}`]
+}
+
+function smokingJournalEntryForEvent(eventId) {
+  return records('smoking-journal-entries')
+    .find((entry) => Number(entry.inventoryEventId) === Number(eventId)) || null
+}
+
 function savingsPercent(cost, msrp) {
   if (!hasKnownMoney(cost) || !hasKnownMoney(msrp)) {
     return null
@@ -1028,8 +1056,9 @@ function renderDashboard(view) {
   const enRouteQuantity = enRoutePurchaseQuantity()
   const smoked = removalMetrics('SMOKED')
   const gifted = removalMetrics('GIFTED')
-  const lifetimeCost = sumMoneyValues([current.currentCostBasis, smoked.totalCost, gifted.totalCost])
-  const lifetimeMsrp = sumMoneyValues([current.currentMsrpValue, smoked.totalMsrp, gifted.totalMsrp])
+  const discarded = removalMetrics('DISCARDED')
+  const lifetimeCost = sumMoneyValues([current.currentCostBasis, smoked.totalCost, gifted.totalCost, discarded.totalCost])
+  const lifetimeMsrp = sumMoneyValues([current.currentMsrpValue, smoked.totalMsrp, gifted.totalMsrp, discarded.totalMsrp])
   const lifetimeSavings = hasKnownMoney(lifetimeCost) && hasKnownMoney(lifetimeMsrp) ? Number(lifetimeMsrp) - Number(lifetimeCost) : null
   const lifetimeSavingsDisplay = hasKnownMoney(lifetimeSavings)
     ? `${money(lifetimeSavings)} (${formatPercent(savingsPercent(lifetimeCost, lifetimeMsrp))})`
@@ -1054,7 +1083,7 @@ function renderDashboard(view) {
   lifetime.innerHTML = `
     <div class="section-heading compact-heading">
       <div>
-        <h3>Consumption Totals</h3>
+        <h3>Removal Totals</h3>
       </div>
     </div>
     <div class="metric-grid compact lifetime-metric-grid">
@@ -1070,6 +1099,13 @@ function renderDashboard(view) {
       <article class="metric-card"><span>Gifted MSRP</span><strong>${money(gifted.totalMsrp)}</strong></article>
       <article class="metric-card"><span>Avg Gifted Cost</span><strong>${money(gifted.averageCostPerCigar)}</strong></article>
       <article class="metric-card"><span>Avg Gifted MSRP</span><strong>${money(gifted.averageMsrpPerCigar)}</strong></article>
+    </div>
+    <div class="metric-grid compact lifetime-metric-grid">
+      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(discarded.quantity)}</strong><small>Discarded / Damaged</small></article>
+      <article class="metric-card"><span>Discarded Cost</span><strong>${money(discarded.totalCost)}</strong></article>
+      <article class="metric-card"><span>Discarded MSRP</span><strong>${money(discarded.totalMsrp)}</strong></article>
+      <article class="metric-card"><span>Avg Discarded Cost</span><strong>${money(discarded.averageCostPerCigar)}</strong></article>
+      <article class="metric-card"><span>Avg Discarded MSRP</span><strong>${money(discarded.averageMsrpPerCigar)}</strong></article>
     </div>
   `
 
@@ -1131,6 +1167,51 @@ function renderDashboard(view) {
     button.addEventListener('click', () => navigateToPage(button.dataset.page))
   })
   view.append(shell)
+}
+
+function renderPendingSmokingJournal(view) {
+  const eventId = Number(state.pendingSmokingJournalEventId || 0)
+  if (!eventId) {
+    return
+  }
+  const event = recordById('inventory-events', eventId)
+  if (!event || normalizeEventType(event.eventType) !== 'SMOKED') {
+    state.pendingSmokingJournalEventId = null
+    return
+  }
+  const existing = smokingJournalEntryForEvent(eventId)
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel'
+  panel.innerHTML = `
+    <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating and tasting notes for the smoked cigar.</p></div></div>
+    <form class="record-form compact-top-gap" data-smoking-journal-form>
+      <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
+      <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
+      <div class="form-actions"><button type="submit" class="primary-button">Save Journal Entry</button><button type="button" class="secondary-button" data-skip-journal>Skip</button></div>
+    </form>
+  `
+  const form = panel.querySelector('[data-smoking-journal-form]')
+  form.addEventListener('submit', async (submitEvent) => {
+    submitEvent.preventDefault()
+    const data = new FormData(form)
+    try {
+      await apiPut(`/inventory-events/${eventId}/smoking-journal`, {
+        rating: Number(data.get('rating')),
+        notes: String(data.get('notes') || '').trim(),
+      })
+      state.pendingSmokingJournalEventId = null
+      state.formError = null
+      await refreshCollections(['smoking-journal-entries'])
+    } catch (error) {
+      state.formError = error.message
+    }
+    render()
+  })
+  panel.querySelector('[data-skip-journal]').addEventListener('click', () => {
+    state.pendingSmokingJournalEventId = null
+    render()
+  })
+  view.append(panel)
 }
 
 function renderCollectionPage(view) {
@@ -1316,8 +1397,19 @@ function renderCollectionPage(view) {
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="SMOKED">Smoke</button>
                           <button type="button" class="secondary-button compact-button" data-move-toggle-id="${balance.balance.id}">Move</button>
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED">Give</button>
+                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED">Discard / Damage</button>
                         </div>
-                        <form class="inline-move-form" data-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
+                        <form class="inline-move-form" data-removal-form="${balance.balance.id}">
+                          <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
+                          <input type="hidden" name="eventType" value="">
+                          <input type="hidden" name="idempotencyKey" value="">
+                          <label class="form-field"><span>Qty</span><input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="1" required></label>
+                          <label class="form-field"><span>Event Date</span><input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
+                          <label class="form-field wide"><span>Notes</span><textarea name="notes" rows="2"></textarea></label>
+                          <button type="submit" class="primary-button compact-button" data-removal-submit>Confirm Removal</button>
+                          <button type="button" class="secondary-button compact-button" data-cancel-removal>Cancel</button>
+                        </form>
+                        <form class="inline-move-form" data-move-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <label class="form-field">
                             <span>Qty</span>
@@ -1360,15 +1452,41 @@ function renderCollectionPage(view) {
   })
   tableWrap.append(table)
   table.querySelectorAll('button[data-remove-balance-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', () => {
+      const balanceId = Number(button.dataset.removeBalanceId || 0)
+      const type = normalizeEventType(button.dataset.removeType)
+      const form = table.querySelector(`form[data-removal-form="${balanceId}"]`)
+      if (!form) {
+        return
+      }
+      form.elements.eventType.value = type
+      form.elements.idempotencyKey.value = removalIdempotencyKey(balanceId, type)
+      form.querySelector('[data-removal-submit]').textContent = `Confirm ${removalActionLabel(type)}`
+      table.querySelectorAll('form[data-removal-form]').forEach((otherForm) => otherForm.classList.toggle('is-open', otherForm === form))
+    })
+  })
+  table.querySelectorAll('form[data-removal-form]').forEach((form) => {
+    form.querySelector('[data-cancel-removal]').addEventListener('click', () => form.classList.remove('is-open'))
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const data = new FormData(form)
+      const balanceId = Number(data.get('sourceBalanceId') || 0)
+      const type = normalizeEventType(data.get('eventType'))
       try {
-        await apiPost('/inventory/remove', {
-          sourceBalanceId: String(button.dataset.removeBalanceId || '').trim(),
-          quantity: '1',
-          eventType: String(button.dataset.removeType || '').trim(),
-          notes: `${button.dataset.removeType === 'GIFTED' ? 'Gifted' : 'Smoked'} from collection`,
+        const result = await apiPost('/inventory/remove', {
+          sourceBalanceId: String(balanceId),
+          quantity: String(data.get('quantity') || '').trim(),
+          eventType: type,
+          eventDate: String(data.get('eventDate') || '').trim(),
+          notes: String(data.get('notes') || '').trim(),
+          idempotencyKey: String(data.get('idempotencyKey') || '').trim(),
         })
-        await refreshCollections(['lot-location-balances', 'inventory-events'])
+        clearRemovalIdempotencyKey(balanceId, type)
+        if (type === 'SMOKED') {
+          state.pendingSmokingJournalEventId = Number(result.inventoryEventId || 0)
+        }
+        state.formError = null
+        await refreshCollections(['lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
       } catch (error) {
         state.formError = error.message
       }
@@ -1377,11 +1495,11 @@ function renderCollectionPage(view) {
   })
   table.querySelectorAll('button[data-move-toggle-id]').forEach((button) => {
     button.addEventListener('click', () => {
-      const form = table.querySelector(`form[data-balance-id="${button.dataset.moveToggleId}"]`)
+      const form = table.querySelector(`form[data-move-balance-id="${button.dataset.moveToggleId}"]`)
       form?.classList.toggle('is-open')
     })
   })
-  table.querySelectorAll('form[data-balance-id]').forEach((form) => {
+  table.querySelectorAll('form[data-move-balance-id]').forEach((form) => {
     const humidorSelect = form.querySelector('[data-destination-humidor]')
     const sectionSelect = form.querySelector('[data-destination-section]')
     const submitButton = form.querySelector('button[type="submit"]')
@@ -1430,7 +1548,9 @@ function renderCollectionPage(view) {
     })
   })
 
-  view.append(controls, summary, tableWrap)
+  view.append(controls, summary)
+  renderPendingSmokingJournal(view)
+  view.append(tableWrap)
 }
 
 function fieldValue(record, field) {
@@ -2862,9 +2982,11 @@ function removalEventDetails(event) {
   const cigar = lot?.catalogCigarId
     ? recordById('catalog-cigars', lot.catalogCigarId)
     : recordById('catalog-cigars', event.catalogCigarId)
-  const location = humidorName(event.storageLocationId)
-  const section = event.storageSubLocationId
-    ? sectionName(recordById('storage-sub-locations', event.storageSubLocationId))
+  const sourceLocationId = event.fromStorageLocationId ?? event.storageLocationId
+  const sourceSectionId = event.fromStorageSubLocationId ?? event.storageSubLocationId
+  const location = humidorName(sourceLocationId)
+  const section = sourceSectionId
+    ? sectionName(recordById('storage-sub-locations', sourceSectionId))
     : ''
   return {
     cigar,
@@ -2878,7 +3000,7 @@ function filteredRemovalEvents() {
   const currentYear = new Date().getFullYear()
   const search = String(state.reportSearch || '').trim().toLowerCase()
   return records('inventory-events')
-    .filter((event) => ['SMOKED', 'GIFTED'].includes(normalizeEventType(event.eventType)))
+    .filter((event) => ['SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event.eventType)))
     .filter((event) => {
       const eventType = normalizeEventType(event.eventType)
       return state.reportRemovalType === 'all' || eventType === state.reportRemovalType
@@ -2924,6 +3046,7 @@ function removalReportMetrics(events) {
     quantity,
     smoked: events.filter((event) => normalizeEventType(event.eventType) === 'SMOKED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
     gifted: events.filter((event) => normalizeEventType(event.eventType) === 'GIFTED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
+    discarded: events.filter((event) => normalizeEventType(event.eventType) === 'DISCARDED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
     totalCost: costComplete ? knownCostTotal : null,
     totalMsrp: msrpComplete ? knownMsrpTotal : null,
     totalSavings: costComplete && msrpComplete ? knownMsrpTotal - knownCostTotal : null,
@@ -2989,6 +3112,7 @@ function renderRemovalHistory(view) {
     reportFilterButton('All Removals', 'all', 'reportRemovalType'),
     reportFilterButton('Smoked', 'SMOKED', 'reportRemovalType'),
     reportFilterButton('Gifted', 'GIFTED', 'reportRemovalType'),
+    reportFilterButton('Discarded / Damaged', 'DISCARDED', 'reportRemovalType'),
   )
   removalType.append(typeButtons)
   filters.append(period, removalType)
@@ -3036,6 +3160,7 @@ function renderRemovalHistory(view) {
     metricCard('Total Removed', metrics.quantity, ''),
     metricCard('Smoked', metrics.smoked, ''),
     metricCard('Gifted', metrics.gifted, ''),
+    metricCard('Discarded / Damaged', metrics.discarded, ''),
   )
   panel.append(counts)
 
@@ -3043,7 +3168,7 @@ function renderRemovalHistory(view) {
   valuesTitle.className = 'report-values-title'
   valuesTitle.textContent = state.reportRemovalType === 'all'
     ? 'All Removal Values'
-    : `${state.reportRemovalType === 'SMOKED' ? 'Smoked' : 'Gifted'} Values`
+    : `${removalEventLabel(state.reportRemovalType)} Values`
   const values = document.createElement('div')
   values.className = 'report-value-grid'
   values.append(
@@ -3063,7 +3188,7 @@ function renderRemovalHistory(view) {
   if (events.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = '<p>No smoked or gifted events match the selected filters.</p>'
+    empty.innerHTML = '<p>No smoked, gifted, or discarded events match the selected filters.</p>'
     panel.append(empty)
   } else {
     const tableWrap = document.createElement('div')
@@ -3071,21 +3196,24 @@ function renderRemovalHistory(view) {
     const table = document.createElement('table')
     table.className = 'data-table'
     table.innerHTML = `
-      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th><th>Rating</th><th>Journal Notes</th></tr></thead>
       <tbody></tbody>
     `
     const tbody = table.querySelector('tbody')
     events.forEach((event) => {
       const details = removalEventDetails(event)
+      const journal = smokingJournalEntryForEvent(event.id)
       const row = document.createElement('tr')
       row.innerHTML = `
         <td>${escapeHtml(removalEventDate(event))}</td>
-        <td>${escapeHtml(normalizeEventType(event.eventType))}</td>
+        <td>${escapeHtml(removalEventLabel(event.eventType))}</td>
         <td>${escapeHtml(details.cigarLabel)}</td>
         <td>${escapeHtml(details.locationLabel || 'Unassigned')}</td>
         <td>${formatCount(event.quantity)}</td>
         <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
         <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+        <td>${journal ? escapeHtml(String(journal.rating)) : '—'}</td>
+        <td>${escapeHtml(journal?.notes || '')}</td>
       `
       tbody.append(row)
     })

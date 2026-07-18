@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.16.0
+Revision: 1.17.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 1:30 AM ET
+Modified Date: 2026-07-18 9:30 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.17.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added quantity-aware Smoke, Give, and Discard / Damage forms with validated historical event dates and transaction-safe removal mutations.
+- Added required removal idempotency keys so exact retries return the original event without changing balances, Lots, counters, events, or audit success records, while conflicting reuse is rejected.
+- Corrected removal reports and Smoking Journal snapshots to use the event's original Humidor and optional section, including General locations.
+- Added discarded/damaged quantities and values to Dashboard lifetime totals and removal report filters, summaries, and history.
+- Reconnected smoked removals to a 1-10 Smoking Journal follow-up and displayed journal ratings and notes in removal history.
+- Added isolated regression coverage for retry safety, rejected dates, exact source locations, all three removal types, inventory reconciliation, journal constraints, and read-only journal reporting.
 
 ## 1.16.0 - 2026-07-18
 

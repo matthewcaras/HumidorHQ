@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.10.0
+ * Revision: 1.11.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-18 01:30 ET
+ * Modified Date: 2026-07-18 09:30 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -184,6 +184,15 @@ function managed_collection_configs(): array
         'inventory-events' => [
             'page' => 'Reports',
             'label' => 'Inventory Event',
+            'readOnly' => true,
+            'required' => [],
+            'text' => [],
+            'int' => [],
+            'money' => [],
+        ],
+        'smoking-journal-entries' => [
+            'page' => 'Reports',
+            'label' => 'Smoking Journal Entry',
             'readOnly' => true,
             'required' => [],
             'text' => [],
@@ -893,12 +902,46 @@ function remove_inventory(array $input): array
     $sourceBalanceId = positive_int_param($input['sourceBalanceId'] ?? null, 'source balance id', 'VALIDATION_ERROR');
     $quantity = positive_int_param($input['quantity'] ?? null, 'quantity', 'VALIDATION_ERROR');
     $eventTypeInput = strtoupper(trim((string) ($input['eventType'] ?? '')));
-    $notes = trim((string) ($input['notes'] ?? ''));
+    $eventDate = validate_iso_date($input['eventDate'] ?? today_local_date(), 'eventDate', true);
+    $idempotencyKey = receipt_idempotency_key($input['idempotencyKey'] ?? null);
+    $notes = clean_text_field($input, 'notes');
 
     $eventType = match ($eventTypeInput) {
         'SMOKED', 'GIFTED', 'DISCARDED' => $eventTypeInput,
         default => throw new ApiError('VALIDATION_ERROR', 'eventType must be SMOKED, GIFTED, or DISCARDED.', 422),
     };
+
+    if ($eventDate > today_local_date()) {
+        throw new ApiError('VALIDATION_ERROR', 'eventDate cannot be in the future.', 422);
+    }
+
+    $events = load_collection('inventory-events');
+    foreach ($events as $existingEvent) {
+        if (!is_array($existingEvent) || (string) ($existingEvent['removalKey'] ?? '') !== $idempotencyKey) {
+            continue;
+        }
+        $matches = (int) ($existingEvent['sourceBalanceId'] ?? 0) === $sourceBalanceId
+            && (int) ($existingEvent['quantity'] ?? 0) === $quantity
+            && strtoupper((string) ($existingEvent['eventType'] ?? '')) === $eventType
+            && (string) ($existingEvent['eventDate'] ?? '') === $eventDate
+            && (string) ($existingEvent['notes'] ?? '') === $notes;
+        if (!$matches) {
+            throw new ApiError(
+                'REMOVAL_IDEMPOTENCY_CONFLICT',
+                'This idempotency key was already used for a different removal request.',
+                409
+            );
+        }
+        return [
+            'sourceBalanceId' => $sourceBalanceId,
+            'lotId' => (int) ($existingEvent['lotId'] ?? 0),
+            'quantityRemoved' => $quantity,
+            'eventType' => $eventType,
+            'inventoryEventId' => (int) ($existingEvent['id'] ?? 0),
+            'inventoryEvent' => $existingEvent,
+            'idempotentReplay' => true,
+        ];
+    }
 
     $sourceBalance = find_by_id('lot-location-balances', $sourceBalanceId);
     if (!$sourceBalance) {
@@ -914,6 +957,13 @@ function remove_inventory(array $input): array
     $lot = find_by_id('lots', $lotId);
     if (!$lot) {
         throw new ApiError('VALIDATION_ERROR', 'The source lot was not found.', 404);
+    }
+    $lotReceivedDate = validate_iso_date(
+        $lot['receivedDateSnapshot'] ?? $lot['receivedDate'] ?? $lot['purchaseDateSnapshot'] ?? null,
+        'stored lot receipt date'
+    );
+    if ($lotReceivedDate !== null && $eventDate < $lotReceivedDate) {
+        throw new ApiError('VALIDATION_ERROR', 'eventDate cannot be earlier than the Lot receipt date.', 422);
     }
 
     $balances = load_collection('lot-location-balances');
@@ -939,7 +989,6 @@ function remove_inventory(array $input): array
     save_collection('lot-location-balances', $balances);
     synchronize_lot_quantity_cache($lotId, $balances, $now);
 
-    $events = load_collection('inventory-events');
     $event = [
         'id' => next_id('inventory-events'),
         'eventType' => $eventType,
@@ -947,14 +996,16 @@ function remove_inventory(array $input): array
         'purchaseLineId' => $lot['purchaseLineId'] ?? null,
         'purchaseId' => $lot['purchaseId'] ?? null,
         'catalogCigarId' => $lot['catalogCigarId'] ?? null,
+        'sourceBalanceId' => $sourceBalanceId,
         'fromStorageLocationId' => $sourceBalance['storageLocationId'] ?? null,
         'fromStorageSubLocationId' => $sourceBalance['storageSubLocationId'] ?? null,
         'quantity' => $quantity,
-        'eventDate' => today_local_date(),
+        'eventDate' => $eventDate,
         'occurredAt' => $now,
         'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
         'notes' => $notes,
+        'removalKey' => $idempotencyKey,
         'createdAt' => $now,
         'updatedAt' => $now,
     ];
@@ -973,6 +1024,8 @@ function remove_inventory(array $input): array
         'quantityRemoved' => $quantity,
         'eventType' => $eventType,
         'inventoryEventId' => $event['id'],
+        'inventoryEvent' => $event,
+        'idempotentReplay' => false,
     ];
 }
 
