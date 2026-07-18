@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: ReceiveStoreService.php
- * Revision: 1.1.0
+ * Revision: 1.2.0
  * Description: Transactional, idempotent purchase-line receiving and storage workflow.
- * Modified Date: 2026-07-18 10:00 ET
+ * Modified Date: 2026-07-18 11:00 ET
  */
 
 function receipt_normalized_optional_id(mixed $value): ?int
@@ -31,12 +31,21 @@ function receipt_idempotency_key(mixed $value): string
 
 function purchase_receipt_events_for_line(array $events, int $purchaseLineId): array
 {
+    $reversedEventIds = [];
+    foreach ($events as $event) {
+        if (is_array($event)
+            && strtoupper((string) ($event['eventType'] ?? '')) === 'REVERSAL'
+            && (int) ($event['reversesInventoryEventId'] ?? 0) > 0) {
+            $reversedEventIds[(int) $event['reversesInventoryEventId']] = true;
+        }
+    }
     return array_values(array_filter(
         $events,
         static fn (mixed $row): bool => is_array($row)
             && (int) ($row['purchaseLineId'] ?? 0) === $purchaseLineId
             && (string) ($row['eventType'] ?? '') === 'purchase-receipt'
             && (int) ($row['quantity'] ?? 0) > 0
+            && !isset($reversedEventIds[(int) ($row['id'] ?? 0)]),
     ));
 }
 

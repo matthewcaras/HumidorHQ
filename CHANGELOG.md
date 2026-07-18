@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.18.0
+Revision: 1.19.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 10:00 AM ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.19.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added transactional, append-only full-event reversals for purchase receipts, moves, smokes, gifts, and discards through `POST /api/inventory-events/{id}/reverse`.
+- Required a validated reversal date, correction reason, and idempotency key; exact retries return the original compensating event while conflicting keys and second reversals are rejected without writes.
+- Preserved original InventoryEvents, cost/MSRP snapshots, Lots, depleted history, counters, and Smoking Journal entries while restoring only the target event's inventory effect.
+- Derived receipt quantities and purchase status from effective unreversed receipt events, allowing an incorrect receipt to be reversed and replaced through the existing partial-receipt workflow.
+- Excluded reversed removals from Dashboard/report metrics and added reversible Activity controls that clearly mark original and compensating events.
+- Updated the read-only integrity checker and isolated smoke suite for reversal references, effective-ledger reconciliation, unavailable quantities, journal preservation, retries, and corrected replacement receipts.
 
 ## 1.18.0 - 2026-07-18
 

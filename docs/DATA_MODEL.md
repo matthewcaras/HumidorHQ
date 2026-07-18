@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.1.0
+Revision: 1.2.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 1:30 AM ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # HumidorHQ Data Model
@@ -111,6 +111,8 @@ Consumption reasons:
 - Damaged
 
 Events should drive calculated inventory instead of manually maintaining totals.
+
+Corrections are append-only. A `REVERSAL` InventoryEvent references exactly one prior purchase receipt, move, smoke, gift, or discard through `reversesInventoryEventId`. The original event remains immutable. Effective receipt and removal calculations exclude an event after one valid reversal, while Activity History retains both records. A reversal copies the target cost/MSRP snapshots, reverses the complete target quantity, and never deletes a Lot or Smoking Journal entry. Incorrect receipts are corrected by reversing the receipt and entering replacement receipt facts through Receive and Store.
 
 ## Smoking Journal
 

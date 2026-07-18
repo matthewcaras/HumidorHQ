@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.17.0
+# Revision : 1.18.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-18 10:00 AM ET
+# Modified Date : 2026-07-18 11:00 AM ET
 # Changelog :
+# 1.18.0 verify append-only idempotent receipt, move, removal reversals and corrected replacement receipts
 # 1.17.0 verify history-preserving archive/restore and active-only workflow destinations
 # 1.16.0 verify dated idempotent smoke/gift/discard removals, source locations, metrics, and journal history
 # 1.15.0 verify transactional idempotent partial receiving, status derivation, split placement, and over-receipt guards
@@ -215,7 +216,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.12\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.13\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -229,13 +230,16 @@ if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing pr
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, removals, and their append-only reversals.') { throw 'Reports page must render the activity history section.' }
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 foreach ($removalHook in @('Discard / Damage', 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
     if ($appJs -notmatch [regex]::Escape($removalHook)) { throw "Removal and journal workflow is missing hook: $removalHook" }
 }
 foreach ($archiveHook in @('Show Archived', 'Hide Archived', 'apiPatch', '/archive', '/restore', 'recordIsActive')) {
     if ($appJs -notmatch [regex]::Escape($archiveHook)) { throw "Archive and restore workflow is missing hook: $archiveHook" }
+}
+foreach ($reversalHook in @('effectiveInventoryEvents', 'inventoryEventCanBeReversed', 'purchaseLineHasInventoryHistory', 'Confirm Reversal', '/reverse', 'reversalIdempotencyKey', 'Show All Activity')) {
+    if ($appJs -notmatch [regex]::Escape($reversalHook)) { throw "Inventory correction/reversal workflow is missing hook: $reversalHook" }
 }
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
@@ -837,6 +841,56 @@ try {
     $journalAfterBlockedDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterBlockedDelete.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Blocked purchase-line deletion orphaned or removed its Smoking Journal entry.' }
 
+    $blockedReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-18'; notes = 'destination quantity unavailable'; idempotencyKey = 'reversal-move-blocked-quantity-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-18'; notes = 'receipt quantity unavailable'; idempotencyKey = 'reversal-receipt-blocked-qty-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-16'; notes = 'too early'; idempotencyKey = 'reversal-smoke-early-date-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-18'; notes = ''; idempotencyKey = 'reversal-smoke-no-reason-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $blockedReversalHashes -Context 'Rejected unavailable or invalid reversals'
+
+    $smokeReversalBody = @{ eventDate = '2026-07-18'; notes = 'correct mistaken smoke'; idempotencyKey = 'reversal-smoke-test-valid-001' }
+    $smokeReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body ($smokeReversalBody | ConvertTo-Json) -WebSession $session
+    if ($smokeReversal.data.reversedEventType -ne 'SMOKED' -or $smokeReversal.data.quantityReversed -ne 1 -or $smokeReversal.data.idempotentReplay -ne $false) { throw 'Smoked-event reversal did not return the expected compensating event.' }
+    $smokeReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $smokeReversalReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body ($smokeReversalBody | ConvertTo-Json) -WebSession $session
+    if ($smokeReversalReplay.data.inventoryEventId -ne $smokeReversal.data.inventoryEventId -or $smokeReversalReplay.data.idempotentReplay -ne $true) { throw 'Exact reversal replay did not return the original compensating event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Exact reversal replay'
+    $reversalConflict = $smokeReversalBody.Clone(); $reversalConflict.notes = 'different reversal request'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body $reversalConflict -StatusCode 409 -ErrorCode 'REVERSAL_IDEMPOTENCY_CONFLICT' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-18'; notes = 'second reversal'; idempotencyKey = 'reversal-smoke-second-key-002' } -StatusCode 409 -ErrorCode 'EVENT_ALREADY_REVERSED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Rejected duplicate reversal'
+    $journalAfterReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
+    if ($journalAfterReversal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Reversing a smoked event deleted or orphaned its Smoking Journal history.' }
+
+    $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = '2026-07-18'; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = '2026-07-18'; notes = 'correct mistaken damage'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    if ($giftReversal.data.reversedEventType -ne 'GIFTED' -or $discardReversal.data.reversedEventType -ne 'DISCARDED') { throw 'Gift or discard reversal did not preserve the reversed event type.' }
+
+    $moveReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = '2026-07-18'; notes = 'correct mistaken move'; idempotencyKey = 'reversal-move-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    if ($moveReversal.data.reversedEventType -ne 'MOVE') { throw 'Move reversal did not create a compensating event.' }
+    $balancesAfterOperationalReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id })
+    if (($balancesAfterOperationalReversals | Measure-Object -Property quantity -Sum).Sum -ne 5 -or $balancesAfterOperationalReversals.Count -ne 1 -or $balancesAfterOperationalReversals[0].storageSubLocationId -ne $createdSection.data.id) { throw 'Removal and move reversals did not restore the exact original inventory state.' }
+
+    $receiptReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = '2026-07-18'; notes = 'replace incorrect receipt'; idempotencyKey = 'reversal-receipt-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    if ($receiptReversal.data.reversedEventType -ne 'PURCHASE_RECEIPT') { throw 'Receipt reversal did not create a compensating event.' }
+    $purchaseAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchases.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdPurchase.data.id } | Select-Object -First 1
+    $lineAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdLine.data.id } | Select-Object -First 1
+    $lotAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    if ($purchaseAfterReceiptReversal.status -ne 'pending' -or $lineAfterReceiptReversal.receivedQuantity -ne 0 -or $lotAfterReceiptReversal.initialQuantity -ne 0 -or $lotAfterReceiptReversal.currentQuantity -ne 0) { throw 'Receipt reversal did not derive pending status and zero effective receipt/current quantities.' }
+    if (@((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }).Count -ne 0) { throw 'Receipt reversal left a positive balance for the fully reversed Lot.' }
+
+    $correctedReceiptOne = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body (@{ quantity = '4'; receivedDate = '2026-07-17'; storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = ''; idempotencyKey = 'receipt-correction-replace-0001'; notes = 'corrected quantity date and location' } | ConvertTo-Json) -WebSession $session
+    if ($correctedReceiptOne.data.purchase.status -ne 'partially-received' -or $correctedReceiptOne.data.receivedQuantity -ne 4) { throw 'Corrected replacement receipt did not derive partial receipt state.' }
+    $correctedReceiptTwo = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body (@{ quantity = '1'; receivedDate = '2026-07-18'; storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-correction-replace-0002'; notes = 'complete corrected receipt' } | ConvertTo-Json) -WebSession $session
+    if ($correctedReceiptTwo.data.purchase.status -ne 'received' -or $correctedReceiptTwo.data.receivedQuantity -ne 5 -or $correctedReceiptTwo.data.lot.currentQuantity -ne 5) { throw 'Corrected replacement receipts did not restore received status and inventory.' }
+    $journalAfterReceiptCorrection = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
+    if ($journalAfterReceiptCorrection.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Receipt correction damaged preserved Smoking Journal history.' }
+    $correctedIntegrityOutput = & (Join-Path $repoRoot 'tools\check-data-integrity.ps1') -DataRoot $testDataRoot 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or $correctedIntegrityOutput -notmatch '\[SUMMARY\] Errors=0 Warnings=0') {
+        Write-Host $correctedIntegrityOutput
+        throw 'Integrity checker did not reconcile the effective event ledger after reversals and corrected replacement receipts.'
+    }
+
     $integrityFixtureRoot = Join-Path $testRoot 'integrity-defects'
     [System.IO.Directory]::CreateDirectory($integrityFixtureRoot) | Out-Null
     $fixtureCollections = @{
@@ -862,7 +916,8 @@ try {
             @{ id = 2; eventType = 'SMOKED'; lotId = 1; catalogCigarId = 999; fromStorageLocationId = 1; quantity = 1 },
             @{ id = 3; eventType = 'GIFTED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
             @{ id = 4; eventType = 'DISCARDED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
-            @{ id = 5; eventType = 'move'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; fromStorageSubLocationId = 1; toStorageLocationId = 1; toStorageSubLocationId = 1; quantity = 1 }
+            @{ id = 5; eventType = 'move'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; fromStorageSubLocationId = 1; toStorageLocationId = 1; toStorageSubLocationId = 1; quantity = 1 },
+            @{ id = 6; eventType = 'REVERSAL'; reversesInventoryEventId = 999; lotId = 1; catalogCigarId = 1; quantity = 1 }
         )
         'smoking-journal-entries' = @(@{ id = 1; inventoryEventId = 999; rating = 8 })
     }
@@ -888,7 +943,8 @@ try {
         'POSITIVE_BALANCE_QUANTITY', 'RECEIPT_QUANTITY', 'SMOKED_QUANTITY', 'GIFTED_QUANTITY', 'DISCARDED_QUANTITY',
         'EXPECTED_CURRENT_QUANTITY', 'DISTINCT_LOT_COUNT', 'SPLIT_LOT_COUNT', 'LOT_CURRENT_MISMATCH', 'MISSING_CATALOG',
         'MISSING_VENDOR', 'MISSING_HUMIDOR', 'MISSING_SECTION', 'BALANCE_LOCATION_ZERO', 'ORPHAN_JOURNAL', 'DUPLICATE_ID',
-        'COUNTER_NOT_AHEAD', 'SAME_LOCATION_MOVE', 'PURCHASE_TOTAL_MISMATCH', 'NEGATIVE_DISCOUNT', 'MISSING_SUBTOTAL'
+        'COUNTER_NOT_AHEAD', 'SAME_LOCATION_MOVE', 'PURCHASE_TOTAL_MISMATCH', 'NEGATIVE_DISCOUNT', 'MISSING_SUBTOTAL',
+        'REVERSAL_TARGET_MISSING'
     )) {
         if ($integrityOutput -notmatch [regex]::Escape("[$code]")) {
             Write-Host $integrityOutput

@@ -2,14 +2,15 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.12.0
+ * Revision: 1.13.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-18 10:00 ET
+ * Modified Date: 2026-07-18 11:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
 require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
+require_once API_ROOT . '/lib/services/InventoryReversalService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -1715,6 +1716,13 @@ try {
             $result = delete_smoking_journal($inventoryEventId);
             audit_record('Smoking Journal', 'delete', ['inventoryEventId' => $inventoryEventId]);
             json_success($result);
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+    if (preg_match('#^/inventory-events/([1-9][0-9]*)/reverse$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'POST') {
+            json_success(reverse_inventory_event(positive_int_param($matches[1], 'Inventory Event id'), request_json()), 201);
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }

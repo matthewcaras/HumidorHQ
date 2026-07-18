@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.12.0
+ * Revision: 1.13.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-18 10:00 ET
+ * Modified Date: 2026-07-18 11:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -36,6 +36,9 @@ const state = {
   removalKeys: {},
   pendingSmokingJournalEventId: null,
   showArchivedRecords: {},
+  reversalKeys: {},
+  reversingEventId: null,
+  showAllActivity: false,
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -259,6 +262,24 @@ function records(collection) {
   return state.records[collection] || []
 }
 
+function reversedInventoryEventIds() {
+  return new Set(records('inventory-events')
+    .filter((event) => normalizeEventType(event.eventType) === 'REVERSAL')
+    .map((event) => Number(event.reversesInventoryEventId || 0))
+    .filter(Boolean))
+}
+
+function inventoryEventIsReversed(event) {
+  return reversedInventoryEventIds().has(Number(event?.id || 0))
+}
+
+function effectiveInventoryEvents() {
+  const reversed = reversedInventoryEventIds()
+  return records('inventory-events').filter((event) => (
+    normalizeEventType(event.eventType) !== 'REVERSAL' && !reversed.has(Number(event.id || 0))
+  ))
+}
+
 function recordIsActive(record) {
   return record?.isActive !== false
 }
@@ -337,10 +358,21 @@ function purchaseAcceptsReceipts(purchase) {
 }
 
 function purchaseReceiptEventsForLine(purchaseLineId) {
-  return records('inventory-events').filter((event) => (
+  return effectiveInventoryEvents().filter((event) => (
     Number(event.purchaseLineId || 0) === Number(purchaseLineId)
     && normalizeEventType(event.eventType) === 'PURCHASE_RECEIPT'
     && numericValue(event.quantity) > 0
+  ))
+}
+
+function purchaseLineHasInventoryHistory(purchaseLineId) {
+  const lineId = Number(purchaseLineId || 0)
+  const linkedLotIds = new Set(records('lots')
+    .filter((lot) => Number(lot.purchaseLineId || 0) === lineId)
+    .map((lot) => Number(lot.id || 0)))
+  return linkedLotIds.size > 0 || records('inventory-events').some((event) => (
+    Number(event.purchaseLineId || 0) === lineId
+    || linkedLotIds.has(Number(event.lotId || 0))
   ))
 }
 
@@ -704,7 +736,7 @@ function currentCollectionMetrics(useCollectionFilters = true) {
 }
 
 function removalEventsOfType(type) {
-  return records('inventory-events').filter((event) => normalizeEventType(event.eventType) === type)
+  return effectiveInventoryEvents().filter((event) => normalizeEventType(event.eventType) === type)
 }
 
 function removalMetrics(type) {
@@ -768,13 +800,13 @@ function humidorOldestDate(humidorId) {
 }
 
 function recentEvents() {
-  return [...records('inventory-events')]
+  const sorted = [...records('inventory-events')]
     .sort((left, right) => {
       const leftDate = left.eventDate || left.occurredAt || left.updatedAt || ''
       const rightDate = right.eventDate || right.occurredAt || right.updatedAt || ''
       return rightDate.localeCompare(leftDate) || Number(right.id || 0) - Number(left.id || 0)
     })
-    .slice(0, 12)
+  return state.showAllActivity ? sorted : sorted.slice(0, 12)
 }
 
 function customPageReady(pageId) {
@@ -1016,6 +1048,28 @@ function removalIdempotencyKey(balanceId, type) {
 
 function clearRemovalIdempotencyKey(balanceId, type) {
   delete state.removalKeys[`${Number(balanceId)}:${normalizeEventType(type)}`]
+}
+
+function reversalIdempotencyKey(eventId) {
+  const key = String(Number(eventId))
+  if (!state.reversalKeys[key]) {
+    const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    state.reversalKeys[key] = `reversal-${unique}`
+  }
+  return state.reversalKeys[key]
+}
+
+function inventoryEventCanBeReversed(event) {
+  return ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event?.eventType))
+    && !inventoryEventIsReversed(event)
+}
+
+function inventoryEventDisplayType(event) {
+  const type = normalizeEventType(event?.eventType)
+  if (type === 'REVERSAL') {
+    return `Reversal: ${String(event.reversedEventType || '').replaceAll('_', ' ')}`
+  }
+  return `${type.replaceAll('_', ' ')}${inventoryEventIsReversed(event) ? ' — Reversed' : ''}`
 }
 
 function smokingJournalEntryForEvent(eventId) {
@@ -2617,9 +2671,9 @@ function renderPurchaseLinesPanel(view) {
     remove.type = 'button'
     remove.className = 'danger-button compact-button'
     remove.textContent = 'Delete'
-    remove.disabled = normalizePurchaseStatus(purchase?.status) !== 'pending'
+    remove.disabled = normalizePurchaseStatus(purchase?.status) !== 'pending' || purchaseLineHasInventoryHistory(line.id)
     if (remove.disabled) {
-      remove.title = 'Received and partially received lines require an adjustment workflow.'
+      remove.title = 'Historical purchase lines cannot be deleted. Reverse an incorrect event and enter a corrected receipt.'
     }
     remove.addEventListener('click', async () => {
       if (!confirm('Delete this purchase line?')) {
@@ -3129,7 +3183,7 @@ function removalEventDetails(event) {
 function filteredRemovalEvents() {
   const currentYear = new Date().getFullYear()
   const search = String(state.reportSearch || '').trim().toLowerCase()
-  return records('inventory-events')
+  return effectiveInventoryEvents()
     .filter((event) => ['SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event.eventType)))
     .filter((event) => {
       const eventType = normalizeEventType(event.eventType)
@@ -3362,10 +3416,20 @@ function renderReportsPage(view) {
     <div class="section-heading">
       <div>
         <h3>Activity</h3>
-        <p class="muted">Purchase receipts, moves, smoked cigars, gifts, and discard events.</p>
+        <p class="muted">Purchase receipts, moves, removals, and their append-only reversals.</p>
       </div>
     </div>
   `
+  const activityToggle = document.createElement('button')
+  activityToggle.type = 'button'
+  activityToggle.className = 'secondary-button'
+  activityToggle.textContent = state.showAllActivity ? 'Show Recent 12' : 'Show All Activity'
+  activityToggle.addEventListener('click', () => {
+    state.showAllActivity = !state.showAllActivity
+    state.reversingEventId = null
+    render()
+  })
+  activity.querySelector('.section-heading').append(activityToggle)
   const tableWrap = document.createElement('div')
   tableWrap.className = 'table-scroll'
   const table = document.createElement('table')
@@ -3379,6 +3443,7 @@ function renderReportsPage(view) {
         <th>Qty</th>
         <th>Cost / Cigar</th>
         <th>MSRP / Cigar</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -3390,13 +3455,64 @@ function renderReportsPage(view) {
     const row = document.createElement('tr')
     row.innerHTML = `
       <td>${escapeHtml(displayDate(event.eventDate || event.occurredAt || event.updatedAt))}</td>
-      <td>${escapeHtml(normalizeEventType(event.eventType))}</td>
+      <td>${escapeHtml(inventoryEventDisplayType(event))}</td>
       <td>${escapeHtml(cigar ? cigarName(cigar) : '')}</td>
       <td>${formatCount(event.quantity)}</td>
       <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
       <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+      <td class="row-actions"></td>
     `
+    const actions = row.querySelector('.row-actions')
+    if (inventoryEventCanBeReversed(event)) {
+      const reverse = document.createElement('button')
+      reverse.type = 'button'
+      reverse.className = 'secondary-button compact-button'
+      reverse.textContent = 'Reverse'
+      reverse.addEventListener('click', () => {
+        state.reversingEventId = Number(state.reversingEventId || 0) === Number(event.id) ? null : Number(event.id)
+        render()
+      })
+      actions.append(reverse)
+    }
     tbody.append(row)
+    if (Number(state.reversingEventId || 0) === Number(event.id)) {
+      const formRow = document.createElement('tr')
+      formRow.className = 'collection-expanded-row'
+      formRow.innerHTML = `
+        <td colspan="7">
+          <form class="inline-move-form is-open" data-reversal-form>
+            <label class="form-field"><span>Reversal Date</span><input name="eventDate" type="date" min="${escapeHtml(displayDate(event.eventDate))}" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
+            <label class="form-field wide"><span>Correction Reason</span><textarea name="notes" rows="2" required></textarea></label>
+            <button type="submit" class="primary-button compact-button">Confirm Reversal</button>
+            <button type="button" class="secondary-button compact-button" data-cancel-reversal>Cancel</button>
+          </form>
+        </td>
+      `
+      const form = formRow.querySelector('[data-reversal-form]')
+      form.querySelector('[data-cancel-reversal]').addEventListener('click', () => {
+        state.reversingEventId = null
+        render()
+      })
+      form.addEventListener('submit', async (submitEvent) => {
+        submitEvent.preventDefault()
+        const data = new FormData(form)
+        try {
+          await apiPost(`/inventory-events/${event.id}/reverse`, {
+            eventDate: String(data.get('eventDate') || '').trim(),
+            notes: String(data.get('notes') || '').trim(),
+            idempotencyKey: reversalIdempotencyKey(event.id),
+          })
+          delete state.reversalKeys[String(Number(event.id))]
+          state.reversingEventId = null
+          state.formError = null
+          await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      tbody.append(formRow)
+    }
   })
   tableWrap.append(table)
   activity.append(tableWrap)

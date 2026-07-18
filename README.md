@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.16.0
+Revision: 1.17.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 10:00 AM ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # HumidorHQ
@@ -120,6 +120,8 @@ The API validates those links before writing so a PO Line cannot point to a miss
 
 Purchase status is derived from receipt events: `pending` means nothing has been received, `partially-received` means at least one ordered cigar remains, and `received` means every line is complete. Purchase lines retain ordered `quantity`, store their received-quantity cache and first/latest/completion dates, and reconcile those values to receipt events. The purchase header receives its completion date only after every line is complete. Existing records are not automatically migrated or repaired.
 
+Inventory correction uses append-only full-event reversal rather than editing or deleting history. `POST /api/inventory-events/{id}/reverse` supports purchase receipts, moves, smokes, gifts, and discards. It requires a local calendar date, correction reason, and idempotency key; only one reversal may target an event. The original event and any Smoking Journal entry remain intact. Receipt and move reversals require the original destination to still contain the complete event quantity. After a receipt reversal, corrected quantity, date, and storage placement are entered through the normal Receive and Store workflow. Direct Catalog-cigar relationship correction remains deferred.
+
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 
 Lots, location balances, and inventory events are readable by the app for reports and quantity calculations, but direct writes stay controlled by purchase-line and inventory workflows.
@@ -132,6 +134,7 @@ Lots, location balances, and inventory events are readable by the app for report
 - Catalog cigars, Vendors, Humidors, and Humidor sections cannot be physically deleted while the relationships protected by the API still reference them. Purchase lines and purchases with inventory history cannot be physically deleted.
 - Catalog cigars, Vendors, Humidors, and Humidor sections can be archived and restored without changing their IDs or linked history. Existing records without an `isActive` field are treated as active; no runtime migration is performed automatically.
 - Archived records are excluded from new purchase, receiving, movement, and storage-selection workflows. Humidors and sections with positive balances must be emptied before archive, and a Humidor's active sections must be archived first.
+- Inventory Events are never edited or deleted by corrections. Supported events may receive one append-only, idempotent full reversal; effective inventory, receipt status, Dashboard values, and reports exclude the reversed event's effect while Activity retains both records.
 - No existing runtime records are automatically migrated, repaired, cascaded, or reconstructed by these guardrails.
 - `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation, relationship, identifier, counter, move, journal, and purchase-total issues and never repairs data.
 

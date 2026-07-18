@@ -1,8 +1,8 @@
 <!--
 Filename: DECISIONS.md
-Revision: 1.1.0
+Revision: 1.2.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 1:30 AM ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # HumidorHQ Project Decisions
@@ -36,6 +36,9 @@ Inventory will be derived from purchases, lots, and events rather than manually 
 
 Reason:
 This preserves complete history and makes calculations reliable.
+
+Correction decision:
+Inventory mistakes are corrected with one full, append-only reversal of the immutable event. Reversal is allowed only when its physical quantity can be reconciled safely, and corrected receipt facts are then entered through the normal idempotent receiving workflow. Original events, snapshots, and Smoking Journal history remain available.
 
 ---
 

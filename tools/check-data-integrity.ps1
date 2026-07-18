@@ -1,10 +1,11 @@
 # Filename: check-data-integrity.ps1
-# Revision : 1.1.0
+# Revision : 1.2.0
 # Description : Performs a read-only integrity review of HumidorHQ flat-file JSON data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-18
 # Changelog :
+# 1.2.0 validate compensating-event references and calculate inventory from effective unreversed events
 # 1.1.0 resolve the default data root from HUMIDORHQ_DATA_ROOT instead of repository data
 # 1.0.0 initial read-only inventory, relationship, counter, and accounting checks
 
@@ -102,6 +103,30 @@ $humidorIds = Get-IdSet $collections['storage-locations']
 $sectionIds = Get-IdSet $collections['storage-sub-locations']
 $lotIds = Get-IdSet $collections['lots']
 $eventIds = Get-IdSet $collections['inventory-events']
+$eventsById = @{}
+foreach ($event in $collections['inventory-events']) {
+    $eventId = [int]($event.id ?? 0)
+    if ($eventId -gt 0) { $eventsById[$eventId] = $event }
+}
+$reversedEventIds = @{}
+foreach ($event in $collections['inventory-events']) {
+    if ((Normalize-EventType $event.eventType) -ne 'REVERSAL') { continue }
+    $targetId = Normalize-OptionalId $event.reversesInventoryEventId
+    if ($targetId -eq 0 -or -not $eventsById.ContainsKey($targetId)) {
+        Write-IntegrityMessage ERROR 'REVERSAL_TARGET_MISSING' "REVERSAL event id $($event.id) references a missing Inventory Event."
+        continue
+    }
+    if ((Normalize-EventType $eventsById[$targetId].eventType) -eq 'REVERSAL') {
+        Write-IntegrityMessage ERROR 'REVERSAL_OF_REVERSAL' "REVERSAL event id $($event.id) targets another REVERSAL."
+    }
+    if ($reversedEventIds.ContainsKey($targetId)) {
+        Write-IntegrityMessage ERROR 'DUPLICATE_EVENT_REVERSAL' "Inventory Event id $targetId has more than one REVERSAL."
+    }
+    if ([int]($event.quantity ?? 0) -ne [int]($eventsById[$targetId].quantity ?? 0)) {
+        Write-IntegrityMessage ERROR 'REVERSAL_QUANTITY_MISMATCH' "REVERSAL event id $($event.id) quantity differs from its target."
+    }
+    $reversedEventIds[$targetId] = $true
+}
 
 foreach ($section in $collections['storage-sub-locations']) {
     $parentLocationId = Normalize-OptionalId $section.storageLocationId
@@ -138,13 +163,16 @@ $smokedQuantity = 0
 $giftedQuantity = 0
 $discardedQuantity = 0
 foreach ($event in $collections['inventory-events']) {
+    $eventId = [int]($event.id ?? 0)
     $quantity = [int]($event.quantity ?? 0)
-    switch (Normalize-EventType $event.eventType) {
-        'PURCHASE-RECEIPT' { $receiptQuantity += $quantity }
-        'RECEIPT' { $receiptQuantity += $quantity }
-        'SMOKED' { $smokedQuantity += $quantity }
-        'GIFTED' { $giftedQuantity += $quantity }
-        'DISCARDED' { $discardedQuantity += $quantity }
+    if (-not $reversedEventIds.ContainsKey($eventId)) {
+        switch (Normalize-EventType $event.eventType) {
+            'PURCHASE-RECEIPT' { $receiptQuantity += $quantity }
+            'RECEIPT' { $receiptQuantity += $quantity }
+            'SMOKED' { $smokedQuantity += $quantity }
+            'GIFTED' { $giftedQuantity += $quantity }
+            'DISCARDED' { $discardedQuantity += $quantity }
+        }
     }
 
     foreach ($field in @('storageLocationId', 'fromStorageLocationId', 'toStorageLocationId')) {

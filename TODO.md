@@ -1,8 +1,8 @@
 <!--
 Filename: TODO.md
-Revision: 1.7.0
+Revision: 1.8.0
 Description: Future development backlog for HumidorHQ.
-Modified Date: 2026-07-18 10:00 AM ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # TODO
@@ -11,9 +11,9 @@ Future development items for HumidorHQ.
 
 ## Future Development
 
-1. Add a dedicated inventory correction and reversal workflow.
-   - Keep received purchase lines immutable until corrections can create explicit adjustment history.
-   - Correct receipt quantity, cigar, date, and storage relationships without deleting Lots, balances, InventoryEvents, or Smoking Journal entries.
+1. Complete advanced inventory correction coverage.
+   - Add a dedicated Catalog-cigar relationship correction after all effective receipts for the affected Lot have been safely reversed.
+   - Evaluate partial-event corrections only if a real workflow requires them; current correction intentionally reverses the complete immutable event before replacement.
 
 2. Continue functional stabilization after transaction-safe persistence.
    - Complete remaining report/history workflow parity.
