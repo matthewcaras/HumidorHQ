@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.14.0
-# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
-# Author : Jason Lamb (with help from Codex CLI)
+# Revision : 1.15.0
+# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root, including admin backup/restore endpoints.
+# Author : Jason Lamb (with help from Codex CLI and Claude Code CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 7:00 PM ET
+# Modified Date : 2026-07-18 ET
 # Changelog :
+# 1.15.0 verify admin backup, list, download (content + traversal guard), restore-from-backup, restore-from-upload, and sensitive-file exclusion
 # 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
 # 1.13.0 verify CSRF session tokens and authenticated mutation compatibility
 # 1.12.0 use tracked seed data and verify external runtime-root startup enforcement
@@ -212,8 +213,8 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.8') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.10\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.6') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -335,10 +336,15 @@ $port = 8765
 $serverOutLog = Join-Path $testRoot 'php.out.log'
 $serverErrLog = Join-Path $testRoot 'php.err.log'
 $phpArgs = "-S 127.0.0.1:$port -t `"$repoRoot`""
+$testBackupRoot = Join-Path $testRoot 'backups'
+New-Item -ItemType Directory -Path $testBackupRoot -Force | Out-Null
 $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
+$previousBackupRoot = $env:HUMIDORHQ_BACKUP_ROOT
 $env:HUMIDORHQ_DATA_ROOT = $testDataRoot
+$env:HUMIDORHQ_BACKUP_ROOT = $testBackupRoot
 $process = Start-Process -FilePath $php -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
 $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
+$env:HUMIDORHQ_BACKUP_ROOT = $previousBackupRoot
 $testFailure = $null
 try {
     Start-Sleep -Milliseconds 700
@@ -608,6 +614,43 @@ try {
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
     $journalAfterBlockedDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterBlockedDelete.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Blocked purchase-line deletion orphaned or removed its Smoking Journal entry.' }
+
+    # --- Admin backup / restore (Jason backup-restore feature) ---
+    $backupResult = Invoke-RestMethod "http://127.0.0.1:$port/api/admin/backup" -Method Post -ContentType 'application/json' -Body (@{ scope = 'data' } | ConvertTo-Json) -WebSession $session
+    if (-not $backupResult.data.dataFiles -or @($backupResult.data.dataFiles).Count -lt 1) { throw 'Admin backup did not report created data files.' }
+    $vendorsBackup = @($backupResult.data.dataFiles) | Where-Object { $_.collection -eq 'vendors' } | Select-Object -First 1
+    if (-not $vendorsBackup) { throw 'Admin backup did not include the vendors collection.' }
+
+    # Sensitive collections must be rejected for backup (literal JSON keeps the single-element array).
+    $sensitiveBackup = Invoke-WebRequest "http://127.0.0.1:$port/api/admin/backup" -Method Post -ContentType 'application/json' -Body '{"scope":"data","collections":["auth-users"]}' -WebSession $session -SkipHttpErrorCheck
+    if ($sensitiveBackup.StatusCode -ne 422) { throw "Backup should reject auth-users. Expected 422, got $($sensitiveBackup.StatusCode)." }
+    if (($sensitiveBackup.Content | ConvertFrom-Json).error.code -ne 'BACKUP_INVALID_COLLECTION') { throw 'Backup rejection returned the wrong error code.' }
+
+    $backupList = Invoke-RestMethod "http://127.0.0.1:$port/api/admin/backups" -Method Get -WebSession $session
+    if (-not (@($backupList.data.dataBackups) | Where-Object { $_.name -eq $vendorsBackup.name })) { throw 'Backup list did not include the created vendors backup.' }
+
+    # Download must match the live file exactly, and traversal names are rejected.
+    $download = Invoke-WebRequest "http://127.0.0.1:$port/api/admin/backups/download?name=$($vendorsBackup.name)" -WebSession $session
+    if ($download.StatusCode -ne 200) { throw 'Backup download did not return 200.' }
+    $downloadedText = if ($download.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($download.Content) } else { [string]$download.Content }
+    $liveVendors = Get-Content -LiteralPath (Join-Path $testDataRoot 'vendors.json') -Raw
+    if ($downloadedText.Trim() -ne $liveVendors.Trim()) { throw 'Downloaded backup content did not match the live vendors file.' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/admin/backups/download?name=../vendors.json" -Method Get -Session $session -Body $null -StatusCode 422 -ErrorCode 'BACKUP_INVALID_NAME' | Out-Null
+
+    # Restore from an existing backup snapshots the current file first.
+    $restore = Invoke-RestMethod "http://127.0.0.1:$port/api/admin/restore" -Method Post -ContentType 'application/json' -Body (@{ source = 'backup'; name = $vendorsBackup.name } | ConvertTo-Json) -WebSession $session
+    if ($restore.data.collection -ne 'vendors' -or -not $restore.data.safetyBackup) { throw 'Restore-from-backup did not report the collection and safety backup.' }
+
+    # Restore from an uploaded file writes the new content and snapshots the current file first.
+    $uploadContent = (@(@{ id = 987654; name = 'Restored Upload Vendor'; website = ''; contactName = ''; email = ''; phone = ''; notes = '' }) | ConvertTo-Json -Depth 5 -AsArray)
+    $uploadRestore = Invoke-RestMethod "http://127.0.0.1:$port/api/admin/restore" -Method Post -ContentType 'application/json' -Body (@{ source = 'upload'; collection = 'vendors'; content = $uploadContent } | ConvertTo-Json) -WebSession $session
+    if ($uploadRestore.data.collection -ne 'vendors' -or -not $uploadRestore.data.safetyBackup) { throw 'Restore-from-upload did not report the collection and safety backup.' }
+    $restoredVendors = Get-Content -LiteralPath (Join-Path $testDataRoot 'vendors.json') -Raw | ConvertFrom-Json
+    if (-not (@($restoredVendors) | Where-Object { $_.id -eq 987654 })) { throw 'Restore-from-upload did not write the uploaded content to the live file.' }
+
+    # Invalid restore inputs are rejected without touching data.
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/admin/restore" -Method Post -Session $session -Body @{ source = 'upload'; collection = 'vendors'; content = 'not valid json' } -StatusCode 422 -ErrorCode 'RESTORE_INVALID_JSON' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/admin/restore" -Method Post -Session $session -Body @{ source = 'upload'; collection = 'auth-users'; content = '[]' } -StatusCode 422 -ErrorCode 'RESTORE_INVALID_COLLECTION' | Out-Null
 
     $integrityFixtureRoot = Join-Path $testRoot 'integrity-defects'
     [System.IO.Directory]::CreateDirectory($integrityFixtureRoot) | Out-Null

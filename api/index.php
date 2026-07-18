@@ -2,13 +2,14 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.9.0
+ * Revision: 1.10.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-17 19:00 ET
+ * Modified Date: 2026-07-18 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
+require_once API_ROOT . '/lib/services/BackupService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -1520,6 +1521,58 @@ try {
             json_success($result);
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+
+    // Admin backup/restore. POST routes are already auth+CSRF gated by the global
+    // mutation guard above; the GET routes require an authenticated session explicitly.
+    if ($path === '/admin/backup' && $method === 'POST') {
+        $input = request_json();
+        $scope = strtolower(trim((string) ($input['scope'] ?? 'data')));
+        $collections = [];
+        if (isset($input['collections']) && is_array($input['collections'])) {
+            $collections = array_values(array_filter(
+                array_map(static fn (mixed $c): string => trim((string) $c), $input['collections']),
+                static fn (string $c): bool => $c !== ''
+            ));
+        }
+        $result = backup_create($scope, $collections);
+        audit_record('Admin', 'create backup', ['scope' => $scope, 'dataFiles' => count($result['dataFiles'])]);
+        json_success($result, 201);
+    }
+
+    if ($path === '/admin/backups' && $method === 'GET') {
+        require_auth();
+        json_success(backup_list());
+    }
+
+    if ($path === '/admin/backups/download' && $method === 'GET') {
+        require_auth();
+        $downloadPath = backup_download_path((string) ($_GET['name'] ?? ''));
+        audit_record('Admin', 'download backup', ['name' => basename($downloadPath)]);
+        http_response_code(200);
+        send_security_headers();
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($downloadPath) . '"');
+        header('Content-Length: ' . (string) filesize($downloadPath));
+        readfile($downloadPath);
+        exit;
+    }
+
+    if ($path === '/admin/restore' && $method === 'POST') {
+        $input = request_json();
+        $source = strtolower(trim((string) ($input['source'] ?? '')));
+        if ($source === 'backup') {
+            $result = backup_restore_from_backup((string) ($input['name'] ?? ''));
+        } elseif ($source === 'upload') {
+            $result = backup_restore_from_upload(
+                trim((string) ($input['collection'] ?? '')),
+                (string) ($input['content'] ?? '')
+            );
+        } else {
+            json_error('RESTORE_INVALID_SOURCE', 'source must be backup or upload.', 422);
+        }
+        audit_record('Admin', 'restore data', ['collection' => $result['collection'], 'source' => $result['source']]);
+        json_success($result);
     }
 
     json_error('ROUTE_NOT_FOUND', 'The requested endpoint was not found.', 404);

@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.8
- * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 19:00 ET
+ * Revision: 1.10.0
+ * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, report, and admin backup/restore workflows.
+ * Modified Date: 2026-07-18 ET
  */
 
 const API_BASE_URL = 'api'
@@ -885,7 +885,260 @@ function renderSidebarAccount() {
   mobileLink.href = 'mobile/'
   mobileLink.textContent = 'Mobile'
 
-  account.append(label, logoutButton, mobileLink)
+  account.append(label, logoutButton, mobileLink, buildSidebarAdmin())
+}
+
+// --- Admin: backup & restore -------------------------------------------------
+
+const BACKUP_DATA_COLLECTIONS = [
+  { id: 'catalog-cigars', label: 'Catalog Cigars' },
+  { id: 'vendors', label: 'Vendors' },
+  { id: 'storage-locations', label: 'Humidors' },
+  { id: 'storage-sub-locations', label: 'Humidor Sections' },
+  { id: 'purchases', label: 'Purchases' },
+  { id: 'purchase-lines', label: 'Purchase Lines' },
+  { id: 'lots', label: 'Lots' },
+  { id: 'lot-location-balances', label: 'Location Balances' },
+  { id: 'inventory-events', label: 'Inventory Events' },
+  { id: 'smoking-journal-entries', label: 'Smoking Journal' },
+  { id: 'counters', label: 'ID Counters' },
+]
+
+function buildSidebarAdmin() {
+  const wrap = document.createElement('div')
+  wrap.className = 'sidebar-admin'
+  const heading = document.createElement('span')
+  heading.className = 'sidebar-admin-heading'
+  heading.textContent = 'Admin'
+  const backupButton = document.createElement('button')
+  backupButton.type = 'button'
+  backupButton.className = 'sidebar-admin-button'
+  backupButton.textContent = 'Backup'
+  backupButton.addEventListener('click', openBackupModal)
+  const restoreButton = document.createElement('button')
+  restoreButton.type = 'button'
+  restoreButton.className = 'sidebar-admin-button'
+  restoreButton.textContent = 'Restore'
+  restoreButton.addEventListener('click', openRestoreModal)
+  wrap.append(heading, backupButton, restoreButton)
+  return wrap
+}
+
+function closeAdminModal() {
+  document.querySelector('.admin-modal-overlay')?.remove()
+}
+
+function openAdminModal(title, buildBody) {
+  closeAdminModal()
+  const overlay = document.createElement('div')
+  overlay.className = 'admin-modal-overlay'
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeAdminModal()
+  })
+  const modal = document.createElement('div')
+  modal.className = 'admin-modal'
+  const head = document.createElement('div')
+  head.className = 'admin-modal-head'
+  const heading = document.createElement('h3')
+  heading.textContent = title
+  const closeButton = document.createElement('button')
+  closeButton.type = 'button'
+  closeButton.className = 'admin-modal-close'
+  closeButton.setAttribute('aria-label', 'Close')
+  closeButton.textContent = '×'
+  closeButton.addEventListener('click', closeAdminModal)
+  head.append(heading, closeButton)
+  const body = document.createElement('div')
+  body.className = 'admin-modal-body'
+  modal.append(head, body)
+  overlay.append(modal)
+  document.body.append(overlay)
+  buildBody(body)
+}
+
+function openBackupModal() {
+  openAdminModal('Create Backup', (body) => {
+    const info = document.createElement('p')
+    info.className = 'muted'
+    info.textContent = 'Copies live files into the protected backups folder. Login users and the audit log are never included.'
+    const options = document.createElement('div')
+    options.className = 'admin-backup-options'
+    BACKUP_DATA_COLLECTIONS.forEach((collection) => {
+      const label = document.createElement('label')
+      label.className = 'admin-check'
+      const input = document.createElement('input')
+      input.type = 'checkbox'
+      input.value = collection.id
+      input.checked = true
+      label.append(input, document.createTextNode(' ' + collection.label))
+      options.append(label)
+    })
+    const codeLabel = document.createElement('label')
+    codeLabel.className = 'admin-check admin-check-code'
+    const codeInput = document.createElement('input')
+    codeInput.type = 'checkbox'
+    codeLabel.append(codeInput, document.createTextNode(' Also snapshot application code'))
+    const status = document.createElement('p')
+    status.className = 'admin-modal-status'
+    const actions = document.createElement('div')
+    actions.className = 'admin-modal-actions'
+    const createButton = document.createElement('button')
+    createButton.type = 'button'
+    createButton.className = 'primary-button'
+    createButton.textContent = 'Create backup'
+    createButton.addEventListener('click', async () => {
+      const collections = Array.from(options.querySelectorAll('input:checked')).map((input) => input.value)
+      const includeCode = codeInput.checked
+      if (collections.length === 0 && !includeCode) {
+        status.textContent = 'Select at least one file, or the code snapshot.'
+        return
+      }
+      const scope = includeCode ? (collections.length ? 'all' : 'code') : 'data'
+      createButton.disabled = true
+      status.textContent = 'Creating backup…'
+      try {
+        const result = await apiPost('/admin/backup', { scope, collections })
+        const dataCount = result.dataFiles ? result.dataFiles.length : 0
+        const codeMessage = result.codeSnapshot ? `, code snapshot (${result.codeSnapshot.fileCount} files)` : ''
+        status.textContent = `Backed up ${dataCount} data file(s)${codeMessage}.`
+      } catch (error) {
+        status.textContent = `Backup failed: ${error.message}`
+      } finally {
+        createButton.disabled = false
+      }
+    })
+    actions.append(createButton)
+    body.append(info, options, codeLabel, actions, status)
+  })
+}
+
+function openRestoreModal() {
+  openAdminModal('Restore Data', async (body) => {
+    body.textContent = 'Loading backups…'
+    let listing
+    try {
+      listing = await apiGet('/admin/backups')
+    } catch (error) {
+      body.textContent = `Could not load backups: ${error.message}`
+      return
+    }
+    body.replaceChildren()
+    const status = document.createElement('p')
+    status.className = 'admin-modal-status'
+
+    const note = document.createElement('p')
+    note.className = 'muted'
+    note.textContent = 'Restoring overwrites the current file. The current file is automatically backed up first.'
+    body.append(note)
+
+    const backupsHead = document.createElement('h4')
+    backupsHead.textContent = 'From a previous backup'
+    body.append(backupsHead)
+    const backups = listing.dataBackups || []
+    if (backups.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'muted'
+      empty.textContent = 'No data backups yet. Use Backup first.'
+      body.append(empty)
+    } else {
+      const table = document.createElement('table')
+      table.className = 'admin-backup-table'
+      table.innerHTML = '<thead><tr><th>File</th><th>When</th><th></th></tr></thead><tbody></tbody>'
+      const tbody = table.querySelector('tbody')
+      backups.forEach((backup) => {
+        const row = document.createElement('tr')
+        const nameCell = document.createElement('td')
+        nameCell.textContent = backup.name
+        const whenCell = document.createElement('td')
+        whenCell.textContent = backup.modifiedEt
+        const actionCell = document.createElement('td')
+        actionCell.className = 'admin-backup-row-actions'
+        const download = document.createElement('a')
+        download.className = 'linkish-button'
+        download.textContent = 'Download'
+        download.href = `${API_BASE_URL}/admin/backups/download?name=${encodeURIComponent(backup.name)}`
+        const restore = document.createElement('button')
+        restore.type = 'button'
+        restore.className = 'linkish-button'
+        restore.textContent = 'Restore'
+        restore.addEventListener('click', () => restoreFromBackup(backup.name, status))
+        actionCell.append(download, restore)
+        row.append(nameCell, whenCell, actionCell)
+        tbody.append(row)
+      })
+      body.append(table)
+    }
+
+    const uploadHead = document.createElement('h4')
+    uploadHead.textContent = 'From an uploaded file'
+    const uploadRow = document.createElement('div')
+    uploadRow.className = 'admin-upload-row'
+    const select = document.createElement('select')
+    BACKUP_DATA_COLLECTIONS.forEach((collection) => {
+      const option = document.createElement('option')
+      option.value = collection.id
+      option.textContent = collection.label
+      select.append(option)
+    })
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.accept = 'application/json,.json'
+    const uploadButton = document.createElement('button')
+    uploadButton.type = 'button'
+    uploadButton.className = 'secondary-button'
+    uploadButton.textContent = 'Restore from file'
+    uploadButton.addEventListener('click', () => restoreFromUpload(select.value, fileInput.files?.[0], status))
+    uploadRow.append(select, fileInput, uploadButton)
+    body.append(uploadHead, uploadRow, status)
+  })
+}
+
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('The file could not be read.'))
+    reader.readAsText(file)
+  })
+}
+
+async function afterRestore(status, message) {
+  state.records = {}
+  state.sampleData = null
+  state.auditData = null
+  status.textContent = message
+  render()
+}
+
+async function restoreFromBackup(name, status) {
+  if (!window.confirm(`Restore ${name}? The current file is backed up first, then overwritten.`)) {
+    return
+  }
+  status.textContent = 'Restoring…'
+  try {
+    const result = await apiPost('/admin/restore', { source: 'backup', name })
+    await afterRestore(status, `Restored ${result.collection}. Current file saved as ${result.safetyBackup}.`)
+  } catch (error) {
+    status.textContent = `Restore failed: ${error.message}`
+  }
+}
+
+async function restoreFromUpload(collection, file, status) {
+  if (!file) {
+    status.textContent = 'Choose a file to upload first.'
+    return
+  }
+  if (!window.confirm(`Restore ${collection} from ${file.name}? The current file is backed up first, then overwritten.`)) {
+    return
+  }
+  status.textContent = 'Restoring…'
+  try {
+    const content = await readFileText(file)
+    const result = await apiPost('/admin/restore', { source: 'upload', collection, content })
+    await afterRestore(status, `Restored ${result.collection} from ${file.name}. Current file saved as ${result.safetyBackup}.`)
+  } catch (error) {
+    status.textContent = `Restore failed: ${error.message}`
+  }
 }
 
 function metricCard(label, value, detail, moneyMode = false) {

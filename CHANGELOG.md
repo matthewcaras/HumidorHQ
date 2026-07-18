@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.15.0
+Revision: 1.16.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:00 PM ET
+Modified Date: 2026-07-18 ET
 -->
 
 # Changelog
@@ -20,6 +20,57 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.16.0 - 2026-07-18
+
+Changed by: Jason (with Claude Code CLI)
+
+Added an admin backup/restore feature for runtime data (with optional application-code
+snapshots), built neutrally against `DATA_ROOT` so it works whether runtime data lives in
+the repo or in an external directory. Verified with `php -l` and the flat-file smoke test —
+the new backup/restore coverage passes (see the pre-existing-failure note below).
+
+### New: admin backup & restore
+
+- **UI:** an "Admin" section in the lower-left sidebar (under Mobile, above the Rev line),
+  shown only when signed in, with Backup and Restore buttons that open modal dialogs.
+- **Backup:** copies live data files into a protected `backups/` folder, each named
+  `<collection>-YYYY-MM-DD_HHMMSS.json`. You can back up all data, specific file(s), and/or
+  an application-code snapshot (code files are copied individually into
+  `backups/code-<timestamp>/`, not zipped). `auth-users.json` and `audit-log.jsonl` are
+  never included.
+- **Restore:** restore a data file from a previous backup (picked from a list) or from an
+  uploaded file. The current live file is always snapshotted first, then overwritten
+  atomically. The incoming content must be a known collection and valid JSON.
+- **Download:** each data backup can be downloaded from the Restore dialog.
+
+### Storage & protection
+
+- Backups default to the in-repo `backups/` folder (git-ignored contents, with a committed
+  `.placeholder` so the folder stays visible on GitHub and a deny-all `.htaccess`), and can
+  be redirected with the `HUMIDORHQ_BACKUP_ROOT` environment variable.
+
+### API (all require an authenticated session; POST routes also require the CSRF token)
+
+- `POST /admin/backup` — create backups (scope: `data` | `code` | `all`).
+- `GET /admin/backups` — list available data and code backups.
+- `GET /admin/backups/download?name=…` — download a data backup (filename is whitelisted;
+  path traversal is rejected).
+- `POST /admin/restore` — restore from a backup or an uploaded file; snapshots the current
+  file first.
+
+### Notes
+
+- **Neutral by design:** this branch does NOT change where runtime data lives and does NOT
+  touch the external-data-root enforcement or its tests. It reads/writes through `DATA_ROOT`
+  wherever it points, so it is compatible with either data-location decision.
+- **Code backup is copy-only** in this version — there is no in-app "overwrite live code"
+  restore (risky from a browser); restore code via redeploy. Per-file download of a code
+  snapshot is not yet surfaced in the UI.
+- **Pre-existing failure:** the smoke test currently aborts in the integrity-checker fixture
+  section (`POSITIVE_BALANCE_QUANTITY`) on this environment. That failure is present on
+  `origin/main` independent of this feature (confirmed by running a clean `origin/main`
+  worktree), and every new backup/restore assertion passes ahead of it.
 
 ## 1.15.0 - 2026-07-17
 

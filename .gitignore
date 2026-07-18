@@ -1,7 +1,7 @@
 # Filename: .gitignore
-# Revision: 1.1.0
+# Revision: 1.2.0
 # Description: Git ignore rules for local secrets, runtime artifacts, and tooling output.
-# Modified Date: 2026-07-17 11:30 ET
+# Modified Date: 2026-07-18 ET
 
 # Logs and local diagnostics
 logs/
@@ -20,6 +20,12 @@ logs/
 /data/*.tmp.*
 /runtime-data/
 /.runtime-data/
+
+# Backup folder — keep the folder visible (placeholder + htaccess) but never
+# commit the actual backup contents, which hold copies of runtime data.
+/backups/*
+!/backups/.placeholder
+!/backups/.htaccess
 
 # Optional local tooling folders
 vendor/
