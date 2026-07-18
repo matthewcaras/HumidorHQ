@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.13.0
+Revision: 1.14.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:00 PM ET
+Modified Date: 2026-07-18 1:30 AM ET
 -->
 
 # HumidorHQ
@@ -109,15 +109,16 @@ Signed-in users can add, edit, and delete records from the working navigation, D
 - `Purchases` manages purchase headers in external runtime `purchases.json`.
 - `PO Lines` links purchases, cigars, and storage in external runtime `purchase-lines.json`.
 
-Creating or updating a PO Line automatically syncs the related inventory records and weighted purchase allocation fields:
+Creating or updating an unreceived PO Line synchronizes its weighted purchase allocation fields. Receiving is a separate authoritative operation:
 
-- `lots.json` receives the lot tied to the purchase line and catalog cigar.
-- `lot-location-balances.json` receives the current humidor and optional drawer/section balance.
-- `inventory-events.json` receives the `purchase-receipt` event with cost and MSRP snapshots.
+- `POST /api/purchase-lines/{id}/receive` accepts a receipt quantity, local calendar date, Humidor, optional drawer/section, and required idempotency key.
+- `lots.json` receives one Lot per purchase line and accumulates the quantity actually received.
+- `lot-location-balances.json` accumulates the receipt in the exact Humidor and optional drawer/section without resetting other split balances.
+- `inventory-events.json` records each accepted `purchase-receipt` with immutable cost/MSRP snapshots and the idempotency key.
 
-The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are calculated authoritatively in PHP and allocated across lines by weighted purchase price. Moves and removals also reconcile the affected Lot quantity cache from current positive balances. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
+The API validates those links before writing so a PO Line cannot point to a missing purchase, cigar, humidor, or mismatched drawer/section. Purchase totals such as shipping, excise tax, sales tax, and discount are calculated authoritatively in PHP and allocated across lines by weighted purchase price. Receipt retries with the same key and payload return the original event without changing files, counters, or the audit log; reuse of a key with different input is rejected. Moves and removals also reconcile the affected Lot quantity cache from current positive balances. Git deployments cannot overwrite live records because `HUMIDORHQ_DATA_ROOT` must resolve outside the deployed application.
 
-This release supports `In Route` (`pending`) and `Received` purchases. `partially-received` is rejected rather than silently downgraded. Line-level partial receiving is deliberately deferred until a dedicated schema migration and idempotent receive/store endpoint can preserve ordered quantity, received quantity, receipt dates, and duplicate-receipt protection.
+Purchase status is derived from receipt events: `pending` means nothing has been received, `partially-received` means at least one ordered cigar remains, and `received` means every line is complete. Purchase lines retain ordered `quantity`, store their received-quantity cache and first/latest/completion dates, and reconcile those values to receipt events. The purchase header receives its completion date only after every line is complete. Existing records are not automatically migrated or repaired.
 
 Codex work for Jason should stay on `Jason-Bug-Fixes`; merges to `main` and fast-forwards to Matt branches only happen when explicitly requested.
 

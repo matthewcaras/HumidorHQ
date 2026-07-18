@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.14.0
+# Revision : 1.15.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 7:00 PM ET
+# Modified Date : 2026-07-18 1:15 AM ET
 # Changelog :
+# 1.15.0 verify transactional idempotent partial receiving, status derivation, split placement, and over-receipt guards
 # 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
 # 1.13.0 verify CSRF session tokens and authenticated mutation compatibility
 # 1.12.0 use tracked seed data and verify external runtime-root startup enforcement
@@ -162,7 +163,7 @@ function Invoke-ExpectedApiError {
 function Get-TestDataHashSnapshot {
     param([string]$DataRoot)
     $snapshot = @{}
-    foreach ($name in @('purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'audit-log.jsonl')) {
+    foreach ($name in @('purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'audit-log.jsonl')) {
         $path = Join-Path $DataRoot $name
         $snapshot[$name] = if (Test-Path -LiteralPath $path -PathType Leaf) {
             (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
@@ -212,7 +213,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.9\.8') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.10\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -240,8 +241,8 @@ if ($appJs -match "return '2026-07-16'" -or $appJs -match 'toISOString\(\)\.slic
 foreach ($moneyCompletenessHook in @('function hasKnownMoney', 'function sumMoneyValues', "return 'Unknown'", 'knownCostQuantity', 'costComplete')) {
     if ($appJs -notmatch [regex]::Escape($moneyCompletenessHook)) { throw "Unknown-money handling is missing hook: $moneyCompletenessHook" }
 }
-if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
-if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
+if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Receive and Store Cigars') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
+if ($appJs -notmatch 'receiptKeyForPurchaseLine' -or $appJs -notmatch '/receive`' -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Idempotent receipt controls or lifetime smoked/gifted averages are missing.' }
 if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
 if ($index -match 'Flat-file collection manager' -or $appJs -match 'Smoked inventory events' -or $appJs -match 'Gifted inventory events') { throw 'Removed sidebar and consumption helper labels are still present.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
@@ -303,7 +304,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', '/inventory/move', 'purchase-lines', 'storage-sub-locations')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', '/inventory/move', '/purchase-lines/', '/receive', 'storage-sub-locations')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -448,6 +449,99 @@ try {
     $createdSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $sectionBody -WebSession $session
     if ($createdSection.data.name -ne 'Drawer 1' -or [string]$createdSection.data.storageLocationId -ne [string]$createdHumidor.data.id) { throw 'Storage sub-location create endpoint did not return the linked drawer record.' }
 
+    $partialPurchaseBody = @{
+        vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-16'; subtotal = '70'; receivedDate = ''
+        status = 'pending'; invoiceNumber = 'SMOKE-PARTIAL-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'
+        discount = '0'; totalPaid = '70'; notes = ''
+    }
+    $partialPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($partialPurchaseBody | ConvertTo-Json) -WebSession $session
+    $partialLineOne = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{
+        purchaseId = [string]$partialPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'partial line one'
+    } | ConvertTo-Json) -WebSession $session
+    $partialLineTwo = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{
+        purchaseId = [string]$partialPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        quantity = '2'; purchasePrice = '20'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'partial line two'
+    } | ConvertTo-Json) -WebSession $session
+
+    $firstReceiptBody = @{
+        quantity = '2'; receivedDate = '2026-07-17'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-partial-0001'; notes = 'first carton'
+    }
+    $firstReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($firstReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($firstReceipt.data.idempotentReplay -ne $false -or $firstReceipt.data.receivedQuantity -ne 2 -or $firstReceipt.data.remainingQuantity -ne 3) {
+        throw 'First partial receipt did not return the expected quantities.'
+    }
+    if ($firstReceipt.data.purchase.status -ne 'partially-received' -or $firstReceipt.data.purchase.receivedDate) {
+        throw 'First partial receipt did not derive partially-received purchase status with no completion date.'
+    }
+    if ($firstReceipt.data.purchaseLine.receivedQuantity -ne 2 -or $firstReceipt.data.purchaseLine.receivedDate) {
+        throw 'First partial receipt did not preserve ordered versus received line quantities.'
+    }
+    if ($firstReceipt.data.lot.initialQuantity -ne 2 -or $firstReceipt.data.lot.currentQuantity -ne 2 -or $firstReceipt.data.balance.quantity -ne 2) {
+        throw 'First partial receipt did not create the expected Lot and location balance.'
+    }
+    if ($firstReceipt.data.inventoryEvent.quantity -ne 2 -or $firstReceipt.data.inventoryEvent.receiptKey -ne $firstReceiptBody.idempotencyKey) {
+        throw 'First partial receipt did not create the expected idempotent receipt event.'
+    }
+
+    $firstReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $firstReceiptReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($firstReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($firstReceiptReplay.data.idempotentReplay -ne $true -or $firstReceiptReplay.data.inventoryEvent.id -ne $firstReceipt.data.inventoryEvent.id) {
+        throw 'An exact receipt retry did not return the original event as an idempotent replay.'
+    }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstReceiptHashes -Context 'Exact receipt replay'
+
+    $receiptKeyConflict = $firstReceiptBody.Clone(); $receiptKeyConflict.quantity = '1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $receiptKeyConflict -StatusCode 409 -ErrorCode 'RECEIPT_IDEMPOTENCY_CONFLICT' | Out-Null
+    $overReceipt = $firstReceiptBody.Clone(); $overReceipt.quantity = '4'; $overReceipt.idempotencyKey = 'receipt-smoke-partial-over-0002'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $overReceipt -StatusCode 409 -ErrorCode 'RECEIPT_QUANTITY_EXCEEDED' | Out-Null
+    $earlyReceipt = $firstReceiptBody.Clone(); $earlyReceipt.quantity = '1'; $earlyReceipt.receivedDate = '2026-07-15'; $earlyReceipt.idempotencyKey = 'receipt-smoke-partial-early-003'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $earlyReceipt -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstReceiptHashes -Context 'Rejected partial receipt requests'
+
+    $partialHeaderNotes = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($partialPurchase.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'partial header notes remain editable' } | ConvertTo-Json) -WebSession $session
+    if ($partialHeaderNotes.data.status -ne 'partially-received' -or $partialHeaderNotes.data.notes -ne 'partial header notes remain editable') {
+        throw 'Safe header editing did not preserve derived partially-received status.'
+    }
+    $partialLineNotes = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($partialLineOne.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'partial line notes remain editable' } | ConvertTo-Json) -WebSession $session
+    if ($partialLineNotes.data.receivedQuantity -ne 2 -or $partialLineNotes.data.notes -ne 'partial line notes remain editable') {
+        throw 'Safe line editing did not preserve partial receipt fields.'
+    }
+
+    $secondReceiptBody = @{
+        quantity = '3'; receivedDate = '2026-07-18'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = ''; idempotencyKey = 'receipt-smoke-partial-0002'; notes = 'remaining first line'
+    }
+    $secondReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($secondReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($secondReceipt.data.receivedQuantity -ne 5 -or $secondReceipt.data.remainingQuantity -ne 0 -or $secondReceipt.data.purchase.status -ne 'partially-received') {
+        throw 'Completing one line did not leave the multi-line purchase partially received.'
+    }
+    if ($secondReceipt.data.purchaseLine.receivedDate -ne '2026-07-18' -or $secondReceipt.data.lot.initialQuantity -ne 5 -or $secondReceipt.data.lot.currentQuantity -ne 5) {
+        throw 'Completing the first line did not reconcile its dates and Lot quantities.'
+    }
+    $partialLineOneBalances = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json) | Where-Object { $_.lotId -eq $secondReceipt.data.lot.id })
+    if ($partialLineOneBalances.Count -ne 2 -or ($partialLineOneBalances | Measure-Object -Property quantity -Sum).Sum -ne 5) {
+        throw 'Split partial receipts did not reconcile across exact location balances.'
+    }
+    $partialLineOneEvents = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json) | Where-Object { $_.purchaseLineId -eq $partialLineOne.data.id -and $_.eventType -eq 'purchase-receipt' })
+    if ($partialLineOneEvents.Count -ne 2 -or ($partialLineOneEvents | Measure-Object -Property quantity -Sum).Sum -ne 5) {
+        throw 'Partial receipt events did not reconcile to the first line ordered quantity.'
+    }
+
+    $finalReceiptBody = @{
+        quantity = '2'; receivedDate = '2026-07-19'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-partial-0003'; notes = 'second line complete'
+    }
+    $finalReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineTwo.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($finalReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($finalReceipt.data.purchase.status -ne 'received' -or $finalReceipt.data.purchase.receivedDate -ne '2026-07-19') {
+        throw 'Final line receipt did not derive the received purchase status and completion date.'
+    }
+    $completedReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $afterCompleteBody = $finalReceiptBody.Clone(); $afterCompleteBody.idempotencyKey = 'receipt-smoke-after-complete-004'; $afterCompleteBody.quantity = '1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineTwo.data.id)/receive" -Method Post -Session $session -Body $afterCompleteBody -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $completedReceiptHashes -Context 'Receipt after purchase completion'
+
     $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = ''; status = 'pending'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
     $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
     if ($createdPurchase.data.status -ne 'pending' -or $createdPurchase.data.subtotal -ne 50 -or $createdPurchase.data.invoiceNumber -ne 'SMOKE-PO-1') { throw 'Purchase create endpoint did not preserve status, subtotal, and invoice number.' }
@@ -469,12 +563,17 @@ try {
     $pendingEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
     if ($pendingEvent) { throw 'Pending purchase lines should not create receipt events before receipt and location assignment.' }
 
-    $assignLineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; storageSubLocationId = "$($createdSection.data.id)"; quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
-    $assignedLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -ContentType 'application/json' -Body $assignLineBody -WebSession $session
+    $manualStatusHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'received'; receivedDate = '2026-07-16' } -StatusCode 409 -ErrorCode 'RECEIPT_WORKFLOW_REQUIRED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $manualStatusHashes -Context 'Rejected manual purchase status transition'
 
-    $receivedPurchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = '2026-07-16'; status = 'received'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
-    $receivedPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -ContentType 'application/json' -Body $receivedPurchaseBody -WebSession $session
-    if ($receivedPurchase.data.status -ne 'received' -or $receivedPurchase.data.receivedDate -ne '2026-07-16') { throw 'Purchase update endpoint did not mark the order received.' }
+    $fullReceiptBody = @{
+        quantity = '5'; receivedDate = '2026-07-16'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-full-line-0001'; notes = 'temporary linked smoke test record'
+    }
+    $fullReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($fullReceiptBody | ConvertTo-Json) -WebSession $session
+    $receivedPurchase = $fullReceipt.data.purchase
+    if ($receivedPurchase.status -ne 'received' -or $receivedPurchase.receivedDate -ne '2026-07-16') { throw 'Receive endpoint did not mark the completed order received.' }
 
     $lots = Get-Content -LiteralPath (Join-Path $testDataRoot 'lots.json') -Raw | ConvertFrom-Json
     $linkedLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
@@ -536,7 +635,7 @@ try {
         exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = ''
     }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body $receivedDateEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
-    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'pending' } -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'pending' } -StatusCode 409 -ErrorCode 'RECEIPT_WORKFLOW_REQUIRED' | Out-Null
 
     $draftPurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; invoiceNumber = 'DRAFT-DELETE'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10'; notes = '' }
     $draftPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($draftPurchaseBody | ConvertTo-Json) -WebSession $session
@@ -554,8 +653,15 @@ try {
     $incompletePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($incompletePurchaseBody | ConvertTo-Json) -WebSession $session
     $incompleteLineBody = @{ purchaseId = [string]$incompletePurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'incomplete before receipt' }
     $incompleteLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body ($incompleteLineBody | ConvertTo-Json) -WebSession $session
-    $receivedIncompletePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($incompletePurchase.data.id)" -Method Put -ContentType 'application/json' -Body (@{ status = 'received'; receivedDate = '2026-07-17' } | ConvertTo-Json) -WebSession $session
-    if ($receivedIncompletePurchase.data.status -ne 'received') { throw 'Incomplete fixture purchase was not marked received.' }
+    $isolatedPurchasesPath = Join-Path $testDataRoot 'purchases.json'
+    $isolatedPurchases = @(Get-Content -LiteralPath $isolatedPurchasesPath -Raw | ConvertFrom-Json)
+    foreach ($isolatedPurchaseRecord in $isolatedPurchases) {
+        if ($isolatedPurchaseRecord.id -eq $incompletePurchase.data.id) {
+            $isolatedPurchaseRecord.status = 'received'
+            $isolatedPurchaseRecord.receivedDate = '2026-07-17'
+        }
+    }
+    $isolatedPurchases | ConvertTo-Json -Depth 8 -AsArray | Set-Content -LiteralPath $isolatedPurchasesPath -Encoding UTF8
 
     $incompleteGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
     $incompleteLineCount = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') -Raw | ConvertFrom-Json)).Count

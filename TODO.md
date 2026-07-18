@@ -1,8 +1,8 @@
 <!--
 Filename: TODO.md
-Revision: 1.4.0
+Revision: 1.5.0
 Description: Future development backlog for HumidorHQ.
-Modified Date: 2026-07-17 19:00 ET
+Modified Date: 2026-07-18 1:30 AM ET
 -->
 
 # TODO
@@ -17,7 +17,6 @@ Future development items for HumidorHQ.
    - Add archive/restore workflows for linked Catalog, Vendor, Humidor, and section records instead of physical deletion.
 
 2. Continue functional stabilization after transaction-safe persistence.
-   - Add line-level partial receiving and an idempotent receive/store workflow.
    - Complete discard/damage, Smoking Journal, archive/restore, and report/history workflow parity.
 
 3. Expand smoked-cigar ratings.

@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.8
+ * Revision: 1.10.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 19:00 ET
+ * Modified Date: 2026-07-18 01:30 ET
  */
 
 const API_BASE_URL = 'api'
@@ -32,6 +32,7 @@ const state = {
   purchaseDraftLines: [],
   purchaseDraftOrder: null,
   purchaseDraftEntry: null,
+  receiptKeys: {},
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -59,6 +60,7 @@ const pages = [
 
 const purchaseStatusOptions = [
   { value: 'pending', label: 'Pending' },
+  { value: 'partially-received', label: 'Partially Received' },
   { value: 'received', label: 'Received' },
 ]
 
@@ -309,8 +311,8 @@ function purchasedQuantityForPurchase(purchaseId) {
 
 function normalizePurchaseStatus(value) {
   const normalized = String(value || '').trim().toLowerCase()
-  if (normalized === 'received') {
-    return 'received'
+  if (normalized === 'received' || normalized === 'partially-received') {
+    return normalized
   }
   return 'pending'
 }
@@ -319,13 +321,74 @@ function purchaseIsReceived(purchase) {
   return normalizePurchaseStatus(purchase?.status) === 'received'
 }
 
+function purchaseAcceptsReceipts(purchase) {
+  return ['pending', 'partially-received'].includes(normalizePurchaseStatus(purchase?.status))
+}
+
+function purchaseReceiptEventsForLine(purchaseLineId) {
+  return records('inventory-events').filter((event) => (
+    Number(event.purchaseLineId || 0) === Number(purchaseLineId)
+    && normalizeEventType(event.eventType) === 'PURCHASE_RECEIPT'
+    && numericValue(event.quantity) > 0
+  ))
+}
+
+function receivedQuantityForPurchaseLine(line) {
+  return purchaseReceiptEventsForLine(line?.id)
+    .reduce((total, event) => total + numericValue(event.quantity), 0)
+}
+
+function remainingQuantityForPurchaseLine(line) {
+  return Math.max(0, numericValue(line?.quantity) - receivedQuantityForPurchaseLine(line))
+}
+
+function purchaseLineLocationLabel(line) {
+  const lot = records('lots').find((row) => Number(row.purchaseLineId || 0) === Number(line?.id || 0))
+  const currentLocations = lot
+    ? records('lot-location-balances').filter((balance) => (
+      Number(balance.lotId || 0) === Number(lot.id)
+      && numericValue(balance.quantity) > 0
+    ))
+    : []
+  const labels = [...new Set(currentLocations.map((balance) => (
+    [
+      humidorName(balance.storageLocationId),
+      balance.storageSubLocationId ? sectionName(recordById('storage-sub-locations', balance.storageSubLocationId)) : 'General',
+    ].filter(Boolean).join(' / ')
+  )).filter(Boolean))]
+  if (labels.length === 1) {
+    return labels[0]
+  }
+  if (labels.length > 1) {
+    return `${labels.length} locations`
+  }
+  if (Number(line?.storageLocationId || 0) > 0) {
+    return [
+      humidorName(line.storageLocationId),
+      line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General',
+    ].filter(Boolean).join(' / ')
+  }
+  return 'Not received yet'
+}
+
+function receiptKeyForPurchaseLine(purchaseLineId) {
+  const key = String(purchaseLineId)
+  if (!state.receiptKeys[key]) {
+    const randomPart = globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+    state.receiptKeys[key] = `receipt-${purchaseLineId}-${randomPart}`
+  }
+  return state.receiptKeys[key]
+}
+
 function enRoutePurchaseQuantity() {
   return records('purchase-lines')
     .filter((line) => {
       const purchase = recordById('purchases', line.purchaseId)
-      return purchase && !purchaseIsReceived(purchase)
+      return purchase && purchaseAcceptsReceipts(purchase)
     })
-    .reduce((total, line) => total + numericValue(line.quantity), 0)
+    .reduce((total, line) => total + remainingQuantityForPurchaseLine(line), 0)
 }
 
 function purchaseStatusLabel(value) {
@@ -1970,72 +2033,118 @@ function renderPurchaseOrderForm(view) {
 }
 
 function renderPurchaseRecordInlineEdit(container, purchase) {
-  const form = document.createElement('form')
-  form.className = 'data-form compact-top-gap'
-  form.innerHTML = `
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel compact-top-gap'
+  panel.innerHTML = `
     <div class="section-heading">
       <div>
-        <h3>Update Purchase Status</h3>
-        <p class="muted">Pending purchase orders can be marked received here. Once received, assign the cigars below.</p>
+        <h3>Receive and Store Cigars</h3>
+        <p class="muted">Record each shipment quantity and its storage location. Purchase status updates automatically.</p>
       </div>
     </div>
   `
-  const grid = document.createElement('div')
-  grid.className = 'form-grid'
-  ;[
-    { label: 'Vendor', value: vendorName(purchase.vendorId) || 'Unassigned' },
-    { label: 'Invoice / PO Number', value: purchase.invoiceNumber || '' },
-    { label: 'Purchase Date', value: purchase.purchaseDate || '' },
-    { label: 'Total Paid', value: money(purchase.totalPaid) },
-  ].forEach((field) => {
-    const label = document.createElement('label')
-    label.className = 'form-field'
-    label.innerHTML = `<span>${escapeHtml(field.label)}</span><input value="${escapeHtml(field.value)}" disabled>`
-    grid.append(label)
+  const lines = records('purchase-lines')
+    .filter((line) => Number(line.purchaseId) === Number(purchase.id))
+  const incompleteLines = lines.filter((line) => remainingQuantityForPurchaseLine(line) > 0)
+
+  if (lines.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'muted'
+    empty.textContent = 'Add at least one purchased cigar before receiving this order.'
+    panel.append(empty)
+  } else if (incompleteLines.length === 0) {
+    const complete = document.createElement('p')
+    complete.className = 'muted'
+    complete.textContent = 'Every purchase line is fully received.'
+    panel.append(complete)
+  }
+
+  incompleteLines.forEach((line) => {
+    const remaining = remainingQuantityForPurchaseLine(line)
+    const received = receivedQuantityForPurchaseLine(line)
+    const form = document.createElement('form')
+    form.className = 'inline-assignment-form'
+    form.innerHTML = `
+      <strong>${escapeHtml(cigarNameById(line.catalogCigarId))}</strong>
+      <span class="muted">${formatCount(received)} of ${formatCount(line.quantity)} received</span>
+    `
+
+    const quantityInput = document.createElement('input')
+    quantityInput.name = 'quantity'
+    quantityInput.type = 'number'
+    quantityInput.min = '1'
+    quantityInput.max = String(remaining)
+    quantityInput.step = '1'
+    quantityInput.required = true
+    quantityInput.value = String(remaining)
+    quantityInput.setAttribute('aria-label', `Quantity received for ${cigarNameById(line.catalogCigarId)}`)
+
+    const dateInput = document.createElement('input')
+    dateInput.name = 'receivedDate'
+    dateInput.type = 'date'
+    dateInput.required = true
+    dateInput.value = todayIsoDate()
+    dateInput.setAttribute('aria-label', `Received date for ${cigarNameById(line.catalogCigarId)}`)
+
+    const humidorSelect = document.createElement('select')
+    humidorSelect.name = 'storageLocationId'
+    humidorSelect.required = true
+    humidorSelect.append(new Option('Select humidor...', ''))
+    records('storage-locations').forEach((humidor) => {
+      humidorSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id)))
+    })
+
+    const sectionSelect = document.createElement('select')
+    sectionSelect.name = 'storageSubLocationId'
+    function fillSections() {
+      sectionSelect.replaceChildren(new Option('General', ''))
+      records('storage-sub-locations')
+        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
+        .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
+    }
+    humidorSelect.addEventListener('change', fillSections)
+    fillSections()
+
+    const save = document.createElement('button')
+    save.type = 'submit'
+    save.className = 'primary-button compact-button'
+    save.textContent = remaining === numericValue(line.quantity) ? 'Receive and Store' : 'Receive Remaining'
+
+    form.append(quantityInput, dateInput, humidorSelect, sectionSelect, save)
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      try {
+        await apiPost(`/purchase-lines/${line.id}/receive`, {
+          quantity: String(quantityInput.value || '').trim(),
+          receivedDate: String(dateInput.value || '').trim(),
+          storageLocationId: String(humidorSelect.value || '').trim(),
+          storageSubLocationId: String(sectionSelect.value || '').trim(),
+          idempotencyKey: receiptKeyForPurchaseLine(line.id),
+          notes: '',
+        })
+        delete state.receiptKeys[String(line.id)]
+        await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
+        const latestPurchase = recordById('purchases', purchase.id)
+        state.editing.purchases = latestPurchase && purchaseAcceptsReceipts(latestPurchase) ? latestPurchase : null
+      } catch (error) {
+        state.formError = error.message
+      }
+      render()
+    })
+    panel.append(form)
   })
-  const statusField = renderField(
-    { name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true },
-    { ...purchase, status: 'received' },
-  )
-  const receivedDateField = renderField({ name: 'receivedDate', label: 'Received Date', type: 'date' }, { ...purchase, receivedDate: purchase.receivedDate || todayIsoDate() })
-  grid.append(statusField, receivedDateField)
-  const actions = document.createElement('div')
-  actions.className = 'form-actions'
-  const save = document.createElement('button')
-  save.type = 'submit'
-  save.className = 'primary-button'
-  save.textContent = 'Save Status'
+
   const cancel = document.createElement('button')
   cancel.type = 'button'
-  cancel.className = 'secondary-button'
-  cancel.textContent = 'Cancel'
+  cancel.className = 'secondary-button compact-button compact-top-gap'
+  cancel.textContent = 'Close Receiving'
   cancel.addEventListener('click', () => {
     state.editing.purchases = null
     state.formError = null
     render()
   })
-  actions.append(save, cancel)
-  form.append(grid, actions)
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault()
-    try {
-      const data = new FormData(form)
-      await apiPut(`/records/purchases/${purchase.id}`, {
-        ...purchase,
-        status: String(data.get('status') || '').trim(),
-        receivedDate: String(data.get('receivedDate') || '').trim(),
-      })
-      state.selectedPurchaseId = Number(purchase.id)
-      await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
-      state.editing.purchases = recordById('purchases', purchase.id) || purchase
-    } catch (error) {
-      state.formError = error.message
-    }
-    render()
-  })
-  container.append(form)
-  const latestPurchase = recordById('purchases', purchase.id) || purchase
-  renderReceivedAssignments(container, latestPurchase, records('purchase-lines').filter((line) => Number(line.purchaseId) === Number(purchase.id)))
+  panel.append(cancel)
+  container.append(panel)
 }
 
 function renderInlineCatalogCreate(container) {
@@ -2219,78 +2328,6 @@ function renderPurchaseLineForm(container, purchase) {
   renderInlineCatalogCreate(container)
 }
 
-function renderReceivedAssignments(container, purchase, lines) {
-  if (!purchaseIsReceived(purchase)) {
-    return
-  }
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel compact-top-gap'
-  panel.innerHTML = `
-    <div class="section-heading">
-      <div>
-        <h3>Assign Received Cigars</h3>
-        <p class="muted">Now that this order is received, assign each purchased cigar to a humidor and optional drawer.</p>
-      </div>
-    </div>
-  `
-  const unassigned = lines.filter((line) => Number(line.storageLocationId || 0) < 1)
-  if (unassigned.length === 0) {
-    const complete = document.createElement('p')
-    complete.className = 'muted'
-    complete.textContent = 'All received cigars on this order have already been assigned to a location.'
-    panel.append(complete)
-    container.append(panel)
-    return
-  }
-
-  unassigned.forEach((line) => {
-    const form = document.createElement('form')
-    form.className = 'inline-assignment-form'
-    form.innerHTML = `
-      <strong>${escapeHtml(cigarNameById(line.catalogCigarId))}</strong>
-      <span class="muted">${formatCount(line.quantity)} cigars</span>
-    `
-    const humidorSelect = document.createElement('select')
-    humidorSelect.name = 'storageLocationId'
-    humidorSelect.required = true
-    humidorSelect.append(new Option('Select humidor...', ''))
-    records('storage-locations').forEach((humidor) => humidorSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id))))
-
-    const sectionSelect = document.createElement('select')
-    sectionSelect.name = 'storageSubLocationId'
-    function fillSections() {
-      sectionSelect.replaceChildren(new Option('General', ''))
-      records('storage-sub-locations')
-        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
-        .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
-    }
-    humidorSelect.addEventListener('change', fillSections)
-    fillSections()
-
-    const save = document.createElement('button')
-    save.type = 'submit'
-    save.className = 'primary-button compact-button'
-    save.textContent = 'Assign Location'
-
-    form.append(humidorSelect, sectionSelect, save)
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault()
-      try {
-        await apiPut(`/records/purchase-lines/${line.id}`, purchaseLinePayloadFromRecord(line, {
-          storageLocationId: String(humidorSelect.value || '').trim(),
-          storageSubLocationId: String(sectionSelect.value || '').trim(),
-        }))
-        await refreshCollections(['purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
-      } catch (error) {
-        state.formError = error.message
-      }
-      render()
-    })
-    panel.append(form)
-  })
-  container.append(panel)
-}
-
 function renderPurchaseLinesPanel(view) {
   const purchases = sortPurchasesNewest(records('purchases'))
   const panel = document.createElement('section')
@@ -2306,7 +2343,7 @@ function renderPurchaseLinesPanel(view) {
   header.innerHTML = `
     <div>
       <h3>Purchased Cigars</h3>
-      <p class="muted">Add cigars to a purchase order, then assign their location after the order is received.</p>
+      <p class="muted">Review ordered quantities and receive each shipment directly into its storage location.</p>
     </div>
   `
   const purchaseSelect = document.createElement('select')
@@ -2364,13 +2401,12 @@ function renderPurchaseLinesPanel(view) {
   const tbody = table.querySelector('tbody')
   lines.forEach((line) => {
     const row = document.createElement('tr')
-    const locationLabel = Number(line.storageLocationId || 0) > 0
-      ? [humidorName(line.storageLocationId), line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General'].filter(Boolean).join(' / ')
-      : 'Not assigned yet'
+    const locationLabel = purchaseLineLocationLabel(line)
+    const receivedQuantity = receivedQuantityForPurchaseLine(line)
     row.innerHTML = `
       <td>${escapeHtml(cigarNameById(line.catalogCigarId))}</td>
       <td>${escapeHtml(locationLabel)}</td>
-      <td>${formatCount(line.quantity)}</td>
+      <td>${formatCount(line.quantity)} ordered / ${formatCount(receivedQuantity)} received</td>
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
@@ -2382,7 +2418,10 @@ function renderPurchaseLinesPanel(view) {
     remove.type = 'button'
     remove.className = 'danger-button compact-button'
     remove.textContent = 'Delete'
-    remove.disabled = purchaseIsReceived(purchase)
+    remove.disabled = normalizePurchaseStatus(purchase?.status) !== 'pending'
+    if (remove.disabled) {
+      remove.title = 'Received and partially received lines require an adjustment workflow.'
+    }
     remove.addEventListener('click', async () => {
       if (!confirm('Delete this purchase line?')) {
         return
@@ -2401,7 +2440,6 @@ function renderPurchaseLinesPanel(view) {
   tableWrap.append(table)
   panel.append(tableWrap)
 
-  renderReceivedAssignments(panel, purchase, lines)
   view.append(panel)
 }
 
@@ -2469,14 +2507,13 @@ function renderPurchaseLineDetails(container, purchase) {
   `
   const tbody = table.querySelector('tbody')
   lines.forEach((line) => {
-    const locationLabel = Number(line.storageLocationId || 0) > 0
-      ? [humidorName(line.storageLocationId), line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General'].filter(Boolean).join(' / ')
-      : 'Not assigned yet'
+    const locationLabel = purchaseLineLocationLabel(line)
+    const receivedQuantity = receivedQuantityForPurchaseLine(line)
     const row = document.createElement('tr')
     row.innerHTML = `
       <td>${escapeHtml(cigarNameById(line.catalogCigarId))}</td>
       <td>${escapeHtml(locationLabel)}</td>
-      <td>${formatCount(line.quantity)}</td>
+      <td>${formatCount(line.quantity)} ordered / ${formatCount(receivedQuantity)} received</td>
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
@@ -2495,7 +2532,7 @@ function renderPurchaseRecords(view) {
   heading.innerHTML = `
     <div>
       <h3>Purchase Records</h3>
-      <p class="muted">Select a purchase order to view its cigars. En route orders can be edited and received.</p>
+      <p class="muted">Select a purchase order to view its cigars and record full or partial receipts.</p>
     </div>
   `
   view.append(heading)
@@ -2547,11 +2584,11 @@ function renderPurchaseRecords(view) {
       render()
     })
     actions.append(viewButton)
-    if (!purchaseIsReceived(purchase)) {
+    if (purchaseAcceptsReceipts(purchase)) {
       const edit = document.createElement('button')
       edit.type = 'button'
       edit.className = 'primary-button compact-button'
-      edit.textContent = 'Edit / Receive'
+      edit.textContent = 'Receive'
       edit.addEventListener('click', (event) => {
         event.stopPropagation()
         state.selectedPurchaseId = Number(purchase.id)

@@ -2,13 +2,14 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.9.0
+ * Revision: 1.10.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-17 19:00 ET
+ * Modified Date: 2026-07-18 01:30 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
+require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -1003,7 +1004,7 @@ function clean_managed_record(string $collection, array $input, ?array $existing
     }
     if ($collection === 'purchases') {
         $record['status'] = normalize_purchase_status_value((string) ($record['status'] ?? ''));
-        validate_purchase_status($record);
+        validate_purchase_status($record, $existing);
         normalize_purchase_dates_and_total($record);
     }
     if ($collection === 'storage-sub-locations') {
@@ -1030,11 +1031,20 @@ function normalize_purchase_status_value(string $value): string
     };
 }
 
-function validate_purchase_status(array $record): void
+function validate_purchase_status(array $record, ?array $existing = null): void
 {
     $allowed = ['pending', 'received'];
-    if (!in_array((string) ($record['status'] ?? ''), $allowed, true)) {
-        throw new ApiError('VALIDATION_ERROR', 'status must be pending or received.', 422);
+    $status = (string) ($record['status'] ?? '');
+    if ($existing === null && $status !== 'pending') {
+        throw new ApiError('VALIDATION_ERROR', 'New purchases must begin in pending status and be completed through receipt events.', 422);
+    }
+    if ($status === 'partially-received'
+        && $existing !== null
+        && normalize_purchase_status_value((string) ($existing['status'] ?? '')) === 'partially-received') {
+        return;
+    }
+    if (!in_array($status, $allowed, true)) {
+        throw new ApiError('VALIDATION_ERROR', 'status must be pending or received; partially received status is managed by receipt events.', 422);
     }
 }
 
@@ -1218,6 +1228,15 @@ function update_managed_record(string $collection, int $id, array $input): array
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
             $mergedInput = array_merge($row, $input);
+            if ($collection === 'purchases'
+                && normalize_purchase_status_value((string) ($mergedInput['status'] ?? ''))
+                    !== normalize_purchase_status_value((string) ($row['status'] ?? ''))) {
+                throw new ApiError(
+                    'RECEIPT_WORKFLOW_REQUIRED',
+                    'Purchase status is derived from receipt events. Use the Receive and Store workflow.',
+                    409
+                );
+            }
             $lineInventoryLocked = $collection === 'purchase-lines' && purchase_line_is_inventory_locked($row, $id);
             if ($collection === 'purchase-lines') {
                 $originalPurchaseId = (int) ($row['purchaseId'] ?? 0);
@@ -1247,7 +1266,7 @@ function update_managed_record(string $collection, int $id, array $input): array
                     );
                 }
             }
-            if ($collection === 'purchases' && (purchase_relationship_summary($id)['hasInventory'] ?? false) === true) {
+            if ($collection === 'purchases' && purchase_inventory_is_locked($id)) {
                 $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
                 $protectedFields = array_values(array_diff(
                     array_merge($config['text'], $config['int'], $config['money']),
@@ -1282,8 +1301,7 @@ function update_managed_record(string $collection, int $id, array $input): array
                 }
             }
             if ($collection === 'purchases') {
-                $relationships = purchase_relationship_summary($id);
-                if (($relationships['hasInventory'] ?? false) === true) {
+                if (purchase_inventory_is_locked($id)) {
                     $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
                     $protectedFields = array_values(array_diff(
                         array_merge($config['text'], $config['int'], $config['money']),
@@ -1476,6 +1494,13 @@ try {
     if ($path === '/inventory/remove' && $method === 'POST') {
         require_auth();
         json_success(remove_inventory(request_json()));
+    }
+    if (preg_match('#^/purchase-lines/([1-9][0-9]*)/receive$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'POST') {
+            json_success(receive_purchase_line(positive_int_param($matches[1], 'purchase line id'), request_json()), 201);
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }
     if (preg_match('#^/records/([a-z0-9\-]+)$#', $path, $matches)) {
         require_auth();

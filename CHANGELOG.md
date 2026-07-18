@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.15.0
+Revision: 1.16.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:00 PM ET
+Modified Date: 2026-07-18 1:30 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.16.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added a transactional `POST /api/purchase-lines/{id}/receive` workflow for full or partial line receipts into an exact Humidor and optional section.
+- Made purchase-receipt InventoryEvents authoritative for received quantity and derived `pending`, `partially-received`, and `received` purchase status after every receipt.
+- Added required idempotency keys, exact replay responses, conflicting-key rejection, over-receipt protection, real-date validation, and pre-mutation Lot reconciliation checks.
+- Kept one Lot per purchase line while accumulating its received quantity, exact location balances, immutable cost/MSRP snapshots, and line-level first/latest/completion receipt dates.
+- Replaced the manual all-at-once receiving control with line-level quantity/date/location forms without changing the existing visual design.
+- Added isolated regression coverage for retries, rejected-request hash stability, split receipt locations, multi-line completion, partial notes edits, counters, Lots, balances, events, and status dates.
 
 ## 1.15.0 - 2026-07-17
 
