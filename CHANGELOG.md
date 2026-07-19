@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.20.0
+Revision: 1.21.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 15:00 ET
+Modified Date: 2026-07-19 16:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.21.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added read-only purchase-history summaries by Vendor or Catalog cigar manufacturer using purchase counts, cigar quantities, and the same authoritative purchase-header totals in both views.
+- Allocated manufacturer-specific shares deterministically in integer cents from stored line weights so all manufacturer totals foot exactly to the corresponding Vendor totals.
+- Added Collection search across cigar identity, blend details, strength, notes, and current location labels.
+- Added Collection strength filtering and mild-to-full strength sorting while keeping filtered quantities and financial summaries reconciled to the displayed on-hand records.
+- Added isolated JavaScript regression coverage for Vendor/manufacturer reporting, Collection search, strength filtering/sorting, and unknown-versus-zero monetary totals.
+- Kept purchase-line details in the Purchases workflow and organized Collection controls into separate heading, filter, and full-width search rows.
 
 ## 1.20.0 - 2026-07-19
 

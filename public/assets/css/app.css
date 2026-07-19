@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.5
+ * Revision: 1.5.7
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-16 19:25 ET
+ * Modified Date: 2026-07-19 16:00 ET
  */
 
 :root {
@@ -363,6 +363,20 @@ h3 {
   text-align: center;
 }
 
+.report-select {
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.purchase-history-panel + .removal-report-panel {
+  margin-top: 18px;
+}
+
 .report-filter-buttons {
   display: grid;
   gap: 8px;
@@ -371,6 +385,10 @@ h3 {
 
 .report-type-buttons {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.purchase-report-group-buttons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .report-filter-button {
@@ -448,6 +466,7 @@ h3 {
 .collection-controls {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -456,8 +475,25 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
+  flex: 1 1 170px;
   min-height: 38px;
   padding: 8px 10px;
+}
+
+.collection-toolbar {
+  margin-bottom: 18px;
+}
+
+.collection-heading {
+  margin-bottom: 12px;
+}
+
+.collection-search-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  margin-top: 12px;
 }
 
 .dashboard-link-row {
@@ -1011,6 +1047,14 @@ code {
 
   .collection-controls select,
   .collection-controls button {
+    width: 100%;
+  }
+
+  .collection-search-form {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-search-form button {
     width: 100%;
   }
 
