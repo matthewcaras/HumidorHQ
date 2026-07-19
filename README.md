@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.18.0
+Revision: 1.19.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 10:00 AM ET
+Modified Date: 2026-07-19 12:15 PM ET
 -->
 
 # HumidorHQ
@@ -60,7 +60,7 @@ Temporary probe files are not part of the deployable app and should not be commi
 
 ## Data Model
 
-Runtime data defaults to `APP_ROOT/data`. `HUMIDORHQ_DATA_ROOT` remains an optional override. Startup fails safely if the selected directory is unavailable, required JSON is missing or malformed, or PHP cannot read and write the directory and files.
+Runtime data defaults to `APP_ROOT/data`. `HUMIDORHQ_DATA_ROOT` remains an optional override. On first run, PHP creates a missing runtime directory and initializes missing non-auth collections from validated, tracked `seed-data/` templates using create-only atomic replacement; existing files are never overwritten. Startup still fails safely if the selected directory is unavailable or unwritable, existing JSON is malformed, or secure credentials have not been provisioned.
 
 Data-changing API workflows use one serialized transaction boundary. Collections are reloaded while that lock is held, IDs are allocated with their records, all changed JSON is staged before replacement, and exact backups plus a recovery journal restore the prior state after a write failure or interrupted process. Successful mutation audit entries are delayed until the JSON commit completes.
 
@@ -87,7 +87,7 @@ Create or update a local user with:
 php tools/create-auth-user.php "your-username" "your-password" "Your Display Name"
 ```
 
-That command defaults to `data/auth-users.json` and atomically writes it. Set `HUMIDORHQ_DATA_ROOT` only when intentionally using another runtime directory.
+That command defaults to `data/auth-users.json` and atomically writes it. `auth-users.json` is never copied from seed data during first-run initialization; startup returns `AUTH_USERS_SETUP_REQUIRED` until credentials are created securely. Set `HUMIDORHQ_DATA_ROOT` only when intentionally using another runtime directory.
 
 Public routes:
 
@@ -159,7 +159,7 @@ The script prompts for the existing HumidorHQ project folder, validates that it 
 
 ## Local Development
 
-No package install or build command is required. Existing runtime JSON remains in `data/`; startup validates it without copying, moving, or rewriting records. The optional copy utility remains dry-run by default for deliberately creating a separate runtime directory.
+No package install or build command is required. Existing runtime JSON remains in `data/` and is never overwritten by initialization. Missing non-auth runtime files are created from validated `seed-data/` templates, and a missing audit log is created empty. The optional copy utility remains dry-run by default for deliberately creating a separate runtime directory.
 
 Recommended:
 
@@ -220,11 +220,12 @@ http://127.0.0.1:8000/
 
 The intended deployment flow is:
 
-1. Keep live runtime files in the deployed application's `data/` directory.
+1. Keep live runtime files in the deployed application's `data/` directory; missing non-auth files are initialized from tracked `seed-data/` templates on first request.
 2. Confirm `data/.htaccess` is deployed and Apache honors its deny rules.
 3. Keep every runtime JSON/JSONL file ignored by Git so code pulls do not manage it.
-4. Ensure PHP can read and write `data/`; use `HUMIDORHQ_DATA_ROOT` only as an optional override.
-5. The frontend calls relative authenticated PHP API paths, and PHP accesses the selected JSON directory.
+4. Ensure PHP can create, read, and write `data/`; use `HUMIDORHQ_DATA_ROOT` only as an optional override.
+5. Provision `auth-users.json` separately with `tools/create-auth-user.php`; initialization never installs example credentials or password hashes.
+6. The frontend calls relative authenticated PHP API paths, and PHP accesses the selected JSON directory.
 
 No build artifact is required. Runtime JSON, credentials, audit logs, manifests, and backups must remain outside Git tracking. See [docs/RUNTIME_DATA.md](docs/RUNTIME_DATA.md) for Hostinger setup and permissions.
 

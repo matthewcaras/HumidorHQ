@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.19.1
+Revision: 1.19.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 10:00 AM ET
+Modified Date: 2026-07-19 12:15 PM ET
 -->
 
 # Changelog
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.19.2 - 2026-07-19
+
+Changed by: Matt
+
+- Added locked, idempotent, create-only first-run initialization of missing non-auth runtime JSON from validated tracked `seed-data/` templates.
+- Added atomic creation of a missing empty audit log while preserving every existing runtime file byte-for-byte.
+- Kept credentials out of automatic initialization and added the explicit `AUTH_USERS_SETUP_REQUIRED` response for separate secure provisioning.
+- Added isolated PowerShell 7 coverage for an empty runtime directory, template validity, repeat bootstrap, optional overrides, existing-file preservation, and deployment hash preservation.
+- Made reversal smoke fixtures use the current local calendar date so the existing suite remains valid after day rollover.
 
 ## 1.19.1 - 2026-07-19
 

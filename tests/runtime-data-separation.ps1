@@ -1,10 +1,11 @@
 # Filename: runtime-data-separation.ps1
-# Revision : 1.1.0
-# Description : Verifies in-application default runtime data and optional external override behavior.
+# Revision : 1.2.0
+# Description : Verifies create-only first-run initialization, default runtime data, and optional overrides.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
 # Modified Date : 2026-07-19
 # Changelog :
+# 1.2.0 verify atomic first-run seeding, secure auth setup failure, idempotency, and existing-file preservation
 # 1.1.0 verify APP_ROOT/data default, optional override, access denial, and code-only deployment preservation
 # 1.0.0 initial isolated runtime-root, startup validation, and deployment-preservation coverage
 
@@ -16,6 +17,7 @@ $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('humidorhq-runtime-loca
 $deploymentRoot = Join-Path $testRoot 'deployed-code'
 $runtimeRoot = Join-Path $deploymentRoot 'data'
 $overrideRoot = Join-Path $testRoot 'optional-override'
+$createdRoot = Join-Path $testRoot 'created-runtime'
 $testRootFull = [System.IO.Path]::GetFullPath($testRoot)
 $systemTempFull = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 if (-not $testRootFull.StartsWith($systemTempFull, [System.StringComparison]::OrdinalIgnoreCase) -or $testRootFull -eq $systemTempFull) {
@@ -76,45 +78,96 @@ function Install-CodeSnapshot {
     Copy-Item -LiteralPath (Join-Path $repositoryDataRoot '.htaccess') -Destination (Join-Path $dataDirectory '.htaccess') -Force
 }
 
-function Initialize-TestRuntime {
-    param([string]$Destination)
-    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) {
-        $null = New-Item -ItemType Directory -Path $Destination
-    }
-    Get-ChildItem -LiteralPath $seedDataRoot -Filter '*.json' -File | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Destination $_.Name)
-    }
-}
-
 $repositoryHashesBefore = Get-DirectoryDataHashes $repositoryDataRoot
 $seedHashesBefore = Get-DirectoryDataHashes $seedDataRoot
+$runtimeFilenames = @(
+    'catalog-cigars.json', 'counters.json', 'inventory-events.json', 'lot-location-balances.json',
+    'lots.json', 'purchase-lines.json', 'purchases.json', 'smoking-journal-entries.json',
+    'storage-locations.json', 'storage-sub-locations.json', 'vendors.json'
+)
+foreach ($filename in $runtimeFilenames) {
+    $trackedTemplate = (& git -C $repoRoot ls-files -- "seed-data/$filename") -join ''
+    if ($LASTEXITCODE -ne 0 -or $trackedTemplate -ne "seed-data/$filename") {
+        throw "Required runtime seed template is not tracked: $filename"
+    }
+}
 $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
 try {
     $null = New-Item -ItemType Directory -Path $testRoot
     Install-CodeSnapshot $deploymentRoot
-    Initialize-TestRuntime $runtimeRoot
-    Initialize-TestRuntime $overrideRoot
-
-    @([ordered]@{ id = 9001; purchaseDate = '2026-07-19'; status = 'pending'; subtotal = '12.34'; totalPaid = '12.34'; notes = 'runtime deployment sentinel' }) |
-        ConvertTo-Json -Depth 5 -AsArray | Set-Content -LiteralPath (Join-Path $runtimeRoot 'purchases.json') -Encoding utf8
-    $runtimeHashesBeforeDeployment = Get-DirectoryDataHashes $runtimeRoot
 
     $php = Get-PhpCommand
     $bootstrapPath = (Join-Path $deploymentRoot 'api\bootstrap.php').Replace('\', '/').Replace("'", "\'")
     Remove-Item Env:HUMIDORHQ_DATA_ROOT -ErrorAction SilentlyContinue
+
+    $firstRunOutput = (& $php -r "require '$bootstrapPath';" 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $firstRunOutput -notmatch 'AUTH_USERS_SETUP_REQUIRED') {
+        throw 'First-run initialization did not stop with the secure auth-users setup message.'
+    }
+    foreach ($filename in $runtimeFilenames) {
+        $runtimePath = Join-Path $runtimeRoot $filename
+        $seedPath = Join-Path $seedDataRoot $filename
+        if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) { throw "First-run initialization missed $filename." }
+        if ((Get-FileHash -LiteralPath $runtimePath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $seedPath -Algorithm SHA256).Hash) {
+            throw "Initialized runtime file does not match its validated seed: $filename"
+        }
+        $null = Get-Content -LiteralPath $runtimePath -Raw | ConvertFrom-Json
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot 'audit-log.jsonl') -PathType Leaf)) {
+        throw 'First-run initialization did not create audit-log.jsonl.'
+    }
+    if ((Get-Item -LiteralPath (Join-Path $runtimeRoot 'audit-log.jsonl')).Length -ne 0) {
+        throw 'First-run initialization did not create an empty audit log.'
+    }
+    $defaultDenyRules = Get-Content -LiteralPath (Join-Path $runtimeRoot '.htaccess') -Raw
+    if ($defaultDenyRules -notmatch 'Require all denied' -or $defaultDenyRules -notmatch 'Deny from all') {
+        throw 'First-run runtime directory is missing direct-access denial rules.'
+    }
+    [System.IO.File]::WriteAllText((Join-Path $runtimeRoot 'auth-users.json'), "[]`n", [System.Text.UTF8Encoding]::new($false))
+    $runtimeHashesAfterFirstRun = Get-DirectoryDataHashes $runtimeRoot
+
     $defaultOutput = (& $php -r "require '$bootstrapPath'; echo DATA_ROOT;") -join "`n"
     if ($LASTEXITCODE -ne 0 -or [System.IO.Path]::GetFullPath($defaultOutput.Trim()) -ne [System.IO.Path]::GetFullPath($runtimeRoot)) {
-        throw 'Bootstrap did not default to APP_ROOT/data when HUMIDORHQ_DATA_ROOT was absent.'
+        throw 'Bootstrap did not default to APP_ROOT/data after secure auth setup.'
     }
+    Assert-HashesEqual $runtimeHashesAfterFirstRun (Get-DirectoryDataHashes $runtimeRoot) 'Second default bootstrap'
 
+    $null = New-Item -ItemType Directory -Path $overrideRoot
+    [System.IO.File]::WriteAllText((Join-Path $overrideRoot 'auth-users.json'), "[]`n", [System.Text.UTF8Encoding]::new($false))
+    $preservedVendor = "[{`"id`":77,`"name`":`"Preserved Vendor`"}]`n"
+    [System.IO.File]::WriteAllText((Join-Path $overrideRoot 'vendors.json'), $preservedVendor, [System.Text.UTF8Encoding]::new($false))
+    $vendorHashBefore = (Get-FileHash -LiteralPath (Join-Path $overrideRoot 'vendors.json') -Algorithm SHA256).Hash
     $env:HUMIDORHQ_DATA_ROOT = $overrideRoot
     $overrideOutput = (& $php -r "require '$bootstrapPath'; echo DATA_ROOT;") -join "`n"
     if ($LASTEXITCODE -ne 0 -or [System.IO.Path]::GetFullPath($overrideOutput.Trim()) -ne [System.IO.Path]::GetFullPath($overrideRoot)) {
         throw 'Bootstrap did not retain the optional HUMIDORHQ_DATA_ROOT override.'
     }
+    if ((Get-FileHash -LiteralPath (Join-Path $overrideRoot 'vendors.json') -Algorithm SHA256).Hash -ne $vendorHashBefore) {
+        throw 'Initialization overwrote an existing runtime file.'
+    }
+    $overrideDenyRules = Get-Content -LiteralPath (Join-Path $overrideRoot '.htaccess') -Raw
+    if ($overrideDenyRules -notmatch 'Require all denied' -or $overrideDenyRules -notmatch 'Deny from all') {
+        throw 'Optional runtime directory is missing direct-access denial rules.'
+    }
+    $overrideHashesAfterFirstRun = Get-DirectoryDataHashes $overrideRoot
+    $null = & $php -r "require '$bootstrapPath';"
+    if ($LASTEXITCODE -ne 0) { throw 'Second optional-override bootstrap failed.' }
+    Assert-HashesEqual $overrideHashesAfterFirstRun (Get-DirectoryDataHashes $overrideRoot) 'Second optional-override bootstrap'
+
+    $env:HUMIDORHQ_DATA_ROOT = $createdRoot
+    $createdRootOutput = (& $php -r "require '$bootstrapPath';" 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $createdRootOutput -notmatch 'AUTH_USERS_SETUP_REQUIRED' -or
+        -not (Test-Path -LiteralPath $createdRoot -PathType Container)) {
+        throw 'Bootstrap did not create and initialize a missing runtime directory safely.'
+    }
+    foreach ($filename in $runtimeFilenames) {
+        if (-not (Test-Path -LiteralPath (Join-Path $createdRoot $filename) -PathType Leaf)) {
+            throw "Created runtime directory is missing $filename."
+        }
+    }
 
     Install-CodeSnapshot $deploymentRoot
-    Assert-HashesEqual $runtimeHashesBeforeDeployment (Get-DirectoryDataHashes $runtimeRoot) 'In-application runtime after code replacement'
+    Assert-HashesEqual $runtimeHashesAfterFirstRun (Get-DirectoryDataHashes $runtimeRoot) 'In-application runtime after code replacement'
     Assert-HashesEqual $repositoryHashesBefore (Get-DirectoryDataHashes $repositoryDataRoot) 'Repository runtime data'
     Assert-HashesEqual $seedHashesBefore (Get-DirectoryDataHashes $seedDataRoot) 'Tracked seed data'
 
@@ -123,6 +176,11 @@ try {
         throw 'Deployed data/.htaccess does not deny direct browser access.'
     }
 
+    Write-Output '[PASS] EmptyRuntimeInitializedFromTrackedSeeds'
+    Write-Output '[PASS] MissingAuthRequiresSecureSetup'
+    Write-Output '[PASS] SecondBootstrapIsIdempotent'
+    Write-Output '[PASS] ExistingRuntimeFilesPreservedByteForByte'
+    Write-Output '[PASS] MissingRuntimeDirectoryCreatedSafely'
     Write-Output '[PASS] RepositoryDataDefaultAccepted'
     Write-Output '[PASS] OptionalOverrideAccepted'
     Write-Output '[PASS] CodeReplacementPreservedRuntimeHashes'
