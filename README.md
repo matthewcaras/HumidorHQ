@@ -1,6 +1,6 @@
 <!--
 Filename: README.md
-Revision: 1.22.1
+Revision: 1.23.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-19 17:00 ET
 -->
@@ -11,12 +11,12 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 ## Page Functions And Features
 
-- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded/damaged totals with per-cigar averages, and each humidor's current count with oldest inventory date.
+- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded totals with per-cigar averages, and each humidor's current count with oldest inventory date. An active Humidor named `Pre Inventory` also receives a staging count for cigars awaiting permanent placement; that staging summary disappears when the Humidor is archived.
 - `Collection` shows the cigars currently on hand, supports search, strength, Buy Again, and Humidor filters, sorting alphabetically/by location/by strength, and quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating, tasting notes, and an optional Buy Again decision.
-- `Catalog` alphabetically lists active and archived master cigar records, supports search across cigar details and Buy Again information, and manages a Buy Again status (`Not Evaluated`, `Yes`, `Maybe`, or `No`) with optional decision notes. Purchased and on-hand quantities are calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines.
-- `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases.
+- `Catalog` alphabetically lists active and archived master cigar records, supports search across cigar details and Buy Again information, and manages a Buy Again status (`Not Evaluated`, `Yes`, `Maybe`, or `No`) with optional decision notes. Purchased and on-hand quantities are calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines. Catalog record counts omit internal runtime filenames.
+- `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases. Vendor record counts omit internal runtime filenames.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
-- `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory.
+- `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory, and Humidor record counts omit internal runtime filenames.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
 - `Reports` provides purchase-history summaries by Vendor or cigar manufacturer with an optional Buy Again filter, a Buy Again decision summary and highly rated (8.0+) unevaluated follow-up list, plus filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search. Both purchase-summary views foot to stored purchase `totalPaid`; filtered shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
 - `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.

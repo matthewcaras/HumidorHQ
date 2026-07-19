@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.22.1
+Revision: 1.23.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-19 17:00 ET
 -->
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.23.0 - 2026-07-19
+
+Changed by: Matt
+
+- Designated the existing active `Pre Inventory` Humidor by name as the staging location without adding schema fields or migrating runtime data.
+- Added a Dashboard staging count for cigars awaiting permanent placement; the count remains visible at zero while the Humidor is active and disappears automatically after archive.
+- Shortened the Dashboard removal-total label from `Discarded / Damaged` to `Discarded`.
+- Removed internal runtime JSON filename wording from Catalog, Vendor, and Humidor record counts.
+- Added isolated regression coverage for active/archived Pre Inventory visibility and its reconciled positive balance quantity.
 
 ## 1.22.1 - 2026-07-19
 
