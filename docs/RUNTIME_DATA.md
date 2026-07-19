@@ -1,15 +1,17 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.3.0
+Revision: 1.4.0
 Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
-Modified Date: 2026-07-19 10:00 ET
+Modified Date: 2026-07-19 12:15 ET
 -->
 
 # Runtime Data Setup
 
 HumidorHQ defaults runtime storage to `APP_ROOT/data`. `HUMIDORHQ_DATA_ROOT` is optional and may select another existing runtime directory. The selected directory may be inside the application tree.
 
-Startup validates that the selected directory exists and is readable and writable. Every required JSON file must exist, be readable and writable, and decode to a JSON array. Transaction journal recovery runs before normal API startup. No startup validation rewrites or repairs runtime JSON.
+Startup creates the selected directory when it is missing, then runs transaction journal recovery. Missing non-auth runtime collections are initialized from validated, tracked templates in `seed-data/`, and a missing audit log is created as an empty file. Initialization holds an exclusive lock, uses create-only atomic writes, is idempotent, and never overwrites an existing file. Every runtime JSON file must then be readable and writable and have the expected root structure. Existing malformed JSON is never rewritten or repaired.
+
+`auth-users.json` is deliberately excluded from automatic seeding. If it is missing, initialization creates the non-auth collections and then returns `AUTH_USERS_SETUP_REQUIRED`. Create credentials separately with `tools/create-auth-user.php`; example users, passwords, and password hashes are never installed automatically.
 
 Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Tracked `data/.htaccess` denies direct Apache browser access, while application data routes remain protected by PHP session authentication. Keep backups outside `data/` and outside any directory replaced by deployment tooling.
 
@@ -41,17 +43,18 @@ The guarded `tools/copy-runtime-data.ps1` utility remains available for delibera
 
 1. Keep live JSON and the audit log in the deployed HumidorHQ `data/` directory.
 2. Deploy the tracked `data/.htaccess` and confirm Apache honors its deny rules.
-3. Ensure PHP can read and write the directory and required runtime files.
+3. Ensure PHP can create, read, and write the directory and runtime files.
 4. Do not add live JSON, credentials, audit logs, locks, or temporary files to Git.
 5. Leave `HUMIDORHQ_DATA_ROOT` unset to use `APP_ROOT/data`; set it only when intentionally using another existing directory.
 6. Set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Enable `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when Hostinger's proxy overwrites forwarded headers.
-7. Keep backups outside the runtime directory and outside any deployment replacement target.
+7. Provision `auth-users.json` securely and separately; first-run initialization will not create credentials.
+8. Keep backups outside the runtime directory and outside any deployment replacement target.
 
 During the one-time transition from formerly tracked JSON, back up `data/` before pulling the commit that removes those paths from Git tracking and verify every live file remains afterward. Once untracked and ignored, later code pulls do not manage those files.
 
 ## Required runtime files
 
-The selected directory must contain readable, writable JSON arrays named:
+The selected directory must contain readable, writable JSON values with the expected root structures:
 
 - `auth-users.json`
 - `catalog-cigars.json`
@@ -65,6 +68,8 @@ The selected directory must contain readable, writable JSON arrays named:
 - `storage-locations.json`
 - `storage-sub-locations.json`
 - `vendors.json`
+
+Collection templates use JSON arrays. `counters.json` uses an object containing the next positive ID for every collection.
 
 `audit-log.jsonl` is optional at startup and is created on the first audited action. If it exists, it must be readable and writable. The optional `.auth-login-state.json` and lock files are created automatically and contain no passwords or password hashes.
 
@@ -82,8 +87,11 @@ The selected directory must contain readable, writable JSON arrays named:
 
 ## Startup failures
 
-- `DATA_ROOT_MISSING` or `DATA_ROOT_NOT_DIRECTORY`: the selected path is unavailable.
+- `DATA_ROOT_CREATE_FAILED`, `DATA_ROOT_MISSING`, or `DATA_ROOT_NOT_DIRECTORY`: the selected path cannot be created or used as a directory.
 - `DATA_ROOT_NOT_WRITABLE`: PHP cannot read or write the directory.
 - `DATA_FILE_MISSING`, `DATA_FILE_NOT_WRITABLE`, or `DATA_FILE_INVALID_JSON`: a required collection cannot be used safely.
+- `DATA_SEED_MISSING` or `DATA_SEED_INVALID_JSON`: a required tracked initialization template cannot be used safely.
+- `DATA_INITIALIZATION_LOCK_FAILED` or `DATA_FILE_CREATE_FAILED`: create-only initialization could not complete safely.
+- `AUTH_USERS_SETUP_REQUIRED`: non-auth collections are ready, but credentials must be provisioned separately.
 - `AUDIT_FILE_NOT_WRITABLE`: the existing audit log cannot be safely accessed.
 - `DATA_TRANSACTION_RECOVERY_FAILED`: an interrupted transaction could not be safely recovered.
