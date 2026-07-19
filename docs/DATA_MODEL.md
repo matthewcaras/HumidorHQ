@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.2.0
+Revision: 1.3.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 11:00 AM ET
+Modified Date: 2026-07-19 17:00 ET
 -->
 
 # HumidorHQ Data Model
@@ -30,8 +30,11 @@ Catalog fields for Version 1:
 - Country
 - Strength
 - MSRP
+- Buy Again status: `Yes`, `Maybe`, `No`, or an omitted/null value meaning `Not Evaluated`
+- Optional Buy Again decision notes
 
 Catalog records do not store quantity, purchase price, humidor location, or consumption history.
+Buy Again is Catalog-level metadata so one decision follows the cigar across Lots and purchases. It can be edited from Catalog or saved together with a Smoking Journal entry. A Journal save that includes a Buy Again decision updates the Journal and Catalog inside the same runtime-data transaction.
 
 ## Purchases
 
@@ -132,6 +135,8 @@ SmokingJournalEntry stores only:
 - Rating, as a whole number from 1 to 10
 - Optional journal notes
 - Created and updated timestamps
+
+The Smoking Journal form can also update the linked Catalog cigar's Buy Again status and decision notes. Those fields remain on the Catalog record and are not duplicated in `smoking-journal-entries.json`.
 
 Date Smoked is not duplicated in the Journal table. Journal notes are separate from InventoryEvent removal notes. Deleting Journal details does not restore inventory or delete the underlying Smoked event.
 

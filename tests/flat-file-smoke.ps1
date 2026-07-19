@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.22.0
+# Revision : 1.23.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-19 16:00 ET
+# Modified Date : 2026-07-19 17:00 ET
 # Changelog :
+# 1.23.0 verify Catalog and Smoking Journal Buy Again decisions and rejection rollback
 # 1.22.0 verify purchase-history reporting and Collection search/strength hooks
 # 1.21.0 verify backup/restore route inventory is present
 # 1.20.0 keep reversal fixtures valid across local calendar dates
@@ -220,7 +221,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.15\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.16\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.7') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -236,7 +237,7 @@ if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, removals, and their append-only reversals.') { throw 'Reports page must render the activity history section.' }
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
-foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'")) {
+foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
 }
 foreach ($removedPurchaseReportDetail in @("metricCard('Line Items'", "metricCard('Line Purchase Price'", 'Authoritative purchase totals')) {
@@ -416,8 +417,14 @@ try {
     $linkedVendorBody = @{ name = 'Linked Smoke Vendor'; website = 'https://example.com'; phone = '555-0200'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $linkedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Post -ContentType 'application/json' -Body $linkedVendorBody -WebSession $session
 
-    $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; buyAgainStatus = 'MAYBE'; buyAgainNotes = 'Initial smoke-test decision'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+    if ($createdCigar.data.buyAgainStatus -ne 'MAYBE' -or $createdCigar.data.buyAgainNotes -ne 'Initial smoke-test decision') { throw 'Catalog create did not preserve the normalized Buy Again decision.' }
+    $catalogDecisionUpdate = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Put -ContentType 'application/json' -Body (@{ buyAgainStatus = 'NO'; buyAgainNotes = 'Updated through Catalog' } | ConvertTo-Json) -WebSession $session
+    if ($catalogDecisionUpdate.data.buyAgainStatus -ne 'NO' -or $catalogDecisionUpdate.data.buyAgainNotes -ne 'Updated through Catalog') { throw 'Catalog update did not save the Buy Again decision.' }
+    $invalidBuyAgainHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -Session $session -Body @{ manufacturer = 'Invalid'; series = 'Decision'; buyAgainStatus = 'ALWAYS' } -StatusCode 422 -ErrorCode 'BUY_AGAIN_VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $invalidBuyAgainHashes -Context 'Rejected Catalog Buy Again decision'
 
     Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/archive" -Method Patch -WebSession $session | Out-Null
     $archivedVendorAssignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
@@ -829,10 +836,17 @@ try {
     $lotAfterRemoval = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
     $lotBalanceQuantity = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
     if ($lotAfterRemoval.currentQuantity -ne $lotBalanceQuantity.Sum) { throw 'Lot currentQuantity did not reconcile to positive balances after removal.' }
-    $journalBody = @{ rating = 8; notes = 'must remain linked' } | ConvertTo-Json
+    $invalidJournalDecisionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 8; notes = 'must roll back'; buyAgainStatus = 'ALWAYS' } -StatusCode 422 -ErrorCode 'BUY_AGAIN_VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $invalidJournalDecisionHashes -Context 'Rejected Smoking Journal Buy Again decision'
+    $journalBody = @{ rating = 8; notes = 'must remain linked'; buyAgainStatus = 'YES'; buyAgainNotes = 'Excellent construction and flavor' } | ConvertTo-Json
     $journal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body $journalBody -WebSession $session
     if ($journal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Smoking Journal entry did not link to the smoked event.' }
     if ($journal.data.inventoryEvent.sourceLocation.storageLocationId -ne $createdHumidor.data.id -or $journal.data.inventoryEvent.sourceLocation.storageSubLocationName -ne 'General') { throw 'Smoking Journal did not retain the smoked event General source location.' }
+    if ($journal.data.inventoryEvent.catalogCigar.buyAgainStatus -ne 'YES' -or $journal.data.inventoryEvent.catalogCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Smoking Journal did not atomically update the Catalog Buy Again decision.' }
+    $catalogAfterJournal = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Get -WebSession $session
+    $updatedJournalCigar = @($catalogAfterJournal.data.records | Where-Object { $_.id -eq $createdCigar.data.id }) | Select-Object -First 1
+    if ($updatedJournalCigar.buyAgainStatus -ne 'YES' -or $updatedJournalCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Catalog did not retain the Buy Again decision saved from Smoking Journal.' }
     $journalRecords = Invoke-RestMethod "http://127.0.0.1:$port/api/records/smoking-journal-entries" -Method Get -WebSession $session
     if (-not ($journalRecords.data.records | Where-Object { $_.inventoryEventId -eq $removed.data.inventoryEventId })) { throw 'Smoking Journal entry was not available to the read-only report collection.' }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null

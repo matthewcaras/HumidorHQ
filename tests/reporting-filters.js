@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.0.0
- * Description: Isolated assertions for Collection search/strength controls and purchase-history report calculations.
- * Modified Date: 2026-07-19 16:00 ET
+ * Revision: 1.1.0
+ * Description: Isolated assertions for Collection and purchase-history filters, including Buy Again reporting.
+ * Modified Date: 2026-07-19 17:00 ET
  */
 
 const fs = require('node:fs')
@@ -18,8 +18,8 @@ function testAssert(condition, message) {
 
 state.records = {
   'catalog-cigars': [
-    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', strength: 'Mild', wrapper: 'Connecticut' },
-    { id: 2, manufacturer: 'Bravo', series: 'Maduro', vitola: 'Toro', strength: 'Full', wrapper: 'Maduro' },
+    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', strength: 'Mild', wrapper: 'Connecticut', buyAgainStatus: null, buyAgainNotes: 'Evaluate after another smoke' },
+    { id: 2, manufacturer: 'Bravo', series: 'Maduro', vitola: 'Toro', strength: 'Full', wrapper: 'Maduro', buyAgainStatus: 'YES', buyAgainNotes: 'Stock up' },
   ],
   vendors: [{ id: 1, name: 'Vendor One' }, { id: 2, name: 'Vendor Two' }],
   purchases: [
@@ -41,8 +41,16 @@ state.records = {
   ],
   'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }],
   'storage-sub-locations': [],
-  'inventory-events': [],
-  'smoking-journal-entries': [],
+  'inventory-events': [
+    { id: 10, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1 },
+    { id: 11, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1 },
+    { id: 12, eventType: 'SMOKED', lotId: 2, catalogCigarId: 2 },
+  ],
+  'smoking-journal-entries': [
+    { id: 1, inventoryEventId: 10, rating: 8 },
+    { id: 2, inventoryEventId: 11, rating: 9 },
+    { id: 3, inventoryEventId: 12, rating: 10 },
+  ],
 }
 
 let metrics = currentCollectionMetrics()
@@ -54,6 +62,14 @@ state.collectionStrengthFilter = ''
 state.collectionSearch = 'maduro'
 metrics = currentCollectionMetrics()
 testAssert(metrics.totalQuantity === 3 && metrics.items[0].cigar.manufacturer === 'Bravo', 'Collection search is incorrect.')
+state.collectionSearch = ''
+state.collectionBuyAgainFilter = 'NOT_EVALUATED'
+metrics = currentCollectionMetrics()
+testAssert(metrics.totalQuantity === 2 && metrics.items[0].cigar.manufacturer === 'Alpha', 'Collection Buy Again filtering is incorrect.')
+state.collectionBuyAgainFilter = ''
+state.collectionSearch = 'stock up'
+metrics = currentCollectionMetrics()
+testAssert(metrics.totalQuantity === 3 && metrics.items[0].cigar.manufacturer === 'Bravo', 'Collection Buy Again note search is incorrect.')
 state.collectionSearch = ''
 state.collectionSort = 'strength'
 state.collectionDirection = 'asc'
@@ -84,6 +100,14 @@ const allVendorRows = purchaseHistoryRows()
 const allVendorTotal = purchaseHistoryTotalPaid(allVendorRows)
 testAssert(allVendorTotal === 65 && allManufacturerTotal === 65, 'All Vendor and All Manufacturer totals do not foot.')
 testAssert(alphaTotal + 45 === allVendorTotal, 'Manufacturer-specific totals do not foot to the all-Vendor total.')
+state.purchaseHistoryBuyAgainFilter = 'YES'
+const yesHistory = purchaseHistoryRows()
+testAssert(yesHistory.length === 2 && yesHistory.every((row) => row.cigar.id === 2), 'Purchase-history Buy Again filtering is incorrect.')
+testAssert(purchaseHistoryTotalPaid(yesHistory) === 45, 'Buy Again filtered totalPaid allocation is incorrect.')
+state.purchaseHistoryBuyAgainFilter = ''
+const insights = buyAgainInsights()
+testAssert(insights.counts.NOT_EVALUATED === 1 && insights.counts.YES === 1, 'Buy Again decision counts are incorrect.')
+testAssert(insights.highlyRatedNotEvaluated.length === 1 && insights.highlyRatedNotEvaluated[0].cigar.id === 1 && insights.highlyRatedNotEvaluated[0].averageRating === 8.5, 'Highly rated unevaluated summary is incorrect.')
 const pennyAllocation = allocatePurchasePaidCents(
   { totalPaid: '0.01' },
   [{ id: 5, trueCostBasis: '1.00' }, { id: 4, trueCostBasis: '1.00' }],
