@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.21.0
+Revision: 1.22.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 16:00 ET
+Modified Date: 2026-07-19 17:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.22.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added Catalog-level Buy Again decisions (`Not Evaluated`, `Yes`, `Maybe`, or `No`) with optional decision notes and shared PHP validation.
+- Added transactional Buy Again updates to the immediate Smoking Journal workflow so a failed decision cannot leave the Journal and Catalog out of sync.
+- Added Collection Buy Again filtering and search across decision labels and notes.
+- Added purchase-history Buy Again filtering with deterministic line-level paid allocations and a Reports summary of decision counts and highly rated unevaluated cigars.
+- Added isolated JavaScript and API smoke coverage for valid decisions, invalid-decision rollback, report totals, and legacy records without a decision.
 
 ## 1.21.0 - 2026-07-19
 

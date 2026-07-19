@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: SmokingJournalService.php
- * Revision: 1.2.0
+ * Revision: 1.3.0
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-18 09:30 ET
+ * Modified Date: 2026-07-19 17:00 ET
  */
 
 const JOURNAL_PROTECTED_BODY_FIELDS = [
@@ -51,8 +51,8 @@ function smoking_journal_parse_input(array $input): array
         }
     }
     foreach (array_keys($input) as $field) {
-        if ($field !== 'rating' && $field !== 'notes') {
-            journal_error('JOURNAL_VALIDATION_ERROR', 'Only rating and notes may be supplied.', 400);
+        if (!in_array($field, ['rating', 'notes', 'buyAgainStatus', 'buyAgainNotes'], true)) {
+            journal_error('JOURNAL_VALIDATION_ERROR', 'Only rating, notes, and Buy Again fields may be supplied.', 400);
         }
     }
     if (!array_key_exists('rating', $input) || !is_int($input['rating'])) {
@@ -74,7 +74,13 @@ function smoking_journal_parse_input(array $input): array
             $notes = $trimmed;
         }
     }
-    return ['rating' => $input['rating'], 'notes' => $notes];
+    return [
+        'rating' => $input['rating'],
+        'notes' => $notes,
+        'hasBuyAgainDecision' => array_key_exists('buyAgainStatus', $input) || array_key_exists('buyAgainNotes', $input),
+        'buyAgainStatus' => normalize_buy_again_status($input['buyAgainStatus'] ?? null),
+        'buyAgainNotes' => normalize_buy_again_notes($input['buyAgainNotes'] ?? null),
+    ];
 }
 
 function smoking_journal_catalog_cigar(?array $lot): ?array
@@ -97,6 +103,8 @@ function smoking_journal_catalog_cigar(?array $lot): ?array
         'series' => (string) ($catalogCigar['series'] ?? ''),
         'vitola' => (string) ($catalogCigar['vitola'] ?? ''),
         'wrapper' => $catalogCigar['wrapper'] ?? null,
+        'buyAgainStatus' => normalize_buy_again_status($catalogCigar['buyAgainStatus'] ?? null),
+        'buyAgainNotes' => normalize_buy_again_notes($catalogCigar['buyAgainNotes'] ?? null),
         'isActive' => (bool) ($catalogCigar['isActive'] ?? true),
     ];
 }
@@ -197,6 +205,14 @@ function upsert_smoking_journal(int $inventoryEventId, array $input): array
             return $existing;
         }
     );
+    if ($data['hasBuyAgainDecision']) {
+        $catalogCigarId = (int) ($event['catalogCigarId'] ?? 0);
+        if ($catalogCigarId < 1) {
+            $lot = find_by_id('lots', (int) ($event['lotId'] ?? 0));
+            $catalogCigarId = (int) ($lot['catalogCigarId'] ?? 0);
+        }
+        update_catalog_buy_again($catalogCigarId, $data['buyAgainStatus'], $data['buyAgainNotes']);
+    }
     return smoking_journal_build_response($event, $entry);
 }
 

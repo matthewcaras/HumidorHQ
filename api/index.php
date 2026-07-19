@@ -2,12 +2,13 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.14.0
+ * Revision: 1.15.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-19 15:00 ET
+ * Modified Date: 2026-07-19 17:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
+require_once API_ROOT . '/lib/services/CatalogPreferenceService.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
 require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
 require_once API_ROOT . '/lib/services/InventoryReversalService.php';
@@ -121,7 +122,7 @@ function managed_collection_configs(): array
             'page' => 'Catalog',
             'label' => 'Catalog Cigar',
             'required' => ['manufacturer', 'series'],
-            'text' => ['manufacturer', 'series', 'vitola', 'shape', 'length', 'wrapper', 'binder', 'filler', 'country', 'strength', 'notes'],
+            'text' => ['manufacturer', 'series', 'vitola', 'shape', 'length', 'wrapper', 'binder', 'filler', 'country', 'strength', 'buyAgainStatus', 'buyAgainNotes', 'notes'],
             'int' => ['ringGauge'],
             'money' => ['msrp'],
         ],
@@ -1084,6 +1085,9 @@ function clean_managed_record(string $collection, array $input, ?array $existing
         $record['status'] = normalize_purchase_status_value((string) ($record['status'] ?? ''));
         validate_purchase_status($record, $existing);
         normalize_purchase_dates_and_total($record);
+    }
+    if ($collection === 'catalog-cigars') {
+        normalize_catalog_buy_again_record($record);
     }
     if ($collection === 'storage-sub-locations') {
         validate_storage_sub_location_links($record, $existing);

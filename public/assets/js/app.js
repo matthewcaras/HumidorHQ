@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.15.2
+ * Revision: 1.16.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-19 16:00 ET
+ * Modified Date: 2026-07-19 17:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -26,6 +26,7 @@ const state = {
   collectionHumidorFilterId: null,
   collectionSectionFilterId: null,
   collectionStrengthFilter: '',
+  collectionBuyAgainFilter: '',
   collectionSearch: '',
   selectedCollectionCigarId: null,
   selectedPurchaseId: null,
@@ -53,6 +54,7 @@ const state = {
   purchaseHistoryGroup: 'vendor',
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
+  purchaseHistoryBuyAgainFilter: '',
   backupData: null,
   backupPreview: null,
   backupMessage: '',
@@ -78,6 +80,22 @@ const purchaseStatusOptions = [
   { value: 'partially-received', label: 'Partially Received' },
   { value: 'received', label: 'Received' },
 ]
+
+const buyAgainStatusOptions = [
+  { value: '', label: 'Not Evaluated' },
+  { value: 'YES', label: 'Yes' },
+  { value: 'MAYBE', label: 'Maybe' },
+  { value: 'NO', label: 'No' },
+]
+
+function normalizeBuyAgainStatus(value) {
+  const normalized = String(value || '').trim().toUpperCase().replace(/[ -]/g, '_')
+  return ['YES', 'MAYBE', 'NO'].includes(normalized) ? normalized : ''
+}
+
+function buyAgainLabel(value) {
+  return buyAgainStatusOptions.find((option) => option.value === normalizeBuyAgainStatus(value))?.label || 'Not Evaluated'
+}
 
 const pageDependencies = {
   Dashboard: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
@@ -107,6 +125,8 @@ const managedPages = {
       { name: 'country', label: 'Country' },
       { name: 'strength', label: 'Strength' },
       { name: 'msrp', label: 'MSRP', type: 'number', step: '0.01' },
+      { name: 'buyAgainStatus', label: 'Buy Again', type: 'select', options: buyAgainStatusOptions },
+      { name: 'buyAgainNotes', label: 'Buy Again Notes', type: 'textarea' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
     columns: [
@@ -115,6 +135,7 @@ const managedPages = {
       { label: 'Wrapper', value: (row) => row.wrapper || '' },
       { label: 'Purchased', value: (row) => formatCount(purchasedQuantityForCatalog(row.id)) },
       { label: 'On Hand', value: (row) => formatCount(onHandQuantityForCatalog(row.id)) },
+      { label: 'Buy Again', value: (row) => buyAgainLabel(row.buyAgainStatus) },
       { label: 'MSRP', value: (row) => money(row.msrp) },
     ],
   },
@@ -723,6 +744,9 @@ function currentCollectionMetrics(useCollectionFilters = true) {
   if (useCollectionFilters && state.collectionStrengthFilter) {
     items = items.filter((item) => String(item.cigar.strength || '').trim().toLowerCase() === state.collectionStrengthFilter.toLowerCase())
   }
+  if (useCollectionFilters && state.collectionBuyAgainFilter) {
+    items = items.filter((item) => (normalizeBuyAgainStatus(item.cigar.buyAgainStatus) || 'NOT_EVALUATED') === state.collectionBuyAgainFilter)
+  }
   const collectionSearch = useCollectionFilters ? String(state.collectionSearch || '').trim().toLowerCase() : ''
   if (collectionSearch) {
     items = items.filter((item) => [
@@ -737,6 +761,8 @@ function currentCollectionMetrics(useCollectionFilters = true) {
       item.cigar.strength,
       item.cigar.country,
       item.cigar.notes,
+      buyAgainLabel(item.cigar.buyAgainStatus),
+      item.cigar.buyAgainNotes,
       ...item.locations.map((location) => location.label),
     ].some((value) => String(value || '').toLowerCase().includes(collectionSearch)))
   }
@@ -1410,13 +1436,18 @@ function renderPendingSmokingJournal(view) {
     return
   }
   const existing = smokingJournalEntryForEvent(eventId)
+  const lot = recordById('lots', event.lotId)
+  const cigar = recordById('catalog-cigars', event.catalogCigarId || lot?.catalogCigarId)
+  const currentBuyAgainStatus = normalizeBuyAgainStatus(cigar?.buyAgainStatus)
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
   panel.innerHTML = `
-    <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating and tasting notes for the smoked cigar.</p></div></div>
+    <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating, tasting notes, and an optional Buy Again decision for the smoked cigar.</p></div></div>
     <form class="record-form compact-top-gap" data-smoking-journal-form>
       <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
       <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
+      <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === currentBuyAgainStatus ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
+      <label class="form-field wide"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(cigar?.buyAgainNotes || '')}</textarea></label>
       <div class="form-actions"><button type="submit" class="primary-button">Save Journal Entry</button><button type="button" class="secondary-button" data-skip-journal>Skip</button></div>
     </form>
   `
@@ -1428,10 +1459,12 @@ function renderPendingSmokingJournal(view) {
       await apiPut(`/inventory-events/${eventId}/smoking-journal`, {
         rating: Number(data.get('rating')),
         notes: String(data.get('notes') || '').trim(),
+        buyAgainStatus: String(data.get('buyAgainStatus') || ''),
+        buyAgainNotes: String(data.get('buyAgainNotes') || '').trim(),
       })
       state.pendingSmokingJournalEventId = null
       state.formError = null
-      await refreshCollections(['smoking-journal-entries'])
+      await refreshCollections(['smoking-journal-entries', 'catalog-cigars'])
     } catch (error) {
       state.formError = error.message
     }
@@ -1520,6 +1553,18 @@ function renderCollectionPage(view) {
     render()
   })
 
+  const buyAgainFilterSelect = document.createElement('select')
+  buyAgainFilterSelect.append(new Option('All Buy Again', ''))
+  buyAgainStatusOptions.forEach((option) => {
+    buyAgainFilterSelect.append(new Option(option.label, option.value || 'NOT_EVALUATED'))
+  })
+  buyAgainFilterSelect.value = state.collectionBuyAgainFilter
+  buyAgainFilterSelect.addEventListener('change', () => {
+    state.collectionBuyAgainFilter = buyAgainFilterSelect.value
+    state.selectedCollectionCigarId = null
+    render()
+  })
+
   const directionButton = document.createElement('button')
   directionButton.type = 'button'
   directionButton.className = 'secondary-button'
@@ -1529,7 +1574,7 @@ function renderCollectionPage(view) {
     render()
   })
   let clearButton = null
-  if (state.collectionHumidorFilterId || state.collectionStrengthFilter || state.collectionSearch) {
+  if (state.collectionHumidorFilterId || state.collectionSectionFilterId || state.collectionStrengthFilter || state.collectionBuyAgainFilter || state.collectionSearch) {
     clearButton = document.createElement('button')
     clearButton.type = 'button'
     clearButton.className = 'secondary-button'
@@ -1538,12 +1583,13 @@ function renderCollectionPage(view) {
       state.collectionHumidorFilterId = null
       state.collectionSectionFilterId = null
       state.collectionStrengthFilter = ''
+      state.collectionBuyAgainFilter = ''
       state.collectionSearch = ''
       state.selectedCollectionCigarId = null
       render()
     })
   }
-  controlBar.append(sortSelect, humidorFilterSelect, sectionFilterSelect, strengthFilterSelect, directionButton)
+  controlBar.append(sortSelect, humidorFilterSelect, sectionFilterSelect, strengthFilterSelect, buyAgainFilterSelect, directionButton)
   if (clearButton) controlBar.append(clearButton)
   controls.append(controlBar)
 
@@ -1613,7 +1659,7 @@ function renderCollectionPage(view) {
       <td>
         <div class="collection-cigar-cell">
           <button type="button" class="linkish-button" data-cigar-id="${item.cigar.id}"><strong>${escapeHtml(cigarName(item.cigar))}</strong></button>
-          <small>${strengthBadge(item.cigar.strength)} ${escapeHtml(item.cigar.wrapper || '')}</small>
+          <small>${strengthBadge(item.cigar.strength)} ${escapeHtml(item.cigar.wrapper || '')} &bull; Buy Again: ${escapeHtml(buyAgainLabel(item.cigar.buyAgainStatus))}</small>
         </div>
       </td>
       <td>${formatCount(item.totalQuantity)}</td>
@@ -3624,6 +3670,7 @@ function purchaseHistoryRows() {
     .filter(Boolean)
     .filter((row) => state.purchaseHistoryGroup !== 'vendor' || !state.purchaseHistoryVendorId || Number(row.purchase.vendorId || 0) === Number(state.purchaseHistoryVendorId))
     .filter((row) => state.purchaseHistoryGroup !== 'manufacturer' || !state.purchaseHistoryManufacturer || row.manufacturer.toLowerCase() === state.purchaseHistoryManufacturer.toLowerCase())
+    .filter((row) => !state.purchaseHistoryBuyAgainFilter || (normalizeBuyAgainStatus(row.cigar?.buyAgainStatus) || 'NOT_EVALUATED') === state.purchaseHistoryBuyAgainFilter)
 }
 
 function allocatePurchasePaidCents(purchase, lines) {
@@ -3681,7 +3728,7 @@ function uniquePurchaseHistoryPurchases(rows) {
 }
 
 function purchaseHistoryTotalPaid(rows) {
-  if (state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer) {
+  if ((state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer) || state.purchaseHistoryBuyAgainFilter) {
     return completeMoneyTotal(rows.map((row) => row.attributedPaid))
   }
   return completeMoneyTotal(uniquePurchaseHistoryPurchases(rows).map((purchase) => purchase.totalPaid))
@@ -3737,7 +3784,20 @@ function renderPurchaseHistoryReport(view) {
     })
   }
   selection.append(select)
-  filters.append(group, selection)
+  const buyAgain = document.createElement('fieldset')
+  buyAgain.className = 'report-filter-group'
+  buyAgain.innerHTML = '<legend>Buy Again</legend>'
+  const buyAgainSelect = document.createElement('select')
+  buyAgainSelect.className = 'report-select'
+  buyAgainSelect.append(new Option('All Decisions', ''))
+  buyAgainStatusOptions.forEach((option) => buyAgainSelect.append(new Option(option.label, option.value || 'NOT_EVALUATED')))
+  buyAgainSelect.value = state.purchaseHistoryBuyAgainFilter
+  buyAgainSelect.addEventListener('change', () => {
+    state.purchaseHistoryBuyAgainFilter = buyAgainSelect.value
+    render()
+  })
+  buyAgain.append(buyAgainSelect)
+  filters.append(group, selection, buyAgain)
   panel.append(filters)
 
   const metrics = document.createElement('div')
@@ -3758,8 +3818,61 @@ function renderPurchaseHistoryReport(view) {
   view.append(panel)
 }
 
+function buyAgainInsights() {
+  const journalByEventId = new Map(records('smoking-journal-entries').map((entry) => [Number(entry.inventoryEventId), entry]))
+  const ratingsByCatalogId = new Map()
+  effectiveInventoryEvents().forEach((event) => {
+    if (normalizeEventType(event.eventType) !== 'SMOKED') return
+    const journal = journalByEventId.get(Number(event.id))
+    const rating = Number(journal?.rating)
+    if (!journal || !Number.isInteger(rating) || rating < 1 || rating > 10) return
+    const lot = recordById('lots', event.lotId)
+    const catalogCigarId = Number(event.catalogCigarId || lot?.catalogCigarId || 0)
+    if (!catalogCigarId) return
+    if (!ratingsByCatalogId.has(catalogCigarId)) ratingsByCatalogId.set(catalogCigarId, [])
+    ratingsByCatalogId.get(catalogCigarId).push(rating)
+  })
+  const counts = { NOT_EVALUATED: 0, YES: 0, MAYBE: 0, NO: 0 }
+  records('catalog-cigars').forEach((cigar) => {
+    counts[normalizeBuyAgainStatus(cigar.buyAgainStatus) || 'NOT_EVALUATED'] += 1
+  })
+  const highlyRatedNotEvaluated = records('catalog-cigars')
+    .map((cigar) => {
+      const ratings = ratingsByCatalogId.get(Number(cigar.id)) || []
+      const averageRating = ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null
+      return { cigar, averageRating, ratingCount: ratings.length }
+    })
+    .filter((item) => !normalizeBuyAgainStatus(item.cigar.buyAgainStatus) && item.averageRating !== null && item.averageRating >= 8)
+    .sort((left, right) => right.averageRating - left.averageRating || cigarName(left.cigar).localeCompare(cigarName(right.cigar)))
+  return { counts, highlyRatedNotEvaluated }
+}
+
+function renderBuyAgainReport(view) {
+  const insights = buyAgainInsights()
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel report-activity-panel'
+  panel.innerHTML = '<div class="section-heading report-title"><div><h3>Buy Again</h3><p class="muted">Track purchase decisions and identify highly rated cigars that still need evaluation.</p></div></div>'
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid'
+  metrics.append(
+    metricCard('Yes', insights.counts.YES, ''),
+    metricCard('Maybe', insights.counts.MAYBE, ''),
+    metricCard('No', insights.counts.NO, ''),
+    metricCard('Not Evaluated', insights.counts.NOT_EVALUATED, ''),
+  )
+  panel.append(metrics)
+  if (insights.highlyRatedNotEvaluated.length) {
+    const tableWrap = document.createElement('div')
+    tableWrap.className = 'table-scroll compact-top-gap'
+    tableWrap.innerHTML = `<table class="data-table"><thead><tr><th>Highly Rated, Not Evaluated</th><th>Average Rating</th><th>Ratings</th><th>On Hand</th></tr></thead><tbody>${insights.highlyRatedNotEvaluated.map((item) => `<tr><td>${escapeHtml(cigarName(item.cigar))}</td><td>${item.averageRating.toFixed(1)}</td><td>${formatCount(item.ratingCount)}</td><td>${formatCount(onHandQuantityForCatalog(item.cigar.id))}</td></tr>`).join('')}</tbody></table>`
+    panel.append(tableWrap)
+  }
+  view.append(panel)
+}
+
 function renderReportsPage(view) {
   renderPurchaseHistoryReport(view)
+  renderBuyAgainReport(view)
   renderRemovalHistory(view)
 
   const activity = document.createElement('section')

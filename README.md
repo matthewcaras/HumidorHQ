@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.21.0
+Revision: 1.22.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 16:00 ET
+Modified Date: 2026-07-19 17:00 ET
 -->
 
 # HumidorHQ
@@ -12,13 +12,13 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 ## Page Functions And Features
 
 - `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded/damaged totals with per-cigar averages, and each humidor's current count with oldest inventory date.
-- `Collection` shows the cigars currently on hand, supports search, strength and Humidor filters, sorting alphabetically/by location/by strength, and quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating and tasting notes.
-- `Catalog` manages active and archived master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines.
+- `Collection` shows the cigars currently on hand, supports search, strength, Buy Again, and Humidor filters, sorting alphabetically/by location/by strength, and quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating, tasting notes, and an optional Buy Again decision.
+- `Catalog` manages active and archived master cigar records, including a Buy Again status (`Not Evaluated`, `Yes`, `Maybe`, or `No`) and optional decision notes, and shows purchased and on-hand quantities calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines.
 - `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
 - `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
-- `Reports` provides purchase-history summaries by Vendor or cigar manufacturer, plus filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search. Both purchase-summary views foot to stored purchase `totalPaid`; manufacturer-specific shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
+- `Reports` provides purchase-history summaries by Vendor or cigar manufacturer with an optional Buy Again filter, a Buy Again decision summary and highly rated (8.0+) unevaluated follow-up list, plus filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search. Both purchase-summary views foot to stored purchase `totalPaid`; filtered shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
 - `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
@@ -104,7 +104,7 @@ Protected routes include `GET /api/sample-data` and future data-changing endpoin
 
 Signed-in users can add, edit, and delete records from the working navigation, Dashboard linked count rows, and Dashboard quick actions:
 
-- `Catalog` manages runtime `catalog-cigars.json` and shows purchased/on-hand quantities from linked records.
+- `Catalog` manages runtime `catalog-cigars.json`, including optional Buy Again decisions and notes, and shows purchased/on-hand quantities from linked records. Existing records without a decision are treated as `Not Evaluated` without a data migration.
 - `Vendors` manages runtime `vendors.json`.
 - `Humidors` manages runtime `storage-locations.json`, shows current count and oldest inventory date, and includes inline section management.
 - `Humidor Sections` stores drawers, shelves, trays, and zones in runtime `storage-sub-locations.json`.
