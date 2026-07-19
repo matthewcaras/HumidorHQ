@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.2.0
+ * Revision: 1.3.0
  * Description: Isolated assertions for Collection, Catalog, purchase-history, and Buy Again behavior.
  * Modified Date: 2026-07-19 17:00 ET
  */
@@ -37,9 +37,9 @@ state.records = {
   ],
   'lot-location-balances': [
     { id: 1, lotId: 1, purchaseLineId: 1, purchaseId: 1, storageLocationId: 1, storageSubLocationId: null, quantity: 2 },
-    { id: 2, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 1, storageSubLocationId: null, quantity: 3 },
+    { id: 2, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 2, storageSubLocationId: null, quantity: 3 },
   ],
-  'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }],
+  'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }, { id: 2, name: 'Pre Inventory', isActive: true }],
   'storage-sub-locations': [],
   'inventory-events': [
     { id: 10, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1 },
@@ -59,6 +59,12 @@ testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').lengt
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
+let preInventory = preInventoryDashboardSummary()
+testAssert(preInventory?.humidor.id === 2 && preInventory.totalQuantity === 3, 'Dashboard Pre Inventory summary is incorrect.')
+state.records['storage-locations'][1].isActive = false
+preInventory = preInventoryDashboardSummary()
+testAssert(preInventory === null, 'Archived Pre Inventory Humidor should not appear in the Dashboard summary.')
+state.records['storage-locations'][1].isActive = true
 
 let metrics = currentCollectionMetrics()
 testAssert(metrics.totalQuantity === 5 && metrics.uniqueCigarCount === 2, 'Unfiltered Collection metrics are incorrect.')

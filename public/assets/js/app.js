@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.16.1
+ * Revision: 1.17.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-19 17:00 ET
  */
@@ -882,6 +882,14 @@ function buildHumidorSummaries() {
   return Array.from(summaries.values()).sort((left, right) => left.humidor.name.localeCompare(right.humidor.name))
 }
 
+function isPreInventoryHumidor(humidor) {
+  return String(humidor?.name || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ') === 'pre inventory'
+}
+
+function preInventoryDashboardSummary() {
+  return buildHumidorSummaries().find((item) => recordIsActive(item.humidor) && isPreInventoryHumidor(item.humidor)) || null
+}
+
 function humidorCurrentCount(humidorId) {
   return buildHumidorSummaries().find((item) => Number(item.humidor.id) === Number(humidorId))?.totalQuantity || 0
 }
@@ -1356,6 +1364,7 @@ function renderDashboard(view) {
     ? `${money(lifetimeSavings)} (${formatPercent(savingsPercent(lifetimeCost, lifetimeMsrp))})`
     : 'Unknown'
   const humidors = buildHumidorSummaries()
+  const preInventory = preInventoryDashboardSummary()
   const shell = document.createElement('div')
   shell.className = 'dashboard-shell'
 
@@ -1369,6 +1378,9 @@ function renderDashboard(view) {
     metricCard('Avg Cost', current.averageCostPerCigar, 'Average cost per cigar on hand', true),
     metricCard('Avg MSRP', current.averageMsrpPerCigar, 'Average MSRP per cigar on hand', true),
   )
+  if (preInventory) {
+    summary.append(metricCard('Pre Inventory', preInventory.totalQuantity, 'Cigars awaiting permanent placement'))
+  }
 
   const lifetime = document.createElement('section')
   lifetime.className = 'dashboard-panel'
@@ -1393,7 +1405,7 @@ function renderDashboard(view) {
       <article class="metric-card"><span>Avg Gifted MSRP</span><strong>${money(gifted.averageMsrpPerCigar)}</strong></article>
     </div>
     <div class="metric-grid compact lifetime-metric-grid">
-      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(discarded.quantity)}</strong><small>Discarded / Damaged</small></article>
+      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(discarded.quantity)}</strong><small>Discarded</small></article>
       <article class="metric-card"><span>Discarded Cost</span><strong>${money(discarded.totalCost)}</strong></article>
       <article class="metric-card"><span>Discarded MSRP</span><strong>${money(discarded.totalMsrp)}</strong></article>
       <article class="metric-card"><span>Avg Discarded Cost</span><strong>${money(discarded.averageCostPerCigar)}</strong></article>
@@ -2062,12 +2074,13 @@ function renderManagedTable(view, pageConfig) {
   const visibleRows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
   const rows = collection === 'catalog-cigars' ? catalogRecordsForDisplay(visibleRows, state.catalogSearch) : visibleRows
   const inlineEdit = pageConfig.inlineEdit === true
+  const hideRuntimeLocationCopy = ['catalog-cigars', 'vendors', 'storage-locations'].includes(collection)
   const heading = document.createElement('div')
   heading.className = 'section-heading'
   heading.innerHTML = `
     <div>
       <h3>${escapeHtml(pageConfig.title)} Records</h3>
-      <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
+      <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records${hideRuntimeLocationCopy ? '.' : ` in external runtime <code>${escapeHtml(collection)}.json</code>.`}</p>
     </div>
   `
   if (supportsArchive) {
