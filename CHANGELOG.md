@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.23.0
+Revision: 1.24.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-19 17:00 ET
 -->
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.24.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added a Pre Inventory reconciliation worklist to Dashboard using current positive location balances without introducing a new collection or migrating runtime data.
+- Reconciled each worklist row across staged quantity, quantity placed elsewhere, and total on hand, with a current placement percentage.
+- Made the Pre Inventory metric keyboard-accessible and linked it directly to Collection filtered to the staging Humidor.
+- Made each worklist cigar open its filtered, expanded Collection record so the existing guarded Move workflow remains authoritative.
+- Kept the empty-state archive reminder while the staging Humidor is active and removed the complete worklist automatically after archive.
+- Added isolated regression coverage for split-location quantities, placement percentages, and archived worklist removal.
 
 ## 1.23.0 - 2026-07-19
 

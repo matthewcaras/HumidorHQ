@@ -1,6 +1,6 @@
 <!--
 Filename: README.md
-Revision: 1.23.0
+Revision: 1.24.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-19 17:00 ET
 -->
@@ -11,7 +11,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 
 ## Page Functions And Features
 
-- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded totals with per-cigar averages, and each humidor's current count with oldest inventory date. An active Humidor named `Pre Inventory` also receives a staging count for cigars awaiting permanent placement; that staging summary disappears when the Humidor is archived.
+- `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded totals with per-cigar averages, and each humidor's current count with oldest inventory date. An active Humidor named `Pre Inventory` receives a staging count and reconciliation worklist showing each staged cigar, its quantity placed elsewhere, total on hand, and current placement percentage. The card and cigar links open the existing filtered Collection move workflow, and all staging information disappears when the Humidor is archived.
 - `Collection` shows the cigars currently on hand, supports search, strength, Buy Again, and Humidor filters, sorting alphabetically/by location/by strength, and quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating, tasting notes, and an optional Buy Again decision.
 - `Catalog` alphabetically lists active and archived master cigar records, supports search across cigar details and Buy Again information, and manages a Buy Again status (`Not Evaluated`, `Yes`, `Maybe`, or `No`) with optional decision notes. Purchased and on-hand quantities are calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines. Catalog record counts omit internal runtime filenames.
 - `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases. Vendor record counts omit internal runtime filenames.

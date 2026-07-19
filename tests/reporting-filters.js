@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.3.0
+ * Revision: 1.4.0
  * Description: Isolated assertions for Collection, Catalog, purchase-history, and Buy Again behavior.
  * Modified Date: 2026-07-19 17:00 ET
  */
@@ -37,7 +37,8 @@ state.records = {
   ],
   'lot-location-balances': [
     { id: 1, lotId: 1, purchaseLineId: 1, purchaseId: 1, storageLocationId: 1, storageSubLocationId: null, quantity: 2 },
-    { id: 2, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 2, storageSubLocationId: null, quantity: 3 },
+    { id: 2, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 2, storageSubLocationId: null, quantity: 2 },
+    { id: 3, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 1, storageSubLocationId: null, quantity: 1 },
   ],
   'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }, { id: 2, name: 'Pre Inventory', isActive: true }],
   'storage-sub-locations': [],
@@ -60,10 +61,16 @@ testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0]
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
 let preInventory = preInventoryDashboardSummary()
-testAssert(preInventory?.humidor.id === 2 && preInventory.totalQuantity === 3, 'Dashboard Pre Inventory summary is incorrect.')
+testAssert(preInventory?.humidor.id === 2 && preInventory.totalQuantity === 2, 'Dashboard Pre Inventory summary is incorrect.')
+let stagingRows = preInventoryWorklist(preInventory)
+testAssert(stagingRows.length === 1 && stagingRows[0].cigar.id === 2, 'Pre Inventory worklist cigar selection is incorrect.')
+testAssert(stagingRows[0].stagedQuantity === 2 && stagingRows[0].placedQuantity === 1 && stagingRows[0].totalQuantity === 3, 'Pre Inventory staged and placed quantities do not reconcile.')
+testAssert(Math.abs(stagingRows[0].placementPercent - (100 / 3)) < 0.0001, 'Pre Inventory placement progress is incorrect.')
 state.records['storage-locations'][1].isActive = false
 preInventory = preInventoryDashboardSummary()
 testAssert(preInventory === null, 'Archived Pre Inventory Humidor should not appear in the Dashboard summary.')
+stagingRows = preInventoryWorklist(preInventory)
+testAssert(stagingRows.length === 0, 'Archived Pre Inventory Humidor should not retain a worklist.')
 state.records['storage-locations'][1].isActive = true
 
 let metrics = currentCollectionMetrics()

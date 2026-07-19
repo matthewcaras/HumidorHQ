@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.25.0
+# Revision : 1.26.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-19 17:00 ET
 # Changelog :
+# 1.26.0 verify the Pre Inventory reconciliation worklist and direct Collection access
 # 1.25.0 verify active Pre Inventory Dashboard staging and concise record-count copy
 # 1.24.0 verify Catalog alphabetical search and Smoking Journal Buy Again defaults
 # 1.23.0 verify Catalog and Smoking Journal Buy Again decisions and rejection rollback
@@ -223,8 +224,8 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.17\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.7') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.18\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.8') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -242,7 +243,7 @@ if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'funct
 foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
 }
-foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', "metricCard('Pre Inventory'", 'Cigars awaiting permanent placement')) {
+foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', 'function preInventoryWorklist', "metricCard('Pre Inventory'", 'Pre Inventory Worklist', 'Placed Elsewhere', 'Placement Progress', 'interactive-metric-card', 'data-pre-inventory-cigar-id')) {
     if ($appJs -notmatch [regex]::Escape($preInventoryHook)) { throw "Pre Inventory Dashboard staging is missing hook: $preInventoryHook" }
 }
 if ($appJs -match 'Discarded / Damaged</small>') { throw 'Dashboard removal totals must label discarded cigars as Discarded.' }
