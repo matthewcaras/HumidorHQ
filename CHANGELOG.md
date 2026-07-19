@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.19.2
+Revision: 1.20.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 12:15 PM ET
+Modified Date: 2026-07-19 15:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.20.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added an authenticated Backup & Restore workflow for the complete runtime JSON collection set, including secure download and validated import of portable bundles.
+- Added SHA-256 verification, duplicate-ID/counter/relationship/inventory checks, a preview fingerprint, an exact confirmation phrase, and transaction-safe restore.
+- Added an automatic pre-restore safety backup while leaving the append-only audit log unchanged and keeping all backup bundles ignored by Git and denied direct Apache access.
+- Added isolated PowerShell 7 rehearsal coverage for create, list, preview, stale-state rejection, confirmation rejection, restore, import, tamper detection, JSON parsing, and source-runtime hash preservation.
 
 ## 1.19.2 - 2026-07-19
 

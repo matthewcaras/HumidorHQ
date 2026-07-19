@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.19.0
+Revision: 1.20.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 12:15 PM ET
+Modified Date: 2026-07-19 15:00 ET
 -->
 
 # HumidorHQ
@@ -19,6 +19,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
 - `Reports` provides filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, shows Smoking Journal ratings/notes, and keeps recent inventory activity below the report.
+- `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.
@@ -30,7 +31,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 The target runtime is:
 
 - PHP for API endpoints
-- JSON files in an external configured directory for runtime data
+- JSON files in the ignored in-repository `data/` directory by default, with an optional external override
 - Empty sample/initialization JSON tracked under `seed-data/`
 - Plain JavaScript for browser behavior
 - HTML and CSS for the frontend
@@ -145,7 +146,13 @@ HumidorHQ writes user activity to runtime `audit-log.jsonl`. Each record include
 
 Audit, Changelog, and Todo pages remain protected PHP-backed pages, but they are hidden from the left menu to keep the working navigation focused.
 
-The audit log, lock files, temporary writes, credentials, and backups remain outside Git and the deployed code tree.
+The audit log, lock files, temporary writes, credentials, and backups remain outside Git tracking.
+
+## Backup And Restore
+
+The authenticated `Backup & Restore` page creates portable JSON bundles under `backups/`. Bundle files are ignored by Git, and tracked `backups/.htaccess` denies direct HTTP access. Use the authenticated Download action to keep an off-server copy; bundles contain `auth-users.json` password hashes and must be stored securely.
+
+A bundle contains all twelve runtime JSON collections but deliberately excludes `audit-log.jsonl`. Creation and download remain available for preserving parseable legacy data. Import and restore additionally validate IDs, counters, required relationships, and Lot/balance reconciliation without changing runtime data; an integrity failure must be corrected before that bundle can be restored. Restore requires a fresh preview, the exact phrase `RESTORE-HUMIDORHQ-BACKUP`, and an unchanged current-state fingerprint. It creates a timestamped pre-restore safety bundle before replacing collections through the existing journaled multi-file transaction. Existing audit history is never replaced by restore.
 
 ## Codex Setup Shortcut
 
@@ -194,6 +201,7 @@ The automated smoke, runtime-location, transaction, and authentication-security 
 .\tests\runtime-data-separation.ps1
 .\tests\flat-file-transaction.ps1
 .\tests\auth-security.ps1
+.\tests\backup-restore.ps1
 ```
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.

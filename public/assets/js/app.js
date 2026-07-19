@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.13.0
+ * Revision: 1.14.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-18 11:00 ET
+ * Modified Date: 2026-07-19 15:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -48,6 +48,9 @@ const state = {
   reportSearch: '',
   reportCustomStart: '',
   reportCustomEnd: '',
+  backupData: null,
+  backupPreview: null,
+  backupMessage: '',
 }
 
 const pages = [
@@ -59,6 +62,7 @@ const pages = [
   { id: 'PurchaseLines', label: 'PO Lines', hidden: true },
   { id: 'Humidors', label: 'Humidors' },
   { id: 'Reports', label: 'Reports' },
+  { id: 'Backups', label: 'Backup & Restore' },
   { id: 'Audit', label: 'Audit', hidden: true },
   { id: 'Changelog', label: 'Changelog', hidden: true },
   { id: 'Todo', label: 'TODO', hidden: true },
@@ -899,11 +903,119 @@ async function ensureRecords(collection) {
 }
 
 async function ensurePageData(pageId) {
+  if (pageId === 'Backups' && !state.backupData) {
+    state.backupData = await apiGet('/backups')
+  }
   const managedPage = managedPages[pageId]
   if (managedPage) {
     await Promise.all([managedPage.collection, ...(managedPage.dependencies || [])].map(ensureRecords))
   }
   await Promise.all((pageDependencies[pageId] || []).map(ensureRecords))
+}
+
+function renderBackupPage(view) {
+  const data = state.backupData || { backups: [] }
+  const panel = document.createElement('section')
+  panel.className = 'data-form'
+  panel.innerHTML = `
+    <h3>Protected Runtime Backup</h3>
+    <p class="muted">Create an authenticated backup of runtime JSON, including user password hashes. The audit log is not included. Store downloaded copies securely.</p>
+    <div class="form-actions">
+      <button type="button" class="primary-button" data-action="create-backup">Create Backup</button>
+      <label class="secondary-button" role="button">Import Backup<input type="file" accept="application/json,.json" data-backup-import hidden></label>
+    </div>
+    ${state.backupMessage ? `<p>${escapeHtml(state.backupMessage)}</p>` : ''}
+  `
+  panel.querySelector('[data-action="create-backup"]').addEventListener('click', async (event) => {
+    event.currentTarget.disabled = true
+    state.backupMessage = ''
+    try {
+      const result = await apiPost('/backups')
+      state.backupMessage = `Backup created: ${result.filename}`
+      state.backupData = await apiGet('/backups')
+    } catch (error) {
+      state.backupMessage = error.message
+    }
+    render()
+  })
+  panel.querySelector('[data-backup-import]').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    state.backupMessage = ''
+    try {
+      const bundle = JSON.parse(await file.text())
+      const result = await apiPost('/backups/import', { bundle })
+      state.backupMessage = `Backup imported and validated: ${result.filename}`
+      state.backupData = await apiGet('/backups')
+    } catch (error) {
+      state.backupMessage = error.message || 'The selected backup could not be imported.'
+    }
+    render()
+  })
+  view.append(panel)
+
+  const listPanel = document.createElement('section')
+  listPanel.className = 'data-form'
+  const backups = data.backups || []
+  listPanel.innerHTML = `
+    <div class="section-heading"><div><h3>Available Backups</h3><p class="muted">${formatCount(backups.length)} validated backup bundle${backups.length === 1 ? '' : 's'}.</p></div></div>
+    ${backups.length === 0 ? '<p class="muted">No backups have been created or imported yet.</p>' : `
+      <div class="table-scroll"><table class="managed-table"><thead><tr><th>Created</th><th>Type</th><th>Size</th><th>Actions</th></tr></thead><tbody>
+      ${backups.map((backup) => `<tr><td>${escapeHtml(backup.createdAtUtc || '')}</td><td>${escapeHtml(backup.kind || '')}</td><td>${escapeHtml(formatCount(backup.bytes || 0))} bytes</td><td><div class="row-actions"><a class="secondary-button" href="${API_BASE_URL}/backups/download?filename=${encodeURIComponent(backup.filename)}">Download</a><button type="button" class="linkish-button" data-preview-backup="${escapeHtml(backup.filename)}">Preview Restore</button></div></td></tr>`).join('')}
+      </tbody></table></div>`}
+  `
+  listPanel.querySelectorAll('[data-preview-backup]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      state.backupMessage = ''
+      try {
+        state.backupPreview = await apiPost('/backups/preview', { filename: button.dataset.previewBackup })
+      } catch (error) {
+        state.backupMessage = error.message
+      }
+      render()
+    })
+  })
+  view.append(listPanel)
+
+  if (!state.backupPreview) return
+  const preview = state.backupPreview
+  const restorePanel = document.createElement('section')
+  restorePanel.className = 'data-form'
+  restorePanel.innerHTML = `
+    <h3>Restore Preview</h3>
+    <p><strong>${escapeHtml(preview.filename)}</strong></p>
+    <p class="muted">Restore replaces all listed runtime JSON collections, including authentication users. A pre-restore safety backup is created automatically. Existing audit history remains unchanged.</p>
+    <p class="muted">Enter <code>RESTORE-HUMIDORHQ-BACKUP</code> exactly to continue. If runtime data changes after this preview, restore will stop without writing.</p>
+    <form class="record-form"><label class="form-field wide"><span>Confirmation phrase</span><input name="confirmation" autocomplete="off" required></label><div class="form-actions"><button type="submit" class="danger-button">Restore Backup</button><button type="button" class="secondary-button" data-cancel-restore>Cancel</button></div></form>
+  `
+  restorePanel.querySelector('[data-cancel-restore]').addEventListener('click', () => {
+    state.backupPreview = null
+    render()
+  })
+  restorePanel.querySelector('form').addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const submit = event.currentTarget.querySelector('[type="submit"]')
+    submit.disabled = true
+    const confirmation = String(new FormData(event.currentTarget).get('confirmation') || '')
+    try {
+      const result = await apiPost('/backups/restore', {
+        filename: preview.filename,
+        confirmation,
+        expectedCurrentFingerprint: preview.currentManifest.fingerprint,
+      })
+      state.records = {}
+      state.sampleData = null
+      state.auditData = null
+      state.backupPreview = null
+      state.backupMessage = `Restore completed. Safety backup: ${result.safetyBackup}`
+      await refreshSampleData()
+      state.backupData = await apiGet('/backups')
+    } catch (error) {
+      state.backupMessage = error.message
+    }
+    render()
+  })
+  view.append(restorePanel)
 }
 
 async function recordPageView(page) {
@@ -3703,6 +3815,15 @@ function render() {
   }
   if (state.activePage === 'Reports') {
     renderReportsPage(view)
+    return
+  }
+  if (state.activePage === 'Backups') {
+    if (!state.backupData) {
+      view.innerHTML = '<p class="muted">Loading backups...</p>'
+      ensurePageData('Backups').then(render).catch((error) => { state.error = error; render() })
+      return
+    }
+    renderBackupPage(view)
     return
   }
 

@@ -1,8 +1,8 @@
 <!--
 Filename: TODO.md
-Revision: 1.8.0
+Revision: 1.8.1
 Description: Future development backlog for HumidorHQ.
-Modified Date: 2026-07-18 11:00 AM ET
+Modified Date: 2026-07-19 14:45 ET
 -->
 
 # TODO
@@ -20,3 +20,5 @@ Future development items for HumidorHQ.
 
 3. Expand smoked-cigar journal visibility.
    - Surface prior ratings/comments when viewing catalog cigars, lots, and smoking journal history.
+
+4. Define an off-server backup retention schedule after production backup/restore verification.
