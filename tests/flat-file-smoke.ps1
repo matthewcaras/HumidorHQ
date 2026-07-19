@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.20.0
+# Revision : 1.21.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-19 10:00 AM ET
+# Modified Date : 2026-07-19 14:50 ET
 # Changelog :
+# 1.21.0 verify backup/restore route inventory is present
 # 1.20.0 keep reversal fixtures valid across local calendar dates
 # 1.19.0 verify the APP_ROOT/data default and retirement of external-only startup guards
 # 1.18.0 verify append-only idempotent receipt, move, removal reversals and corrected replacement receipts
@@ -218,7 +219,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.13\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.14\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -322,7 +323,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', '/inventory/move', '/purchase-lines/', '/receive', 'storage-sub-locations')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/backups', '/backups/import', 'preview|restore|download', '/records/', '/inventory/move', '/purchase-lines/', '/receive', 'storage-sub-locations')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 

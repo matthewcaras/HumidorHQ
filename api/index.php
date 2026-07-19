@@ -2,15 +2,16 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.13.0
+ * Revision: 1.14.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-18 11:00 ET
+ * Modified Date: 2026-07-19 15:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
 require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
 require_once API_ROOT . '/lib/services/InventoryReversalService.php';
+require_once API_ROOT . '/lib/services/BackupRestoreService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -1650,6 +1651,59 @@ try {
         require_auth();
         audit_record('Todo', 'view');
         json_success(todo_payload());
+    }
+    if ($path === '/backups' && $method === 'GET') {
+        require_auth();
+        json_success(list_runtime_backups());
+    }
+    if ($path === '/backups' && $method === 'POST') {
+        json_success(create_runtime_backup(), 201);
+    }
+    if ($path === '/backups/import' && $method === 'POST') {
+        json_success(import_runtime_backup(request_json()), 201);
+    }
+    if ($path === '/backups/preview' && $method === 'POST') {
+        $input = request_json();
+        json_success(preview_runtime_restore(backup_safe_filename((string) ($input['filename'] ?? ''))));
+    }
+    if ($path === '/backups/restore' && $method === 'POST') {
+        $input = request_json();
+        json_success(restore_runtime_backup(backup_safe_filename((string) ($input['filename'] ?? '')), $input));
+    }
+    if ($path === '/backups/download' && $method === 'GET') {
+        require_auth();
+        $filename = backup_safe_filename((string) ($_GET['filename'] ?? ''));
+        $file = backup_directory() . DIRECTORY_SEPARATOR . $filename;
+        if (!is_file($file)) {
+            json_error('BACKUP_NOT_FOUND', 'The backup bundle was not found.', 404);
+        }
+        send_security_headers();
+        header('Content-Type: application/json');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        readfile($file);
+        exit;
+    }
+    if (preg_match('#^/backups/([^/]+)/(preview|restore|download)$#', $path, $matches)) {
+        require_auth();
+        $filename = backup_safe_filename(rawurldecode($matches[1]));
+        if ($matches[2] === 'preview' && $method === 'POST') {
+            json_success(preview_runtime_restore($filename));
+        }
+        if ($matches[2] === 'restore' && $method === 'POST') {
+            json_success(restore_runtime_backup($filename, request_json()));
+        }
+        if ($matches[2] === 'download' && $method === 'GET') {
+            $file = backup_directory() . DIRECTORY_SEPARATOR . $filename;
+            if (!is_file($file)) {
+                json_error('BACKUP_NOT_FOUND', 'The backup bundle was not found.', 404);
+            }
+            send_security_headers();
+            header('Content-Type: application/json');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            readfile($file);
+            exit;
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }
     if ($path === '/inventory/move' && $method === 'POST') {
         require_auth();

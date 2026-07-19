@@ -1,8 +1,8 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.4.0
+Revision: 1.5.0
 Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
-Modified Date: 2026-07-19 12:15 ET
+Modified Date: 2026-07-19 15:00 ET
 -->
 
 # Runtime Data Setup
@@ -13,7 +13,11 @@ Startup creates the selected directory when it is missing, then runs transaction
 
 `auth-users.json` is deliberately excluded from automatic seeding. If it is missing, initialization creates the non-auth collections and then returns `AUTH_USERS_SETUP_REQUIRED`. Create credentials separately with `tools/create-auth-user.php`; example users, passwords, and password hashes are never installed automatically.
 
-Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Tracked `data/.htaccess` denies direct Apache browser access, while application data routes remain protected by PHP session authentication. Keep backups outside `data/` and outside any directory replaced by deployment tooling.
+Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Tracked `data/.htaccess` denies direct Apache browser access, while application data routes remain protected by PHP session authentication.
+
+Authenticated users can create, download, import, preview, and restore portable bundles from the `Backup & Restore` page. Server-side bundles are stored under ignored `backups/`, where a separate tracked `.htaccess` denies direct HTTP access. Downloaded bundles contain password hashes and should be stored securely outside the deployment account. The append-only audit log is intentionally not included in restore bundles.
+
+All listed bundles pass format, SHA-256, and JSON-shape checks. Backup creation and download remain available to preserve parseable legacy data even when the integrity checker reports existing defects. Import and restore also require valid IDs, counters, relationships, and Lot/balance reconciliation; those defects must be corrected before restore. Restore requires an exact confirmation phrase and a current-state fingerprint from a fresh preview. It creates a pre-restore safety bundle and uses the existing transaction journal before replacing any runtime collections. Existing runtime data is never changed merely by creating, listing, downloading, importing, or previewing a backup.
 
 ## Windows
 
@@ -48,7 +52,7 @@ The guarded `tools/copy-runtime-data.ps1` utility remains available for delibera
 5. Leave `HUMIDORHQ_DATA_ROOT` unset to use `APP_ROOT/data`; set it only when intentionally using another existing directory.
 6. Set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Enable `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when Hostinger's proxy overwrites forwarded headers.
 7. Provision `auth-users.json` securely and separately; first-run initialization will not create credentials.
-8. Keep backups outside the runtime directory and outside any deployment replacement target.
+8. Download important backups and store them securely off-server; the ignored server-side `backups/` directory is deployment-adjacent and is not a substitute for an off-server copy.
 
 During the one-time transition from formerly tracked JSON, back up `data/` before pulling the commit that removes those paths from Git tracking and verify every live file remains afterward. Once untracked and ignored, later code pulls do not manage those files.
 
