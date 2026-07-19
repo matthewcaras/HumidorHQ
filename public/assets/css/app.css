@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.7
+ * Revision: 1.5.8
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-19 16:00 ET
+ * Modified Date: 2026-07-19 17:00 ET
  */
 
 :root {
@@ -251,6 +251,18 @@ h3 {
   font-size: 1.75rem;
   line-height: 1;
   margin: 9px 0;
+}
+
+.interactive-metric-card {
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.interactive-metric-card:hover,
+.interactive-metric-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .dual-metric-card .dual-metric-grid {

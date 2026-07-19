@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.17.0
+ * Revision: 1.18.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-19 17:00 ET
  */
@@ -890,6 +890,28 @@ function preInventoryDashboardSummary() {
   return buildHumidorSummaries().find((item) => recordIsActive(item.humidor) && isPreInventoryHumidor(item.humidor)) || null
 }
 
+function preInventoryWorklist(preInventory = preInventoryDashboardSummary()) {
+  if (!preInventory) {
+    return []
+  }
+  return buildCollectionItems()
+    .map((item) => {
+      const stagedQuantity = item.balances
+        .filter((balance) => Number(balance.humidor?.id || 0) === Number(preInventory.humidor.id))
+        .reduce((sum, balance) => sum + Number(balance.quantity || 0), 0)
+      const placedQuantity = Math.max(0, Number(item.totalQuantity || 0) - stagedQuantity)
+      return {
+        cigar: item.cigar,
+        stagedQuantity,
+        placedQuantity,
+        totalQuantity: Number(item.totalQuantity || 0),
+        placementPercent: item.totalQuantity > 0 ? placedQuantity / item.totalQuantity * 100 : 0,
+      }
+    })
+    .filter((item) => item.stagedQuantity > 0)
+    .sort((left, right) => cigarName(left.cigar).localeCompare(cigarName(right.cigar), undefined, { sensitivity: 'base' }) || Number(left.cigar.id || 0) - Number(right.cigar.id || 0))
+}
+
 function humidorCurrentCount(humidorId) {
   return buildHumidorSummaries().find((item) => Number(item.humidor.id) === Number(humidorId))?.totalQuantity || 0
 }
@@ -1365,6 +1387,7 @@ function renderDashboard(view) {
     : 'Unknown'
   const humidors = buildHumidorSummaries()
   const preInventory = preInventoryDashboardSummary()
+  const preInventoryRows = preInventoryWorklist(preInventory)
   const shell = document.createElement('div')
   shell.className = 'dashboard-shell'
 
@@ -1379,7 +1402,25 @@ function renderDashboard(view) {
     metricCard('Avg MSRP', current.averageMsrpPerCigar, 'Average MSRP per cigar on hand', true),
   )
   if (preInventory) {
-    summary.append(metricCard('Pre Inventory', preInventory.totalQuantity, 'Cigars awaiting permanent placement'))
+    const stagingCard = metricCard('Pre Inventory', preInventory.totalQuantity, `${formatCount(preInventoryRows.length)} catalog entries awaiting permanent placement`)
+    stagingCard.classList.add('interactive-metric-card')
+    stagingCard.tabIndex = 0
+    stagingCard.setAttribute('role', 'button')
+    stagingCard.setAttribute('aria-label', `Open ${formatCount(preInventory.totalQuantity)} Pre Inventory cigars in Collection`)
+    const openStagingCollection = () => {
+      state.collectionHumidorFilterId = Number(preInventory.humidor.id)
+      state.collectionSectionFilterId = null
+      state.selectedCollectionCigarId = null
+      navigateToPage('Collection')
+    }
+    stagingCard.addEventListener('click', openStagingCollection)
+    stagingCard.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        openStagingCollection()
+      }
+    })
+    summary.append(stagingCard)
   }
 
   const lifetime = document.createElement('section')
@@ -1456,11 +1497,60 @@ function renderDashboard(view) {
     })
   })
 
+  let preInventoryPanel = null
+  if (preInventory) {
+    preInventoryPanel = document.createElement('section')
+    preInventoryPanel.className = 'dashboard-panel'
+    preInventoryPanel.innerHTML = `
+      <div class="section-heading compact-heading">
+        <div>
+          <h3>Pre Inventory Worklist</h3>
+          <p class="muted">Move staged cigars into their permanent Humidors as the physical count is reconciled.</p>
+        </div>
+      </div>
+    `
+    preInventoryPanel.querySelector('.section-heading').append(infoBadge(`${formatCount(preInventory.totalQuantity)} remaining`))
+    if (preInventoryRows.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'empty-state'
+      empty.innerHTML = '<p>Pre Inventory is empty. Archive the Humidor when reconciliation is complete.</p>'
+      preInventoryPanel.append(empty)
+    } else {
+      const tableWrap = document.createElement('div')
+      tableWrap.className = 'table-scroll'
+      const table = document.createElement('table')
+      table.className = 'data-table'
+      table.innerHTML = `
+        <thead><tr><th>Cigar</th><th>Staged</th><th>Placed Elsewhere</th><th>Total On Hand</th><th>Placement Progress</th></tr></thead>
+        <tbody>${preInventoryRows.map((item) => `
+          <tr>
+            <td><button type="button" class="linkish-button" data-pre-inventory-cigar-id="${item.cigar.id}">${escapeHtml(cigarName(item.cigar))}</button></td>
+            <td>${formatCount(item.stagedQuantity)}</td>
+            <td>${formatCount(item.placedQuantity)}</td>
+            <td>${formatCount(item.totalQuantity)}</td>
+            <td>${escapeHtml(formatPercent(item.placementPercent))}</td>
+          </tr>
+        `).join('')}</tbody>
+      `
+      tableWrap.append(table)
+      preInventoryPanel.append(tableWrap)
+      preInventoryPanel.querySelectorAll('button[data-pre-inventory-cigar-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.collectionHumidorFilterId = Number(preInventory.humidor.id)
+          state.collectionSectionFilterId = null
+          state.selectedCollectionCigarId = Number(button.dataset.preInventoryCigarId || 0)
+          navigateToPage('Collection')
+        })
+      })
+    }
+  }
+
   const body = document.createElement('div')
   body.className = 'dashboard-body'
   const main = document.createElement('div')
   main.className = 'dashboard-main-grid'
   main.append(humidorPanel)
+  if (preInventoryPanel) main.append(preInventoryPanel)
   const side = document.createElement('aside')
   side.className = 'dashboard-side-grid'
   side.append(lifetime)
