@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.14.0
+ * Revision: 1.15.2
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-19 15:00 ET
+ * Modified Date: 2026-07-19 16:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -25,6 +25,8 @@ const state = {
   collectionDirection: 'asc',
   collectionHumidorFilterId: null,
   collectionSectionFilterId: null,
+  collectionStrengthFilter: '',
+  collectionSearch: '',
   selectedCollectionCigarId: null,
   selectedPurchaseId: null,
   editingPurchaseLineId: null,
@@ -48,6 +50,9 @@ const state = {
   reportSearch: '',
   reportCustomStart: '',
   reportCustomEnd: '',
+  purchaseHistoryGroup: 'vendor',
+  purchaseHistoryVendorId: '',
+  purchaseHistoryManufacturer: '',
   backupData: null,
   backupPreview: null,
   backupMessage: '',
@@ -79,7 +84,7 @@ const pageDependencies = {
   Collection: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
   Purchases: ['purchases', 'vendors', 'catalog-cigars', 'purchase-lines', 'storage-locations', 'storage-sub-locations', 'lots', 'lot-location-balances', 'inventory-events'],
   Humidors: ['storage-locations', 'storage-sub-locations', 'catalog-cigars', 'purchase-lines', 'purchases', 'lots', 'lot-location-balances', 'inventory-events'],
-  Reports: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
+  Reports: ['catalog-cigars', 'vendors', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
 }
 
 const managedPages = {
@@ -715,6 +720,26 @@ function currentCollectionMetrics(useCollectionFilters = true) {
       })
       .filter((item) => item.totalQuantity > 0)
   }
+  if (useCollectionFilters && state.collectionStrengthFilter) {
+    items = items.filter((item) => String(item.cigar.strength || '').trim().toLowerCase() === state.collectionStrengthFilter.toLowerCase())
+  }
+  const collectionSearch = useCollectionFilters ? String(state.collectionSearch || '').trim().toLowerCase() : ''
+  if (collectionSearch) {
+    items = items.filter((item) => [
+      cigarName(item.cigar),
+      item.cigar.manufacturer,
+      item.cigar.series,
+      item.cigar.vitola,
+      item.cigar.shape,
+      item.cigar.wrapper,
+      item.cigar.binder,
+      item.cigar.filler,
+      item.cigar.strength,
+      item.cigar.country,
+      item.cigar.notes,
+      ...item.locations.map((location) => location.label),
+    ].some((value) => String(value || '').toLowerCase().includes(collectionSearch)))
+  }
   const totalQuantity = items.reduce((sum, item) => sum + item.totalQuantity, 0)
   const knownCostQuantity = items.reduce((sum, item) => sum + item.knownCostQuantity, 0)
   const knownMsrpQuantity = items.reduce((sum, item) => sum + item.knownMsrpQuantity, 0)
@@ -822,7 +847,16 @@ function collectionSortLabel(value) {
   if (value === 'location') {
     return 'Humidor Location'
   }
+  if (value === 'strength') {
+    return 'Strength'
+  }
   return 'Alphabetical'
+}
+
+function strengthSortRank(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/–|—/g, '-')
+  const ranks = { mild: 1, 'mild-medium': 2, medium: 3, 'medium-full': 4, full: 5 }
+  return ranks[normalized] || 99
 }
 
 function sortCollectionItems(items) {
@@ -833,6 +867,20 @@ function sortCollectionItems(items) {
       const locationCompare = (left.primaryLocationLabel || '').localeCompare(right.primaryLocationLabel || '')
       if (locationCompare !== 0) {
         return locationCompare * direction
+      }
+    }
+    if (state.collectionSort === 'strength') {
+      const leftRank = strengthSortRank(left.cigar.strength)
+      const rightRank = strengthSortRank(right.cigar.strength)
+      if (leftRank === 99 && rightRank !== 99) return 1
+      if (rightRank === 99 && leftRank !== 99) return -1
+      const rankCompare = leftRank - rightRank
+      if (rankCompare !== 0) {
+        return rankCompare * direction
+      }
+      const strengthCompare = String(left.cigar.strength || '').localeCompare(String(right.cigar.strength || ''))
+      if (strengthCompare !== 0) {
+        return strengthCompare * direction
       }
     }
     const alphaCompare = cigarName(left.cigar).localeCompare(cigarName(right.cigar))
@@ -1405,11 +1453,13 @@ function renderCollectionPage(view) {
     .sort((left, right) => sectionName(left).localeCompare(sectionName(right)))
 
   const controls = document.createElement('div')
-  controls.className = 'section-heading'
+  controls.className = 'collection-toolbar'
   controls.innerHTML = `
-    <div>
-      <h3>Collection On Hand</h3>
-      <p class="muted">${formatCount(metrics.totalQuantity)} cigars across ${formatCount(metrics.uniqueCigarCount)} catalog entries.${state.collectionHumidorFilterId ? ` Filtered to ${humidorName(state.collectionHumidorFilterId)}${state.collectionSectionFilterId ? ` / ${sectionName(recordById('storage-sub-locations', state.collectionSectionFilterId))}` : ''}.` : ''}</p>
+    <div class="section-heading collection-heading">
+      <div>
+        <h3>Collection On Hand</h3>
+        <p class="muted">${formatCount(metrics.totalQuantity)} cigars across ${formatCount(metrics.uniqueCigarCount)} matching catalog entries.</p>
+      </div>
     </div>
   `
 
@@ -1419,6 +1469,7 @@ function renderCollectionPage(view) {
   ;[
     { value: 'alpha', label: 'Alphabetical' },
     { value: 'location', label: 'Humidor Location' },
+    { value: 'strength', label: 'Strength' },
   ].forEach((option) => {
     const item = document.createElement('option')
     item.value = option.value
@@ -1457,6 +1508,18 @@ function renderCollectionPage(view) {
     render()
   })
 
+  const strengthFilterSelect = document.createElement('select')
+  strengthFilterSelect.append(new Option('All Strengths', ''))
+  Array.from(new Set(buildCollectionItems().map((item) => String(item.cigar.strength || '').trim()).filter(Boolean)))
+    .sort((left, right) => strengthSortRank(left) - strengthSortRank(right) || left.localeCompare(right))
+    .forEach((strength) => strengthFilterSelect.append(new Option(strength, strength.toLowerCase())))
+  strengthFilterSelect.value = state.collectionStrengthFilter
+  strengthFilterSelect.addEventListener('change', () => {
+    state.collectionStrengthFilter = strengthFilterSelect.value
+    state.selectedCollectionCigarId = null
+    render()
+  })
+
   const directionButton = document.createElement('button')
   directionButton.type = 'button'
   directionButton.className = 'secondary-button'
@@ -1465,21 +1528,44 @@ function renderCollectionPage(view) {
     state.collectionDirection = state.collectionDirection === 'asc' ? 'desc' : 'asc'
     render()
   })
-  if (state.collectionHumidorFilterId) {
-    const clearButton = document.createElement('button')
+  let clearButton = null
+  if (state.collectionHumidorFilterId || state.collectionStrengthFilter || state.collectionSearch) {
+    clearButton = document.createElement('button')
     clearButton.type = 'button'
     clearButton.className = 'secondary-button'
-    clearButton.textContent = 'Clear Humidor Filter'
+    clearButton.textContent = 'Clear Filters'
     clearButton.addEventListener('click', () => {
       state.collectionHumidorFilterId = null
       state.collectionSectionFilterId = null
+      state.collectionStrengthFilter = ''
+      state.collectionSearch = ''
       state.selectedCollectionCigarId = null
       render()
     })
-    controlBar.append(clearButton)
   }
-  controlBar.append(sortSelect, humidorFilterSelect, sectionFilterSelect, directionButton)
+  controlBar.append(sortSelect, humidorFilterSelect, sectionFilterSelect, strengthFilterSelect, directionButton)
+  if (clearButton) controlBar.append(clearButton)
   controls.append(controlBar)
+
+  const searchForm = document.createElement('form')
+  searchForm.className = 'collection-search-form'
+  searchForm.innerHTML = `
+    <label class="form-field"><span>Search Collection</span><input name="collectionSearch" value="${escapeHtml(state.collectionSearch)}" placeholder="Search cigar, manufacturer, strength, wrapper, or location"></label>
+    <button class="primary-button" type="submit">Search</button>
+    <button class="secondary-button" type="button" data-clear-collection-search>Clear</button>
+  `
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    state.collectionSearch = String(new FormData(searchForm).get('collectionSearch') || '').trim()
+    state.selectedCollectionCigarId = null
+    render()
+  })
+  searchForm.querySelector('[data-clear-collection-search]').addEventListener('click', () => {
+    state.collectionSearch = ''
+    state.selectedCollectionCigarId = null
+    render()
+  })
+  controls.append(searchForm)
 
   const summary = document.createElement('div')
   summary.className = 'metric-grid compact'
@@ -1492,10 +1578,10 @@ function renderCollectionPage(view) {
   if (items.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = `
-      <h3>No On-Hand Collection Yet</h3>
-      <p>Create a purchase and at least one purchase line, or upload your Excel data so I can help convert it into local records.</p>
-    `
+    const hasOnHandInventory = buildCollectionItems().length > 0
+    empty.innerHTML = hasOnHandInventory
+      ? '<h3>No Matching Cigars</h3><p>No on-hand cigars match the current search and filters.</p>'
+      : '<h3>No On-Hand Collection Yet</h3><p>Create a purchase and at least one purchase line to begin tracking on-hand inventory.</p>'
     view.append(controls, summary, empty)
     return
   }
@@ -3519,7 +3605,161 @@ function renderRemovalHistory(view) {
   view.append(panel)
 }
 
+function purchaseHistoryRows() {
+  const paidAllocations = purchaseHistoryPaidAllocations()
+  return records('purchase-lines')
+    .map((line) => {
+      const purchase = recordById('purchases', line.purchaseId)
+      const cigar = recordById('catalog-cigars', line.catalogCigarId)
+      if (!purchase) return null
+      return {
+        line,
+        purchase,
+        cigar,
+        vendor: recordById('vendors', purchase.vendorId),
+        manufacturer: String(cigar?.manufacturer || 'Unknown Manufacturer').trim(),
+        attributedPaid: paidAllocations.get(Number(line.id)) ?? null,
+      }
+    })
+    .filter(Boolean)
+    .filter((row) => state.purchaseHistoryGroup !== 'vendor' || !state.purchaseHistoryVendorId || Number(row.purchase.vendorId || 0) === Number(state.purchaseHistoryVendorId))
+    .filter((row) => state.purchaseHistoryGroup !== 'manufacturer' || !state.purchaseHistoryManufacturer || row.manufacturer.toLowerCase() === state.purchaseHistoryManufacturer.toLowerCase())
+}
+
+function allocatePurchasePaidCents(purchase, lines) {
+  if (!hasKnownMoney(purchase.totalPaid) || lines.length === 0) return null
+  const totalCents = Math.round(Number(purchase.totalPaid) * 100)
+  if (totalCents === 0) return new Map(lines.map((line) => [Number(line.id), 0]))
+
+  let weights = lines.map((line) => line.trueCostBasis)
+  if (!weights.every(hasKnownMoney) || weights.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0) <= 0) {
+    weights = lines.map((line) => line.purchasePrice ?? line.lineSubtotal ?? null)
+  }
+  if (!weights.every(hasKnownMoney) || weights.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0) <= 0) {
+    return lines.length === 1 ? new Map([[Number(lines[0].id), totalCents]]) : null
+  }
+
+  const weightCents = weights.map((value) => Math.round(Number(value) * 100))
+  const weightTotal = weightCents.reduce((sum, value) => sum + value, 0)
+  const allocations = lines.map((line, index) => {
+    const numerator = totalCents * weightCents[index]
+    return {
+      id: Number(line.id),
+      cents: Math.floor(numerator / weightTotal),
+      remainder: numerator % weightTotal,
+    }
+  })
+  let centsRemaining = totalCents - allocations.reduce((sum, item) => sum + item.cents, 0)
+  const remainderOrder = [...allocations].sort((left, right) => right.remainder - left.remainder || left.id - right.id)
+  for (let index = 0; index < centsRemaining; index += 1) {
+    remainderOrder[index % remainderOrder.length].cents += 1
+  }
+  return new Map(allocations.map((item) => [item.id, item.cents]))
+}
+
+function purchaseHistoryPaidAllocations() {
+  const allocations = new Map()
+  records('purchases').forEach((purchase) => {
+    const lines = records('purchase-lines').filter((line) => Number(line.purchaseId || 0) === Number(purchase.id))
+    const purchaseAllocations = allocatePurchasePaidCents(purchase, lines)
+    lines.forEach((line) => {
+      const cents = purchaseAllocations?.get(Number(line.id))
+      allocations.set(Number(line.id), cents === undefined ? null : cents / 100)
+    })
+  })
+  return allocations
+}
+
+function completeMoneyTotal(values) {
+  return values.every(hasKnownMoney)
+    ? values.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0) / 100
+    : null
+}
+
+function uniquePurchaseHistoryPurchases(rows) {
+  return Array.from(new Map(rows.map((row) => [Number(row.purchase.id), row.purchase])).values())
+}
+
+function purchaseHistoryTotalPaid(rows) {
+  if (state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer) {
+    return completeMoneyTotal(rows.map((row) => row.attributedPaid))
+  }
+  return completeMoneyTotal(uniquePurchaseHistoryPurchases(rows).map((purchase) => purchase.totalPaid))
+}
+
+function renderPurchaseHistoryReport(view) {
+  const rows = purchaseHistoryRows()
+  const purchases = uniquePurchaseHistoryPurchases(rows)
+  const totalQuantity = rows.reduce((sum, row) => sum + numericValue(row.line.quantity), 0)
+  const totalPaid = purchaseHistoryTotalPaid(rows)
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel removal-report-panel purchase-history-panel'
+  panel.innerHTML = `
+    <div class="section-heading report-title"><div><h3>Purchase History</h3><p class="muted">Review purchased cigars by Vendor or Catalog manufacturer using stored purchase and allocated line values.</p></div></div>
+  `
+
+  const filters = document.createElement('div')
+  filters.className = 'report-filter-grid'
+  const group = document.createElement('fieldset')
+  group.className = 'report-filter-group'
+  group.innerHTML = '<legend>Report By</legend>'
+  const groupButtons = document.createElement('div')
+  groupButtons.className = 'report-filter-buttons purchase-report-group-buttons'
+  groupButtons.append(
+    reportFilterButton('Vendor', 'vendor', 'purchaseHistoryGroup'),
+    reportFilterButton('Manufacturer', 'manufacturer', 'purchaseHistoryGroup'),
+  )
+  group.append(groupButtons)
+
+  const selection = document.createElement('fieldset')
+  selection.className = 'report-filter-group'
+  selection.innerHTML = `<legend>${state.purchaseHistoryGroup === 'vendor' ? 'Vendor' : 'Manufacturer'}</legend>`
+  const select = document.createElement('select')
+  select.className = 'report-select'
+  if (state.purchaseHistoryGroup === 'vendor') {
+    select.append(new Option('All Vendors', ''))
+    records('vendors').slice().sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')))
+      .forEach((vendor) => select.append(new Option(vendor.name || `Vendor ${vendor.id}`, String(vendor.id))))
+    select.value = state.purchaseHistoryVendorId
+    select.addEventListener('change', () => {
+      state.purchaseHistoryVendorId = select.value
+      render()
+    })
+  } else {
+    select.append(new Option('All Manufacturers', ''))
+    Array.from(new Set(records('catalog-cigars').map((cigar) => String(cigar.manufacturer || '').trim()).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right))
+      .forEach((manufacturer) => select.append(new Option(manufacturer, manufacturer.toLowerCase())))
+    select.value = state.purchaseHistoryManufacturer
+    select.addEventListener('change', () => {
+      state.purchaseHistoryManufacturer = select.value
+      render()
+    })
+  }
+  selection.append(select)
+  filters.append(group, selection)
+  panel.append(filters)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
+  metrics.append(
+    metricCard('Purchase Orders', purchases.length, ''),
+    metricCard('Cigars Purchased', totalQuantity, ''),
+    metricCard('Total Paid', totalPaid, '', true),
+  )
+  panel.append(metrics)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No purchases match the selected report.</p>'
+    panel.append(empty)
+  }
+  view.append(panel)
+}
+
 function renderReportsPage(view) {
+  renderPurchaseHistoryReport(view)
   renderRemovalHistory(view)
 
   const activity = document.createElement('section')

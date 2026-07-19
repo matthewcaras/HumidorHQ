@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.20.0
+Revision: 1.21.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 15:00 ET
+Modified Date: 2026-07-19 16:00 ET
 -->
 
 # HumidorHQ
@@ -12,13 +12,13 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 ## Page Functions And Features
 
 - `Dashboard` shows on-hand and en route cigars, current cost basis, current MSRP value, lifetime savings, average on-hand cost and MSRP, lifetime smoked, gifted, and discarded/damaged totals with per-cigar averages, and each humidor's current count with oldest inventory date.
-- `Collection` shows the cigars currently on hand, can sort them alphabetically or by humidor location, and provides quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating and tasting notes.
+- `Collection` shows the cigars currently on hand, supports search, strength and Humidor filters, sorting alphabetically/by location/by strength, and quantity/date-aware Smoke, Give, Discard / Damage, and Move actions. Removal retries are idempotent, and smoked removals can immediately capture a 1-10 rating and tasting notes.
 - `Catalog` manages active and archived master cigar records and shows purchased and on-hand quantities calculated from linked purchase and inventory records. Archived cigars remain visible wherever history references them but cannot be assigned to new purchase lines.
 - `Vendors` manages active and archived vendor contact records used by purchases. Archived Vendors remain attached to historical purchases but cannot be assigned to new purchases.
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
 - `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
-- `Reports` provides filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search; it calculates quantity, cost, MSRP, savings, per-cigar averages, shows Smoking Journal ratings/notes, and keeps recent inventory activity below the report.
+- `Reports` provides purchase-history summaries by Vendor or cigar manufacturer, plus filterable smoked, gifted, and discarded/damaged removal history by period, custom date range, type, and search. Both purchase-summary views foot to stored purchase `totalPaid`; manufacturer-specific shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
 - `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
@@ -202,6 +202,7 @@ The automated smoke, runtime-location, transaction, and authentication-security 
 .\tests\flat-file-transaction.ps1
 .\tests\auth-security.ps1
 .\tests\backup-restore.ps1
+node .\tests\reporting-filters.js
 ```
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally.

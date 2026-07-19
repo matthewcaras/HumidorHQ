@@ -1,8 +1,8 @@
 <!--
 Filename: TODO.md
-Revision: 1.8.1
+Revision: 1.8.2
 Description: Future development backlog for HumidorHQ.
-Modified Date: 2026-07-19 14:45 ET
+Modified Date: 2026-07-19 16:00 ET
 -->
 
 # TODO
@@ -16,7 +16,7 @@ Future development items for HumidorHQ.
    - Evaluate partial-event corrections only if a real workflow requires them; current correction intentionally reverses the complete immutable event before replacement.
 
 2. Continue functional stabilization after transaction-safe persistence.
-   - Complete remaining report/history workflow parity.
+   - Complete remaining report/history workflow parity beyond Vendor/manufacturer purchase history.
 
 3. Expand smoked-cigar journal visibility.
    - Surface prior ratings/comments when viewing catalog cigars, lots, and smoking journal history.
