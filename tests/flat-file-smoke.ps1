@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.18.0
-# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated external runtime root.
+# Revision : 1.19.0
+# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-18 11:00 AM ET
+# Modified Date : 2026-07-19 10:00 AM ET
 # Changelog :
+# 1.19.0 verify the APP_ROOT/data default and retirement of external-only startup guards
 # 1.18.0 verify append-only idempotent receipt, move, removal reversals and corrected replacement receipts
 # 1.17.0 verify history-preserving archive/restore and active-only workflow destinations
 # 1.16.0 verify dated idempotent smoke/gift/discard removals, source locations, metrics, and journal history
@@ -245,9 +246,13 @@ if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'M
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
 if ($apiIndex -notmatch 'RECEIVED_INVENTORY_IMMUTABLE' -or $apiIndex -notmatch 'RECORD_REFERENCED') { throw 'API is missing Stage 0 immutability or referential guards.' }
 $bootstrapSource = Get-Content -LiteralPath $bootstrapPath -Raw
-foreach ($startupGuard in @('DATA_ROOT_NOT_CONFIGURED', 'DATA_ROOT_MISSING', 'DATA_ROOT_INSIDE_APP', 'DATA_ROOT_NOT_WRITABLE', 'DATA_FILE_MISSING', 'DATA_FILE_NOT_WRITABLE', 'DATA_FILE_INVALID_JSON')) {
+foreach ($startupGuard in @('DATA_ROOT_MISSING', 'DATA_ROOT_NOT_WRITABLE', 'DATA_FILE_MISSING', 'DATA_FILE_NOT_WRITABLE', 'DATA_FILE_INVALID_JSON')) {
     if ($bootstrapSource -notmatch [regex]::Escape($startupGuard)) { throw "Bootstrap is missing runtime startup guard: $startupGuard" }
 }
+foreach ($retiredStartupGuard in @('DATA_ROOT_NOT_CONFIGURED', 'DATA_ROOT_INSIDE_APP', 'Set HUMIDORHQ_DATA_ROOT to an external runtime data directory')) {
+    if ($bootstrapSource -match [regex]::Escape($retiredStartupGuard)) { throw "Bootstrap retains retired runtime startup logic: $retiredStartupGuard" }
+}
+if ($bootstrapSource -notmatch "APP_ROOT\s*\.\s*DIRECTORY_SEPARATOR\s*\.\s*'data'") { throw 'Bootstrap does not default runtime data to APP_ROOT/data.' }
 if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
 if ($appJs -match "return '2026-07-16'" -or $appJs -match 'toISOString\(\)\.slice\(0, 10\)' -or $appJs -notmatch 'today\.getFullYear\(\)') { throw 'Date defaults must use the current local calendar date.' }
 foreach ($moneyCompletenessHook in @('function hasKnownMoney', 'function sumMoneyValues', "return 'Unknown'", 'knownCostQuantity', 'costComplete')) {
@@ -321,22 +326,6 @@ foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', 
 }
 
 $php = Get-PhpCommand
-$bootstrapRequirePath = $bootstrapPath.Replace('\\', '/').Replace("'", "\\'")
-$startupDataRoot = $env:HUMIDORHQ_DATA_ROOT
-try {
-    Remove-Item Env:HUMIDORHQ_DATA_ROOT -ErrorAction SilentlyContinue
-    $missingRootOutput = (& $php -r "require '$bootstrapRequirePath';" 2>&1) -join "`n"
-    if ($LASTEXITCODE -eq 0 -or $missingRootOutput -notmatch 'DATA_ROOT_NOT_CONFIGURED') {
-        throw 'Bootstrap did not reject a missing HUMIDORHQ_DATA_ROOT.'
-    }
-    $env:HUMIDORHQ_DATA_ROOT = $repositoryDataRoot
-    $insideRootOutput = (& $php -r "require '$bootstrapRequirePath';" 2>&1) -join "`n"
-    if ($LASTEXITCODE -eq 0 -or $insideRootOutput -notmatch 'DATA_ROOT_INSIDE_APP') {
-        throw 'Bootstrap did not reject runtime data inside the repository.'
-    }
-} finally {
-    $env:HUMIDORHQ_DATA_ROOT = $startupDataRoot
-}
 $hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 

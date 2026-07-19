@@ -1,10 +1,11 @@
 # Filename: copy-runtime-data.ps1
-# Revision : 1.0.0
-# Description : Guardedly copies HumidorHQ seed or legacy JSON into a new external runtime data directory.
+# Revision : 1.1.0
+# Description : Guardedly copies HumidorHQ seed or runtime JSON into a new optional runtime data directory.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-19
 # Changelog :
+# 1.1.0 clarify that copied runtime directories are optional overrides
 # 1.0.0 initial dry-run-first external runtime data copy with hash manifest and rollback
 
 [CmdletBinding()]
@@ -180,7 +181,7 @@ try {
     }
     Write-Output "[SUCCESS] Copied and hash-verified $($filesToCopy.Count) runtime files."
     Write-Output "[SUCCESS] Manifest: $manifestPath"
-    Write-Output '[NEXT] Set HUMIDORHQ_DATA_ROOT to the destination. If auth-users.json is empty, create a user before starting the app.'
+    Write-Output '[NEXT] To use this optional runtime copy, set HUMIDORHQ_DATA_ROOT to the destination. If auth-users.json is empty, create a user before starting the app.'
 } catch {
     foreach ($path in $copiedPaths) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue

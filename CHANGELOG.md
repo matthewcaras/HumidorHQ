@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.19.0
+Revision: 1.19.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 11:00 AM ET
+Modified Date: 2026-07-19 10:00 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.19.1 - 2026-07-19
+
+Changed by: Matt
+
+- Made `APP_ROOT/data` the runtime-data default while retaining `HUMIDORHQ_DATA_ROOT` as an optional override.
+- Retired external-only startup checks and aligned local startup, authentication provisioning, integrity tooling, tests, and deployment documentation with the in-application default.
+- Preserved strict startup validation, transaction recovery, authentication and security controls, Git ignore protection, and Apache denial of direct `data/` access without changing runtime JSON.
 
 ## 1.19.0 - 2026-07-18
 
