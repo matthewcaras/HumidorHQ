@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.16.0
+ * Revision: 1.16.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-19 17:00 ET
  */
@@ -28,6 +28,7 @@ const state = {
   collectionStrengthFilter: '',
   collectionBuyAgainFilter: '',
   collectionSearch: '',
+  catalogSearch: '',
   selectedCollectionCigarId: null,
   selectedPurchaseId: null,
   editingPurchaseLineId: null,
@@ -95,6 +96,41 @@ function normalizeBuyAgainStatus(value) {
 
 function buyAgainLabel(value) {
   return buyAgainStatusOptions.find((option) => option.value === normalizeBuyAgainStatus(value))?.label || 'Not Evaluated'
+}
+
+function catalogCigarForInventoryEvent(event) {
+  const lot = recordById('lots', event?.lotId)
+  return recordById('catalog-cigars', event?.catalogCigarId || lot?.catalogCigarId)
+}
+
+function smokingJournalBuyAgainDefaults(event) {
+  const cigar = catalogCigarForInventoryEvent(event)
+  return {
+    status: normalizeBuyAgainStatus(cigar?.buyAgainStatus),
+    notes: String(cigar?.buyAgainNotes || ''),
+  }
+}
+
+function catalogRecordsForDisplay(catalogRecords, search = '') {
+  const query = String(search || '').trim().toLowerCase()
+  return catalogRecords
+    .filter((cigar) => !query || [
+      cigarName(cigar),
+      cigar.manufacturer,
+      cigar.series,
+      cigar.vitola,
+      cigar.shape,
+      cigar.wrapper,
+      cigar.binder,
+      cigar.filler,
+      cigar.country,
+      cigar.strength,
+      buyAgainLabel(cigar.buyAgainStatus),
+      cigar.buyAgainNotes,
+      cigar.notes,
+    ].some((value) => String(value || '').toLowerCase().includes(query)))
+    .slice()
+    .sort((left, right) => cigarName(left).localeCompare(cigarName(right), undefined, { sensitivity: 'base' }) || Number(left.id || 0) - Number(right.id || 0))
 }
 
 const pageDependencies = {
@@ -1436,9 +1472,7 @@ function renderPendingSmokingJournal(view) {
     return
   }
   const existing = smokingJournalEntryForEvent(eventId)
-  const lot = recordById('lots', event.lotId)
-  const cigar = recordById('catalog-cigars', event.catalogCigarId || lot?.catalogCigarId)
-  const currentBuyAgainStatus = normalizeBuyAgainStatus(cigar?.buyAgainStatus)
+  const buyAgainDefaults = smokingJournalBuyAgainDefaults(event)
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
   panel.innerHTML = `
@@ -1446,8 +1480,8 @@ function renderPendingSmokingJournal(view) {
     <form class="record-form compact-top-gap" data-smoking-journal-form>
       <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
       <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
-      <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === currentBuyAgainStatus ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
-      <label class="form-field wide"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(cigar?.buyAgainNotes || '')}</textarea></label>
+      <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === buyAgainDefaults.status ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
+      <label class="form-field wide"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(buyAgainDefaults.notes)}</textarea></label>
       <div class="form-actions"><button type="submit" class="primary-button">Save Journal Entry</button><button type="button" class="secondary-button" data-skip-journal>Skip</button></div>
     </form>
   `
@@ -1895,10 +1929,12 @@ function renderField(field, record) {
     if (field.required) {
       select.required = true
     }
-    const emptyOption = document.createElement('option')
-    emptyOption.value = ''
-    emptyOption.textContent = 'Select...'
-    select.append(emptyOption)
+    if (!field.options?.some((option) => option.value === '')) {
+      const emptyOption = document.createElement('option')
+      emptyOption.value = ''
+      emptyOption.textContent = 'Select...'
+      select.append(emptyOption)
+    }
     if (field.options) {
       field.options.forEach((option) => {
         const item = document.createElement('option')
@@ -2017,9 +2053,14 @@ function renderManagedForm(view, pageConfig) {
 function renderManagedTable(view, pageConfig) {
   const collection = pageConfig.collection
   const supportsArchive = collectionSupportsArchive(collection)
-  const allRows = collection === 'purchases' ? sortPurchasesNewest(records(collection)) : records(collection)
+  const allRows = collection === 'purchases'
+    ? sortPurchasesNewest(records(collection))
+    : collection === 'catalog-cigars'
+      ? catalogRecordsForDisplay(records(collection))
+      : records(collection)
   const showArchived = supportsArchive && state.showArchivedRecords[collection] === true
-  const rows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
+  const visibleRows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
+  const rows = collection === 'catalog-cigars' ? catalogRecordsForDisplay(visibleRows, state.catalogSearch) : visibleRows
   const inlineEdit = pageConfig.inlineEdit === true
   const heading = document.createElement('div')
   heading.className = 'section-heading'
@@ -2042,11 +2083,37 @@ function renderManagedTable(view, pageConfig) {
     heading.append(toggleArchived)
   }
 
+  let catalogSearchForm = null
+  if (collection === 'catalog-cigars') {
+    catalogSearchForm = document.createElement('form')
+    catalogSearchForm.className = 'collection-search-form compact-top-gap'
+    catalogSearchForm.innerHTML = `
+      <label class="form-field"><span>Search Catalog</span><input name="catalogSearch" value="${escapeHtml(state.catalogSearch)}" placeholder="Search cigar, manufacturer, strength, wrapper, or Buy Again"></label>
+      <button class="primary-button" type="submit">Search</button>
+      <button class="secondary-button" type="button" data-clear-catalog-search>Clear</button>
+    `
+    catalogSearchForm.addEventListener('submit', (event) => {
+      event.preventDefault()
+      state.catalogSearch = String(new FormData(catalogSearchForm).get('catalogSearch') || '').trim()
+      state.editing[collection] = null
+      render()
+    })
+    catalogSearchForm.querySelector('[data-clear-catalog-search]').addEventListener('click', () => {
+      state.catalogSearch = ''
+      state.editing[collection] = null
+      render()
+    })
+  }
+
   if (rows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = `<p>No ${escapeHtml(pageConfig.title.toLowerCase())} records yet.</p>`
-    view.append(heading, empty)
+    empty.innerHTML = collection === 'catalog-cigars' && state.catalogSearch
+      ? '<p>No Catalog cigars match the current search.</p>'
+      : `<p>No ${escapeHtml(pageConfig.title.toLowerCase())} records yet.</p>`
+    view.append(heading)
+    if (catalogSearchForm) view.append(catalogSearchForm)
+    view.append(empty)
     return
   }
 
@@ -2186,7 +2253,9 @@ function renderManagedTable(view, pageConfig) {
   })
 
   tableWrap.append(table)
-  view.append(heading, tableWrap)
+  view.append(heading)
+  if (catalogSearchForm) view.append(catalogSearchForm)
+  view.append(tableWrap)
 }
 
 async function refreshCollections(collections) {

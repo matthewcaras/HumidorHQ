@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.22.0
+Revision: 1.22.1
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-19 17:00 ET
 -->
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.22.1 - 2026-07-19
+
+Changed by: Matt
+
+- Sorted Catalog records alphabetically by cigar name with a stable ID tie-breaker.
+- Added Catalog search across cigar identity, blend details, strength, general notes, and Buy Again decisions and notes.
+- Confirmed and regression-tested that Smoking Journal defaults to the linked Catalog cigar's latest Buy Again decision and notes; saving a changed decision continues to update Catalog transactionally.
 
 ## 1.22.0 - 2026-07-19
 

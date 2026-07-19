@@ -1,7 +1,7 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.1.0
- * Description: Isolated assertions for Collection and purchase-history filters, including Buy Again reporting.
+ * Revision: 1.2.0
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, and Buy Again behavior.
  * Modified Date: 2026-07-19 17:00 ET
  */
 
@@ -18,8 +18,8 @@ function testAssert(condition, message) {
 
 state.records = {
   'catalog-cigars': [
-    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', strength: 'Mild', wrapper: 'Connecticut', buyAgainStatus: null, buyAgainNotes: 'Evaluate after another smoke' },
     { id: 2, manufacturer: 'Bravo', series: 'Maduro', vitola: 'Toro', strength: 'Full', wrapper: 'Maduro', buyAgainStatus: 'YES', buyAgainNotes: 'Stock up' },
+    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', strength: 'Mild', wrapper: 'Connecticut', buyAgainStatus: null, buyAgainNotes: 'Evaluate after another smoke' },
   ],
   vendors: [{ id: 1, name: 'Vendor One' }, { id: 2, name: 'Vendor Two' }],
   purchases: [
@@ -52,6 +52,13 @@ state.records = {
     { id: 3, inventoryEventId: 12, rating: 10 },
   ],
 }
+
+const sortedCatalog = catalogRecordsForDisplay(records('catalog-cigars'))
+testAssert(sortedCatalog[0].manufacturer === 'Alpha' && sortedCatalog[1].manufacturer === 'Bravo', 'Catalog alphabetical sorting is incorrect.')
+testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').length === 1 && catalogRecordsForDisplay(records('catalog-cigars'), 'stock up')[0].id === 2, 'Catalog search did not match Buy Again notes.')
+testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
+const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
+testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
 
 let metrics = currentCollectionMetrics()
 testAssert(metrics.totalQuantity === 5 && metrics.uniqueCigarCount === 2, 'Unfiltered Collection metrics are incorrect.')
