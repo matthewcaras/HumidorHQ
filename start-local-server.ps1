@@ -1,9 +1,10 @@
 # Filename: start-local-server.ps1
-# Revision : 1.2.0
-# Description : Validates external runtime data, starts the local PHP server, and opens HumidorHQ in Chrome.
+# Revision : 1.3.0
+# Description : Validates runtime data, starts the local PHP server, and opens HumidorHQ in Chrome.
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-19
 # Changelog :
+# 1.3.0 default runtime data to the repository data directory while retaining an optional override
 # 1.2.0 require and validate an external HUMIDORHQ_DATA_ROOT before starting PHP
 # 1.1.1 look for PHP in standard winget install folders when PATH has not refreshed yet
 # 1.1.0 open the local HumidorHQ URL in Chrome after confirming the server is listening
@@ -86,20 +87,17 @@ function Open-LocalSiteInChrome {
 function Resolve-HumidorRuntimeDataRoot {
     param([string]$RequestedRoot, [string]$RepositoryRoot)
 
-    $configuredRoot = if ([string]::IsNullOrWhiteSpace($RequestedRoot)) { $env:HUMIDORHQ_DATA_ROOT } else { $RequestedRoot }
-    if ([string]::IsNullOrWhiteSpace($configuredRoot)) {
-        throw 'HUMIDORHQ_DATA_ROOT is not configured. Copy seed or legacy data to an external directory and pass -DataRoot or set the environment variable.'
+    $configuredRoot = if (-not [string]::IsNullOrWhiteSpace($RequestedRoot)) {
+        $RequestedRoot
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:HUMIDORHQ_DATA_ROOT)) {
+        $env:HUMIDORHQ_DATA_ROOT
+    } else {
+        Join-Path $RepositoryRoot 'data'
     }
     if (-not (Test-Path -LiteralPath $configuredRoot -PathType Container)) {
         throw "Runtime data directory does not exist: $configuredRoot"
     }
     $resolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $configuredRoot).Path)
-    $resolvedRepository = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
-    if ($resolvedRoot.Equals($resolvedRepository, [System.StringComparison]::OrdinalIgnoreCase) -or
-        $resolvedRoot.StartsWith($resolvedRepository + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Runtime data must be outside the HumidorHQ repository.'
-    }
-
     $requiredFiles = @(
         'auth-users.json', 'catalog-cigars.json', 'counters.json', 'inventory-events.json',
         'lot-location-balances.json', 'lots.json', 'purchase-lines.json', 'purchases.json',

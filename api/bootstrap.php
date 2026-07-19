@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: bootstrap.php
- * Revision: 1.5.0
- * Description: Defines and validates the external HumidorHQ runtime data root before loading the API.
- * Modified Date: 2026-07-17 19:00 ET
+ * Revision: 1.6.0
+ * Description: Defines and validates the configurable HumidorHQ runtime data root before loading the API.
+ * Modified Date: 2026-07-18 13:15 ET
  */
 
 define('APP_ROOT', dirname(__DIR__));
@@ -42,24 +42,10 @@ function normalized_runtime_path(string $path): string
     return rtrim($resolved, "\\/");
 }
 
-function runtime_path_is_within(string $candidate, string $parent): bool
-{
-    $candidate = rtrim(str_replace('\\', '/', $candidate), '/');
-    $parent = rtrim(str_replace('\\', '/', $parent), '/');
-    if (DIRECTORY_SEPARATOR === '\\') {
-        $candidate = strtolower($candidate);
-        $parent = strtolower($parent);
-    }
-    return $candidate === $parent || str_starts_with($candidate, $parent . '/');
-}
-
 function validate_runtime_data_root(string $dataRoot): void
 {
     if (!is_dir($dataRoot)) {
         data_root_startup_failure('DATA_ROOT_NOT_DIRECTORY', 'The configured runtime data path is not a directory.');
-    }
-    if (runtime_path_is_within($dataRoot, normalized_runtime_path(APP_ROOT))) {
-        data_root_startup_failure('DATA_ROOT_INSIDE_APP', 'Runtime data must be stored outside the deployed application directory.');
     }
     if (!is_readable($dataRoot) || !is_writable($dataRoot)) {
         data_root_startup_failure('DATA_ROOT_NOT_WRITABLE', 'The runtime data directory must be readable and writable by PHP.');
@@ -102,7 +88,7 @@ function validate_runtime_data_root(string $dataRoot): void
 
 $configuredDataRoot = trim((string) getenv('HUMIDORHQ_DATA_ROOT'));
 if ($configuredDataRoot === '') {
-    data_root_startup_failure('DATA_ROOT_NOT_CONFIGURED', 'Set HUMIDORHQ_DATA_ROOT to an external runtime data directory.');
+    $configuredDataRoot = APP_ROOT . DIRECTORY_SEPARATOR . 'data';
 }
 require_once API_ROOT . '/lib/Errors.php';
 require_once API_ROOT . '/lib/JsonStore.php';

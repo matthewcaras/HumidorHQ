@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.9.8
+ * Revision: 1.13.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-17 19:00 ET
+ * Modified Date: 2026-07-18 11:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -32,6 +32,13 @@ const state = {
   purchaseDraftLines: [],
   purchaseDraftOrder: null,
   purchaseDraftEntry: null,
+  receiptKeys: {},
+  removalKeys: {},
+  pendingSmokingJournalEventId: null,
+  showArchivedRecords: {},
+  reversalKeys: {},
+  reversingEventId: null,
+  showAllActivity: false,
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -59,15 +66,16 @@ const pages = [
 
 const purchaseStatusOptions = [
   { value: 'pending', label: 'Pending' },
+  { value: 'partially-received', label: 'Partially Received' },
   { value: 'received', label: 'Received' },
 ]
 
 const pageDependencies = {
-  Dashboard: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
-  Collection: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
+  Dashboard: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
+  Collection: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
   Purchases: ['purchases', 'vendors', 'catalog-cigars', 'purchase-lines', 'storage-locations', 'storage-sub-locations', 'lots', 'lot-location-balances', 'inventory-events'],
   Humidors: ['storage-locations', 'storage-sub-locations', 'catalog-cigars', 'purchase-lines', 'purchases', 'lots', 'lot-location-balances', 'inventory-events'],
-  Reports: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'storage-locations', 'storage-sub-locations'],
+  Reports: ['catalog-cigars', 'purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
 }
 
 const managedPages = {
@@ -254,6 +262,32 @@ function records(collection) {
   return state.records[collection] || []
 }
 
+function reversedInventoryEventIds() {
+  return new Set(records('inventory-events')
+    .filter((event) => normalizeEventType(event.eventType) === 'REVERSAL')
+    .map((event) => Number(event.reversesInventoryEventId || 0))
+    .filter(Boolean))
+}
+
+function inventoryEventIsReversed(event) {
+  return reversedInventoryEventIds().has(Number(event?.id || 0))
+}
+
+function effectiveInventoryEvents() {
+  const reversed = reversedInventoryEventIds()
+  return records('inventory-events').filter((event) => (
+    normalizeEventType(event.eventType) !== 'REVERSAL' && !reversed.has(Number(event.id || 0))
+  ))
+}
+
+function recordIsActive(record) {
+  return record?.isActive !== false
+}
+
+function collectionSupportsArchive(collection) {
+  return ['catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations'].includes(collection)
+}
+
 function recordById(collection, id) {
   const numericId = Number(id || 0)
   return records(collection).find((row) => Number(row.id) === numericId) || null
@@ -292,7 +326,7 @@ function sectionLabel(section) {
 }
 
 function humidorSectionCount(storageLocationId) {
-  return records('storage-sub-locations').filter((row) => Number(row.storageLocationId) === Number(storageLocationId)).length
+  return records('storage-sub-locations').filter((row) => recordIsActive(row) && Number(row.storageLocationId) === Number(storageLocationId)).length
 }
 
 function purchasedQuantityForCatalog(catalogCigarId) {
@@ -309,8 +343,8 @@ function purchasedQuantityForPurchase(purchaseId) {
 
 function normalizePurchaseStatus(value) {
   const normalized = String(value || '').trim().toLowerCase()
-  if (normalized === 'received') {
-    return 'received'
+  if (normalized === 'received' || normalized === 'partially-received') {
+    return normalized
   }
   return 'pending'
 }
@@ -319,13 +353,85 @@ function purchaseIsReceived(purchase) {
   return normalizePurchaseStatus(purchase?.status) === 'received'
 }
 
+function purchaseAcceptsReceipts(purchase) {
+  return ['pending', 'partially-received'].includes(normalizePurchaseStatus(purchase?.status))
+}
+
+function purchaseReceiptEventsForLine(purchaseLineId) {
+  return effectiveInventoryEvents().filter((event) => (
+    Number(event.purchaseLineId || 0) === Number(purchaseLineId)
+    && normalizeEventType(event.eventType) === 'PURCHASE_RECEIPT'
+    && numericValue(event.quantity) > 0
+  ))
+}
+
+function purchaseLineHasInventoryHistory(purchaseLineId) {
+  const lineId = Number(purchaseLineId || 0)
+  const linkedLotIds = new Set(records('lots')
+    .filter((lot) => Number(lot.purchaseLineId || 0) === lineId)
+    .map((lot) => Number(lot.id || 0)))
+  return linkedLotIds.size > 0 || records('inventory-events').some((event) => (
+    Number(event.purchaseLineId || 0) === lineId
+    || linkedLotIds.has(Number(event.lotId || 0))
+  ))
+}
+
+function receivedQuantityForPurchaseLine(line) {
+  return purchaseReceiptEventsForLine(line?.id)
+    .reduce((total, event) => total + numericValue(event.quantity), 0)
+}
+
+function remainingQuantityForPurchaseLine(line) {
+  return Math.max(0, numericValue(line?.quantity) - receivedQuantityForPurchaseLine(line))
+}
+
+function purchaseLineLocationLabel(line) {
+  const lot = records('lots').find((row) => Number(row.purchaseLineId || 0) === Number(line?.id || 0))
+  const currentLocations = lot
+    ? records('lot-location-balances').filter((balance) => (
+      Number(balance.lotId || 0) === Number(lot.id)
+      && numericValue(balance.quantity) > 0
+    ))
+    : []
+  const labels = [...new Set(currentLocations.map((balance) => (
+    [
+      humidorName(balance.storageLocationId),
+      balance.storageSubLocationId ? sectionName(recordById('storage-sub-locations', balance.storageSubLocationId)) : 'General',
+    ].filter(Boolean).join(' / ')
+  )).filter(Boolean))]
+  if (labels.length === 1) {
+    return labels[0]
+  }
+  if (labels.length > 1) {
+    return `${labels.length} locations`
+  }
+  if (Number(line?.storageLocationId || 0) > 0) {
+    return [
+      humidorName(line.storageLocationId),
+      line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General',
+    ].filter(Boolean).join(' / ')
+  }
+  return 'Not received yet'
+}
+
+function receiptKeyForPurchaseLine(purchaseLineId) {
+  const key = String(purchaseLineId)
+  if (!state.receiptKeys[key]) {
+    const randomPart = globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+    state.receiptKeys[key] = `receipt-${purchaseLineId}-${randomPart}`
+  }
+  return state.receiptKeys[key]
+}
+
 function enRoutePurchaseQuantity() {
   return records('purchase-lines')
     .filter((line) => {
       const purchase = recordById('purchases', line.purchaseId)
-      return purchase && !purchaseIsReceived(purchase)
+      return purchase && purchaseAcceptsReceipts(purchase)
     })
-    .reduce((total, line) => total + numericValue(line.quantity), 0)
+    .reduce((total, line) => total + remainingQuantityForPurchaseLine(line), 0)
 }
 
 function purchaseStatusLabel(value) {
@@ -616,7 +722,7 @@ function currentCollectionMetrics(useCollectionFilters = true) {
     items,
     totalQuantity,
     uniqueCigarCount: items.length,
-    humidorCount: records('storage-locations').length,
+    humidorCount: records('storage-locations').filter(recordIsActive).length,
     currentCostBasis: costComplete ? knownCostTotal : null,
     currentMsrpValue: msrpComplete ? knownMsrpTotal : null,
     currentSavings: costComplete && msrpComplete ? knownMsrpTotal - knownCostTotal : null,
@@ -630,7 +736,7 @@ function currentCollectionMetrics(useCollectionFilters = true) {
 }
 
 function removalEventsOfType(type) {
-  return records('inventory-events').filter((event) => normalizeEventType(event.eventType) === type)
+  return effectiveInventoryEvents().filter((event) => normalizeEventType(event.eventType) === type)
 }
 
 function removalMetrics(type) {
@@ -660,7 +766,7 @@ function removalMetrics(type) {
 
 function buildHumidorSummaries() {
   const summaries = new Map()
-  records('storage-locations').forEach((humidor) => {
+  records('storage-locations').filter(recordIsActive).forEach((humidor) => {
     summaries.set(Number(humidor.id), {
       humidor,
       totalQuantity: 0,
@@ -694,13 +800,13 @@ function humidorOldestDate(humidorId) {
 }
 
 function recentEvents() {
-  return [...records('inventory-events')]
+  const sorted = [...records('inventory-events')]
     .sort((left, right) => {
       const leftDate = left.eventDate || left.occurredAt || left.updatedAt || ''
       const rightDate = right.eventDate || right.occurredAt || right.updatedAt || ''
       return rightDate.localeCompare(leftDate) || Number(right.id || 0) - Number(left.id || 0)
     })
-    .slice(0, 12)
+  return state.showAllActivity ? sorted : sorted.slice(0, 12)
 }
 
 function customPageReady(pageId) {
@@ -916,6 +1022,61 @@ function formatPercent(value) {
   return `${numericValue(value).toFixed(1)}%`
 }
 
+function apiPatch(path, payload = null) {
+  return apiRequest(path, {
+    method: 'PATCH',
+    body: payload === null ? undefined : JSON.stringify(payload),
+  })
+}
+
+function removalActionLabel(type) {
+  return ({ SMOKED: 'Smoke', GIFTED: 'Give', DISCARDED: 'Discard / Damage' })[normalizeEventType(type)] || 'Remove'
+}
+
+function removalEventLabel(type) {
+  return ({ SMOKED: 'Smoked', GIFTED: 'Gifted', DISCARDED: 'Discarded / Damaged' })[normalizeEventType(type)] || 'Removed'
+}
+
+function removalIdempotencyKey(balanceId, type) {
+  const cacheKey = `${Number(balanceId)}:${normalizeEventType(type)}`
+  if (!state.removalKeys[cacheKey]) {
+    const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    state.removalKeys[cacheKey] = `removal-${unique}`
+  }
+  return state.removalKeys[cacheKey]
+}
+
+function clearRemovalIdempotencyKey(balanceId, type) {
+  delete state.removalKeys[`${Number(balanceId)}:${normalizeEventType(type)}`]
+}
+
+function reversalIdempotencyKey(eventId) {
+  const key = String(Number(eventId))
+  if (!state.reversalKeys[key]) {
+    const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    state.reversalKeys[key] = `reversal-${unique}`
+  }
+  return state.reversalKeys[key]
+}
+
+function inventoryEventCanBeReversed(event) {
+  return ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event?.eventType))
+    && !inventoryEventIsReversed(event)
+}
+
+function inventoryEventDisplayType(event) {
+  const type = normalizeEventType(event?.eventType)
+  if (type === 'REVERSAL') {
+    return `Reversal: ${String(event.reversedEventType || '').replaceAll('_', ' ')}`
+  }
+  return `${type.replaceAll('_', ' ')}${inventoryEventIsReversed(event) ? ' — Reversed' : ''}`
+}
+
+function smokingJournalEntryForEvent(eventId) {
+  return records('smoking-journal-entries')
+    .find((entry) => Number(entry.inventoryEventId) === Number(eventId)) || null
+}
+
 function savingsPercent(cost, msrp) {
   if (!hasKnownMoney(cost) || !hasKnownMoney(msrp)) {
     return null
@@ -965,8 +1126,9 @@ function renderDashboard(view) {
   const enRouteQuantity = enRoutePurchaseQuantity()
   const smoked = removalMetrics('SMOKED')
   const gifted = removalMetrics('GIFTED')
-  const lifetimeCost = sumMoneyValues([current.currentCostBasis, smoked.totalCost, gifted.totalCost])
-  const lifetimeMsrp = sumMoneyValues([current.currentMsrpValue, smoked.totalMsrp, gifted.totalMsrp])
+  const discarded = removalMetrics('DISCARDED')
+  const lifetimeCost = sumMoneyValues([current.currentCostBasis, smoked.totalCost, gifted.totalCost, discarded.totalCost])
+  const lifetimeMsrp = sumMoneyValues([current.currentMsrpValue, smoked.totalMsrp, gifted.totalMsrp, discarded.totalMsrp])
   const lifetimeSavings = hasKnownMoney(lifetimeCost) && hasKnownMoney(lifetimeMsrp) ? Number(lifetimeMsrp) - Number(lifetimeCost) : null
   const lifetimeSavingsDisplay = hasKnownMoney(lifetimeSavings)
     ? `${money(lifetimeSavings)} (${formatPercent(savingsPercent(lifetimeCost, lifetimeMsrp))})`
@@ -991,7 +1153,7 @@ function renderDashboard(view) {
   lifetime.innerHTML = `
     <div class="section-heading compact-heading">
       <div>
-        <h3>Consumption Totals</h3>
+        <h3>Removal Totals</h3>
       </div>
     </div>
     <div class="metric-grid compact lifetime-metric-grid">
@@ -1007,6 +1169,13 @@ function renderDashboard(view) {
       <article class="metric-card"><span>Gifted MSRP</span><strong>${money(gifted.totalMsrp)}</strong></article>
       <article class="metric-card"><span>Avg Gifted Cost</span><strong>${money(gifted.averageCostPerCigar)}</strong></article>
       <article class="metric-card"><span>Avg Gifted MSRP</span><strong>${money(gifted.averageMsrpPerCigar)}</strong></article>
+    </div>
+    <div class="metric-grid compact lifetime-metric-grid">
+      <article class="metric-card lifetime-quantity-card"><span>Quantity</span><strong>${formatCount(discarded.quantity)}</strong><small>Discarded / Damaged</small></article>
+      <article class="metric-card"><span>Discarded Cost</span><strong>${money(discarded.totalCost)}</strong></article>
+      <article class="metric-card"><span>Discarded MSRP</span><strong>${money(discarded.totalMsrp)}</strong></article>
+      <article class="metric-card"><span>Avg Discarded Cost</span><strong>${money(discarded.averageCostPerCigar)}</strong></article>
+      <article class="metric-card"><span>Avg Discarded MSRP</span><strong>${money(discarded.averageMsrpPerCigar)}</strong></article>
     </div>
   `
 
@@ -1070,12 +1239,57 @@ function renderDashboard(view) {
   view.append(shell)
 }
 
+function renderPendingSmokingJournal(view) {
+  const eventId = Number(state.pendingSmokingJournalEventId || 0)
+  if (!eventId) {
+    return
+  }
+  const event = recordById('inventory-events', eventId)
+  if (!event || normalizeEventType(event.eventType) !== 'SMOKED') {
+    state.pendingSmokingJournalEventId = null
+    return
+  }
+  const existing = smokingJournalEntryForEvent(eventId)
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel'
+  panel.innerHTML = `
+    <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating and tasting notes for the smoked cigar.</p></div></div>
+    <form class="record-form compact-top-gap" data-smoking-journal-form>
+      <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
+      <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
+      <div class="form-actions"><button type="submit" class="primary-button">Save Journal Entry</button><button type="button" class="secondary-button" data-skip-journal>Skip</button></div>
+    </form>
+  `
+  const form = panel.querySelector('[data-smoking-journal-form]')
+  form.addEventListener('submit', async (submitEvent) => {
+    submitEvent.preventDefault()
+    const data = new FormData(form)
+    try {
+      await apiPut(`/inventory-events/${eventId}/smoking-journal`, {
+        rating: Number(data.get('rating')),
+        notes: String(data.get('notes') || '').trim(),
+      })
+      state.pendingSmokingJournalEventId = null
+      state.formError = null
+      await refreshCollections(['smoking-journal-entries'])
+    } catch (error) {
+      state.formError = error.message
+    }
+    render()
+  })
+  panel.querySelector('[data-skip-journal]').addEventListener('click', () => {
+    state.pendingSmokingJournalEventId = null
+    render()
+  })
+  view.append(panel)
+}
+
 function renderCollectionPage(view) {
   const metrics = currentCollectionMetrics()
   const items = sortCollectionItems(metrics.items)
   const selectedCigarId = Number(state.selectedCollectionCigarId || 0)
   const availableSections = records('storage-sub-locations')
-    .filter((section) => !state.collectionHumidorFilterId || Number(section.storageLocationId) === Number(state.collectionHumidorFilterId))
+    .filter((section) => recordIsActive(section) && (!state.collectionHumidorFilterId || Number(section.storageLocationId) === Number(state.collectionHumidorFilterId)))
     .sort((left, right) => sectionName(left).localeCompare(sectionName(right)))
 
   const controls = document.createElement('div')
@@ -1108,6 +1322,7 @@ function renderCollectionPage(view) {
   const humidorFilterSelect = document.createElement('select')
   humidorFilterSelect.append(new Option('All Humidors', ''))
   records('storage-locations')
+    .filter(recordIsActive)
     .slice()
     .sort((left, right) => (left.name || '').localeCompare(right.name || ''))
     .forEach((humidor) => humidorFilterSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id))))
@@ -1253,8 +1468,19 @@ function renderCollectionPage(view) {
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="SMOKED">Smoke</button>
                           <button type="button" class="secondary-button compact-button" data-move-toggle-id="${balance.balance.id}">Move</button>
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED">Give</button>
+                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED">Discard / Damage</button>
                         </div>
-                        <form class="inline-move-form" data-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
+                        <form class="inline-move-form" data-removal-form="${balance.balance.id}">
+                          <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
+                          <input type="hidden" name="eventType" value="">
+                          <input type="hidden" name="idempotencyKey" value="">
+                          <label class="form-field"><span>Qty</span><input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="1" required></label>
+                          <label class="form-field"><span>Event Date</span><input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
+                          <label class="form-field wide"><span>Notes</span><textarea name="notes" rows="2"></textarea></label>
+                          <button type="submit" class="primary-button compact-button" data-removal-submit>Confirm Removal</button>
+                          <button type="button" class="secondary-button compact-button" data-cancel-removal>Cancel</button>
+                        </form>
+                        <form class="inline-move-form" data-move-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <label class="form-field">
                             <span>Qty</span>
@@ -1264,7 +1490,7 @@ function renderCollectionPage(view) {
                             <span>Humidor</span>
                             <select name="toStorageLocationId" required data-destination-humidor>
                               <option value="">Select...</option>
-                              ${records('storage-locations').map((humidor) => `<option value="${humidor.id}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}</option>`).join('')}
+                              ${records('storage-locations').filter(recordIsActive).map((humidor) => `<option value="${humidor.id}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}</option>`).join('')}
                             </select>
                           </label>
                           <label class="form-field">
@@ -1297,15 +1523,41 @@ function renderCollectionPage(view) {
   })
   tableWrap.append(table)
   table.querySelectorAll('button[data-remove-balance-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', () => {
+      const balanceId = Number(button.dataset.removeBalanceId || 0)
+      const type = normalizeEventType(button.dataset.removeType)
+      const form = table.querySelector(`form[data-removal-form="${balanceId}"]`)
+      if (!form) {
+        return
+      }
+      form.elements.eventType.value = type
+      form.elements.idempotencyKey.value = removalIdempotencyKey(balanceId, type)
+      form.querySelector('[data-removal-submit]').textContent = `Confirm ${removalActionLabel(type)}`
+      table.querySelectorAll('form[data-removal-form]').forEach((otherForm) => otherForm.classList.toggle('is-open', otherForm === form))
+    })
+  })
+  table.querySelectorAll('form[data-removal-form]').forEach((form) => {
+    form.querySelector('[data-cancel-removal]').addEventListener('click', () => form.classList.remove('is-open'))
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const data = new FormData(form)
+      const balanceId = Number(data.get('sourceBalanceId') || 0)
+      const type = normalizeEventType(data.get('eventType'))
       try {
-        await apiPost('/inventory/remove', {
-          sourceBalanceId: String(button.dataset.removeBalanceId || '').trim(),
-          quantity: '1',
-          eventType: String(button.dataset.removeType || '').trim(),
-          notes: `${button.dataset.removeType === 'GIFTED' ? 'Gifted' : 'Smoked'} from collection`,
+        const result = await apiPost('/inventory/remove', {
+          sourceBalanceId: String(balanceId),
+          quantity: String(data.get('quantity') || '').trim(),
+          eventType: type,
+          eventDate: String(data.get('eventDate') || '').trim(),
+          notes: String(data.get('notes') || '').trim(),
+          idempotencyKey: String(data.get('idempotencyKey') || '').trim(),
         })
-        await refreshCollections(['lot-location-balances', 'inventory-events'])
+        clearRemovalIdempotencyKey(balanceId, type)
+        if (type === 'SMOKED') {
+          state.pendingSmokingJournalEventId = Number(result.inventoryEventId || 0)
+        }
+        state.formError = null
+        await refreshCollections(['lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
       } catch (error) {
         state.formError = error.message
       }
@@ -1314,11 +1566,11 @@ function renderCollectionPage(view) {
   })
   table.querySelectorAll('button[data-move-toggle-id]').forEach((button) => {
     button.addEventListener('click', () => {
-      const form = table.querySelector(`form[data-balance-id="${button.dataset.moveToggleId}"]`)
+      const form = table.querySelector(`form[data-move-balance-id="${button.dataset.moveToggleId}"]`)
       form?.classList.toggle('is-open')
     })
   })
-  table.querySelectorAll('form[data-balance-id]').forEach((form) => {
+  table.querySelectorAll('form[data-move-balance-id]').forEach((form) => {
     const humidorSelect = form.querySelector('[data-destination-humidor]')
     const sectionSelect = form.querySelector('[data-destination-section]')
     const submitButton = form.querySelector('button[type="submit"]')
@@ -1334,7 +1586,7 @@ function renderCollectionPage(view) {
       generalOption.disabled = Number(humidorSelect.value || 0) === currentLocationId && currentSectionId === 0
       sectionSelect.replaceChildren(generalOption)
       records('storage-sub-locations')
-        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
+        .filter((section) => recordIsActive(section) && Number(section.storageLocationId) === Number(humidorSelect.value || 0))
         .forEach((section) => {
           const option = new Option(sectionName(section), String(section.id))
           option.disabled = Number(humidorSelect.value || 0) === currentLocationId && Number(section.id) === currentSectionId
@@ -1367,7 +1619,9 @@ function renderCollectionPage(view) {
     })
   })
 
-  view.append(controls, summary, tableWrap)
+  view.append(controls, summary)
+  renderPendingSmokingJournal(view)
+  view.append(tableWrap)
 }
 
 function fieldValue(record, field) {
@@ -1409,12 +1663,14 @@ function renderField(field, record) {
         select.append(item)
       })
     } else {
-      records(field.collection).forEach((option) => {
+      records(field.collection)
+        .filter((option) => recordIsActive(option) || Number(option.id) === Number(record?.[field.name] || 0))
+        .forEach((option) => {
         const item = document.createElement('option')
         item.value = String(option.id)
         item.textContent = typeof field.optionLabel === 'function' ? field.optionLabel(option) : option[field.optionLabel] || `Record ${option.id}`
-        select.append(item)
-      })
+          select.append(item)
+        })
     }
     select.value = fieldValue(record, field)
     label.append(select)
@@ -1516,16 +1772,31 @@ function renderManagedForm(view, pageConfig) {
 
 function renderManagedTable(view, pageConfig) {
   const collection = pageConfig.collection
-  const rows = collection === 'purchases' ? sortPurchasesNewest(records(collection)) : records(collection)
+  const supportsArchive = collectionSupportsArchive(collection)
+  const allRows = collection === 'purchases' ? sortPurchasesNewest(records(collection)) : records(collection)
+  const showArchived = supportsArchive && state.showArchivedRecords[collection] === true
+  const rows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
   const inlineEdit = pageConfig.inlineEdit === true
   const heading = document.createElement('div')
   heading.className = 'section-heading'
   heading.innerHTML = `
     <div>
       <h3>${escapeHtml(pageConfig.title)} Records</h3>
-      <p class="muted">${formatCount(rows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
+      <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
     </div>
   `
+  if (supportsArchive) {
+    const toggleArchived = document.createElement('button')
+    toggleArchived.type = 'button'
+    toggleArchived.className = 'secondary-button'
+    toggleArchived.textContent = showArchived ? 'Hide Archived' : 'Show Archived'
+    toggleArchived.addEventListener('click', () => {
+      state.showArchivedRecords[collection] = !showArchived
+      state.editing[collection] = null
+      render()
+    })
+    heading.append(toggleArchived)
+  }
 
   if (rows.length === 0) {
     const empty = document.createElement('div')
@@ -1558,10 +1829,13 @@ function renderManagedTable(view, pageConfig) {
       cell.textContent = column.value(record)
       row.append(cell)
     })
+    if (supportsArchive && !recordIsActive(record) && row.firstElementChild) {
+      row.firstElementChild.textContent += ' — Archived'
+    }
     const actions = document.createElement('td')
     actions.className = 'row-actions'
 
-    if (!(collection === 'purchases' && purchaseIsReceived(record))) {
+    if (recordIsActive(record) && !(collection === 'purchases' && purchaseIsReceived(record))) {
       const edit = document.createElement('button')
       edit.type = 'button'
       edit.className = 'secondary-button compact-button'
@@ -1575,6 +1849,43 @@ function renderManagedTable(view, pageConfig) {
         render()
       })
       actions.append(edit)
+    }
+
+    if (supportsArchive) {
+      const lifecycleButton = document.createElement('button')
+      lifecycleButton.type = 'button'
+      lifecycleButton.className = 'secondary-button compact-button'
+      lifecycleButton.textContent = recordIsActive(record) ? 'Archive' : 'Restore'
+      if (recordIsActive(record) && collection === 'storage-locations') {
+        const assignedQuantity = humidorCurrentCount(record.id)
+        const activeSectionCount = humidorSectionCount(record.id)
+        if (assignedQuantity > 0 || activeSectionCount > 0) {
+          lifecycleButton.disabled = true
+          lifecycleButton.title = assignedQuantity > 0
+            ? `Move all ${formatCount(assignedQuantity)} assigned cigars before archiving this humidor.`
+            : `Archive all ${formatCount(activeSectionCount)} active sections before archiving this humidor.`
+        }
+      }
+      lifecycleButton.addEventListener('click', async () => {
+        const action = recordIsActive(record) ? 'archive' : 'restore'
+        if (!confirm(`${action === 'archive' ? 'Archive' : 'Restore'} this ${pageConfig.title.toLowerCase()} record?`)) {
+          return
+        }
+        try {
+          await apiPatch(`/records/${collection}/${record.id}/${action}`)
+          state.records[collection] = null
+          state.editing[collection] = null
+          if (collection === 'storage-locations' && action === 'archive' && Number(state.selectedHumidorId) === Number(record.id)) {
+            state.selectedHumidorId = null
+          }
+          await ensureRecords(collection)
+          await refreshSampleData()
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(lifecycleButton)
     }
 
     const remove = document.createElement('button')
@@ -1604,7 +1915,9 @@ function renderManagedTable(view, pageConfig) {
       render()
     })
 
-    actions.append(remove)
+    if (!supportsArchive || !recordIsActive(record)) {
+      actions.append(remove)
+    }
     row.append(actions)
     tbody.append(row)
 
@@ -1780,6 +2093,7 @@ function renderPurchaseOrderForm(view) {
   const cigarSelect = document.createElement('select')
   cigarSelect.append(new Option('Select...', ''))
   records('catalog-cigars')
+    .filter(recordIsActive)
     .slice()
     .sort((left, right) => cigarName(left).localeCompare(cigarName(right)))
     .forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
@@ -1970,72 +2284,118 @@ function renderPurchaseOrderForm(view) {
 }
 
 function renderPurchaseRecordInlineEdit(container, purchase) {
-  const form = document.createElement('form')
-  form.className = 'data-form compact-top-gap'
-  form.innerHTML = `
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel compact-top-gap'
+  panel.innerHTML = `
     <div class="section-heading">
       <div>
-        <h3>Update Purchase Status</h3>
-        <p class="muted">Pending purchase orders can be marked received here. Once received, assign the cigars below.</p>
+        <h3>Receive and Store Cigars</h3>
+        <p class="muted">Record each shipment quantity and its storage location. Purchase status updates automatically.</p>
       </div>
     </div>
   `
-  const grid = document.createElement('div')
-  grid.className = 'form-grid'
-  ;[
-    { label: 'Vendor', value: vendorName(purchase.vendorId) || 'Unassigned' },
-    { label: 'Invoice / PO Number', value: purchase.invoiceNumber || '' },
-    { label: 'Purchase Date', value: purchase.purchaseDate || '' },
-    { label: 'Total Paid', value: money(purchase.totalPaid) },
-  ].forEach((field) => {
-    const label = document.createElement('label')
-    label.className = 'form-field'
-    label.innerHTML = `<span>${escapeHtml(field.label)}</span><input value="${escapeHtml(field.value)}" disabled>`
-    grid.append(label)
+  const lines = records('purchase-lines')
+    .filter((line) => Number(line.purchaseId) === Number(purchase.id))
+  const incompleteLines = lines.filter((line) => remainingQuantityForPurchaseLine(line) > 0)
+
+  if (lines.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'muted'
+    empty.textContent = 'Add at least one purchased cigar before receiving this order.'
+    panel.append(empty)
+  } else if (incompleteLines.length === 0) {
+    const complete = document.createElement('p')
+    complete.className = 'muted'
+    complete.textContent = 'Every purchase line is fully received.'
+    panel.append(complete)
+  }
+
+  incompleteLines.forEach((line) => {
+    const remaining = remainingQuantityForPurchaseLine(line)
+    const received = receivedQuantityForPurchaseLine(line)
+    const form = document.createElement('form')
+    form.className = 'inline-assignment-form'
+    form.innerHTML = `
+      <strong>${escapeHtml(cigarNameById(line.catalogCigarId))}</strong>
+      <span class="muted">${formatCount(received)} of ${formatCount(line.quantity)} received</span>
+    `
+
+    const quantityInput = document.createElement('input')
+    quantityInput.name = 'quantity'
+    quantityInput.type = 'number'
+    quantityInput.min = '1'
+    quantityInput.max = String(remaining)
+    quantityInput.step = '1'
+    quantityInput.required = true
+    quantityInput.value = String(remaining)
+    quantityInput.setAttribute('aria-label', `Quantity received for ${cigarNameById(line.catalogCigarId)}`)
+
+    const dateInput = document.createElement('input')
+    dateInput.name = 'receivedDate'
+    dateInput.type = 'date'
+    dateInput.required = true
+    dateInput.value = todayIsoDate()
+    dateInput.setAttribute('aria-label', `Received date for ${cigarNameById(line.catalogCigarId)}`)
+
+    const humidorSelect = document.createElement('select')
+    humidorSelect.name = 'storageLocationId'
+    humidorSelect.required = true
+    humidorSelect.append(new Option('Select humidor...', ''))
+    records('storage-locations').filter(recordIsActive).forEach((humidor) => {
+      humidorSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id)))
+    })
+
+    const sectionSelect = document.createElement('select')
+    sectionSelect.name = 'storageSubLocationId'
+    function fillSections() {
+      sectionSelect.replaceChildren(new Option('General', ''))
+      records('storage-sub-locations')
+        .filter((section) => recordIsActive(section) && Number(section.storageLocationId) === Number(humidorSelect.value || 0))
+        .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
+    }
+    humidorSelect.addEventListener('change', fillSections)
+    fillSections()
+
+    const save = document.createElement('button')
+    save.type = 'submit'
+    save.className = 'primary-button compact-button'
+    save.textContent = remaining === numericValue(line.quantity) ? 'Receive and Store' : 'Receive Remaining'
+
+    form.append(quantityInput, dateInput, humidorSelect, sectionSelect, save)
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      try {
+        await apiPost(`/purchase-lines/${line.id}/receive`, {
+          quantity: String(quantityInput.value || '').trim(),
+          receivedDate: String(dateInput.value || '').trim(),
+          storageLocationId: String(humidorSelect.value || '').trim(),
+          storageSubLocationId: String(sectionSelect.value || '').trim(),
+          idempotencyKey: receiptKeyForPurchaseLine(line.id),
+          notes: '',
+        })
+        delete state.receiptKeys[String(line.id)]
+        await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
+        const latestPurchase = recordById('purchases', purchase.id)
+        state.editing.purchases = latestPurchase && purchaseAcceptsReceipts(latestPurchase) ? latestPurchase : null
+      } catch (error) {
+        state.formError = error.message
+      }
+      render()
+    })
+    panel.append(form)
   })
-  const statusField = renderField(
-    { name: 'status', label: 'Status', type: 'select', options: purchaseStatusOptions, required: true },
-    { ...purchase, status: 'received' },
-  )
-  const receivedDateField = renderField({ name: 'receivedDate', label: 'Received Date', type: 'date' }, { ...purchase, receivedDate: purchase.receivedDate || todayIsoDate() })
-  grid.append(statusField, receivedDateField)
-  const actions = document.createElement('div')
-  actions.className = 'form-actions'
-  const save = document.createElement('button')
-  save.type = 'submit'
-  save.className = 'primary-button'
-  save.textContent = 'Save Status'
+
   const cancel = document.createElement('button')
   cancel.type = 'button'
-  cancel.className = 'secondary-button'
-  cancel.textContent = 'Cancel'
+  cancel.className = 'secondary-button compact-button compact-top-gap'
+  cancel.textContent = 'Close Receiving'
   cancel.addEventListener('click', () => {
     state.editing.purchases = null
     state.formError = null
     render()
   })
-  actions.append(save, cancel)
-  form.append(grid, actions)
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault()
-    try {
-      const data = new FormData(form)
-      await apiPut(`/records/purchases/${purchase.id}`, {
-        ...purchase,
-        status: String(data.get('status') || '').trim(),
-        receivedDate: String(data.get('receivedDate') || '').trim(),
-      })
-      state.selectedPurchaseId = Number(purchase.id)
-      await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
-      state.editing.purchases = recordById('purchases', purchase.id) || purchase
-    } catch (error) {
-      state.formError = error.message
-    }
-    render()
-  })
-  container.append(form)
-  const latestPurchase = recordById('purchases', purchase.id) || purchase
-  renderReceivedAssignments(container, latestPurchase, records('purchase-lines').filter((line) => Number(line.purchaseId) === Number(purchase.id)))
+  panel.append(cancel)
+  container.append(panel)
 }
 
 function renderInlineCatalogCreate(container) {
@@ -2116,7 +2476,9 @@ function renderPurchaseLineForm(container, purchase) {
   cigarSelect.name = 'catalogCigarId'
   cigarSelect.required = true
   cigarSelect.append(new Option('Select...', ''))
-  records('catalog-cigars').forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
+  records('catalog-cigars')
+    .filter((cigar) => recordIsActive(cigar) || Number(cigar.id) === Number(editingLine?.catalogCigarId || 0))
+    .forEach((cigar) => cigarSelect.append(new Option(cigarName(cigar), String(cigar.id))))
   cigarSelect.value = editingLine ? String(editingLine.catalogCigarId || '') : (state.purchaseLineCatalogId ? String(state.purchaseLineCatalogId) : '')
   const addCatalogButton = document.createElement('button')
   addCatalogButton.type = 'button'
@@ -2219,78 +2581,6 @@ function renderPurchaseLineForm(container, purchase) {
   renderInlineCatalogCreate(container)
 }
 
-function renderReceivedAssignments(container, purchase, lines) {
-  if (!purchaseIsReceived(purchase)) {
-    return
-  }
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel compact-top-gap'
-  panel.innerHTML = `
-    <div class="section-heading">
-      <div>
-        <h3>Assign Received Cigars</h3>
-        <p class="muted">Now that this order is received, assign each purchased cigar to a humidor and optional drawer.</p>
-      </div>
-    </div>
-  `
-  const unassigned = lines.filter((line) => Number(line.storageLocationId || 0) < 1)
-  if (unassigned.length === 0) {
-    const complete = document.createElement('p')
-    complete.className = 'muted'
-    complete.textContent = 'All received cigars on this order have already been assigned to a location.'
-    panel.append(complete)
-    container.append(panel)
-    return
-  }
-
-  unassigned.forEach((line) => {
-    const form = document.createElement('form')
-    form.className = 'inline-assignment-form'
-    form.innerHTML = `
-      <strong>${escapeHtml(cigarNameById(line.catalogCigarId))}</strong>
-      <span class="muted">${formatCount(line.quantity)} cigars</span>
-    `
-    const humidorSelect = document.createElement('select')
-    humidorSelect.name = 'storageLocationId'
-    humidorSelect.required = true
-    humidorSelect.append(new Option('Select humidor...', ''))
-    records('storage-locations').forEach((humidor) => humidorSelect.append(new Option(humidor.name || `Humidor ${humidor.id}`, String(humidor.id))))
-
-    const sectionSelect = document.createElement('select')
-    sectionSelect.name = 'storageSubLocationId'
-    function fillSections() {
-      sectionSelect.replaceChildren(new Option('General', ''))
-      records('storage-sub-locations')
-        .filter((section) => Number(section.storageLocationId) === Number(humidorSelect.value || 0))
-        .forEach((section) => sectionSelect.append(new Option(sectionName(section), String(section.id))))
-    }
-    humidorSelect.addEventListener('change', fillSections)
-    fillSections()
-
-    const save = document.createElement('button')
-    save.type = 'submit'
-    save.className = 'primary-button compact-button'
-    save.textContent = 'Assign Location'
-
-    form.append(humidorSelect, sectionSelect, save)
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault()
-      try {
-        await apiPut(`/records/purchase-lines/${line.id}`, purchaseLinePayloadFromRecord(line, {
-          storageLocationId: String(humidorSelect.value || '').trim(),
-          storageSubLocationId: String(sectionSelect.value || '').trim(),
-        }))
-        await refreshCollections(['purchase-lines', 'lots', 'lot-location-balances', 'inventory-events'])
-      } catch (error) {
-        state.formError = error.message
-      }
-      render()
-    })
-    panel.append(form)
-  })
-  container.append(panel)
-}
-
 function renderPurchaseLinesPanel(view) {
   const purchases = sortPurchasesNewest(records('purchases'))
   const panel = document.createElement('section')
@@ -2306,7 +2596,7 @@ function renderPurchaseLinesPanel(view) {
   header.innerHTML = `
     <div>
       <h3>Purchased Cigars</h3>
-      <p class="muted">Add cigars to a purchase order, then assign their location after the order is received.</p>
+      <p class="muted">Review ordered quantities and receive each shipment directly into its storage location.</p>
     </div>
   `
   const purchaseSelect = document.createElement('select')
@@ -2364,13 +2654,12 @@ function renderPurchaseLinesPanel(view) {
   const tbody = table.querySelector('tbody')
   lines.forEach((line) => {
     const row = document.createElement('tr')
-    const locationLabel = Number(line.storageLocationId || 0) > 0
-      ? [humidorName(line.storageLocationId), line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General'].filter(Boolean).join(' / ')
-      : 'Not assigned yet'
+    const locationLabel = purchaseLineLocationLabel(line)
+    const receivedQuantity = receivedQuantityForPurchaseLine(line)
     row.innerHTML = `
       <td>${escapeHtml(cigarNameById(line.catalogCigarId))}</td>
       <td>${escapeHtml(locationLabel)}</td>
-      <td>${formatCount(line.quantity)}</td>
+      <td>${formatCount(line.quantity)} ordered / ${formatCount(receivedQuantity)} received</td>
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
@@ -2382,7 +2671,10 @@ function renderPurchaseLinesPanel(view) {
     remove.type = 'button'
     remove.className = 'danger-button compact-button'
     remove.textContent = 'Delete'
-    remove.disabled = purchaseIsReceived(purchase)
+    remove.disabled = normalizePurchaseStatus(purchase?.status) !== 'pending' || purchaseLineHasInventoryHistory(line.id)
+    if (remove.disabled) {
+      remove.title = 'Historical purchase lines cannot be deleted. Reverse an incorrect event and enter a corrected receipt.'
+    }
     remove.addEventListener('click', async () => {
       if (!confirm('Delete this purchase line?')) {
         return
@@ -2401,7 +2693,6 @@ function renderPurchaseLinesPanel(view) {
   tableWrap.append(table)
   panel.append(tableWrap)
 
-  renderReceivedAssignments(panel, purchase, lines)
   view.append(panel)
 }
 
@@ -2469,14 +2760,13 @@ function renderPurchaseLineDetails(container, purchase) {
   `
   const tbody = table.querySelector('tbody')
   lines.forEach((line) => {
-    const locationLabel = Number(line.storageLocationId || 0) > 0
-      ? [humidorName(line.storageLocationId), line.storageSubLocationId ? sectionName(recordById('storage-sub-locations', line.storageSubLocationId)) : 'General'].filter(Boolean).join(' / ')
-      : 'Not assigned yet'
+    const locationLabel = purchaseLineLocationLabel(line)
+    const receivedQuantity = receivedQuantityForPurchaseLine(line)
     const row = document.createElement('tr')
     row.innerHTML = `
       <td>${escapeHtml(cigarNameById(line.catalogCigarId))}</td>
       <td>${escapeHtml(locationLabel)}</td>
-      <td>${formatCount(line.quantity)}</td>
+      <td>${formatCount(line.quantity)} ordered / ${formatCount(receivedQuantity)} received</td>
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
@@ -2495,7 +2785,7 @@ function renderPurchaseRecords(view) {
   heading.innerHTML = `
     <div>
       <h3>Purchase Records</h3>
-      <p class="muted">Select a purchase order to view its cigars. En route orders can be edited and received.</p>
+      <p class="muted">Select a purchase order to view its cigars and record full or partial receipts.</p>
     </div>
   `
   view.append(heading)
@@ -2547,11 +2837,11 @@ function renderPurchaseRecords(view) {
       render()
     })
     actions.append(viewButton)
-    if (!purchaseIsReceived(purchase)) {
+    if (purchaseAcceptsReceipts(purchase)) {
       const edit = document.createElement('button')
       edit.type = 'button'
       edit.className = 'primary-button compact-button'
-      edit.textContent = 'Edit / Receive'
+      edit.textContent = 'Receive'
       edit.addEventListener('click', (event) => {
         event.stopPropagation()
         state.selectedPurchaseId = Number(purchase.id)
@@ -2713,7 +3003,8 @@ function renderHumidorSectionForm(container, humidorId) {
 }
 
 function renderHumidorSectionsPanel(view) {
-  const humidors = records('storage-locations')
+  const humidors = records('storage-locations').filter(recordIsActive)
+  const showArchivedSections = state.showArchivedRecords['storage-sub-locations'] === true
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
 
@@ -2737,7 +3028,16 @@ function renderHumidorSectionsPanel(view) {
     state.editingHumidorSectionId = null
     render()
   })
-  header.append(humidorSelect)
+  const toggleArchived = document.createElement('button')
+  toggleArchived.type = 'button'
+  toggleArchived.className = 'secondary-button'
+  toggleArchived.textContent = showArchivedSections ? 'Hide Archived Sections' : 'Show Archived Sections'
+  toggleArchived.addEventListener('click', () => {
+    state.showArchivedRecords['storage-sub-locations'] = !showArchivedSections
+    state.editingHumidorSectionId = null
+    render()
+  })
+  header.append(humidorSelect, toggleArchived)
   panel.append(header)
 
   if (!state.selectedHumidorId) {
@@ -2746,7 +3046,10 @@ function renderHumidorSectionsPanel(view) {
     return
   }
 
-  const sections = records('storage-sub-locations').filter((row) => Number(row.storageLocationId) === Number(state.selectedHumidorId))
+  const sections = records('storage-sub-locations').filter((row) => (
+    (showArchivedSections || recordIsActive(row))
+    && Number(row.storageLocationId) === Number(state.selectedHumidorId)
+  ))
   const table = document.createElement('table')
   table.className = 'data-table'
   table.innerHTML = `
@@ -2768,7 +3071,7 @@ function renderHumidorSectionsPanel(view) {
       .reduce((sum, entry) => sum + entry.quantity, 0)
     const row = document.createElement('tr')
     row.innerHTML = `
-      <td>${escapeHtml(sectionName(section))}</td>
+      <td>${escapeHtml(sectionName(section))}${recordIsActive(section) ? '' : ' — Archived'}</td>
       <td>${escapeHtml(section.type || '')}</td>
       <td>${formatCount(count)}</td>
       <td>${escapeHtml(String(section.capacity || ''))}</td>
@@ -2799,7 +3102,45 @@ function renderHumidorSectionsPanel(view) {
       }
       render()
     })
-    actions.append(edit, remove)
+    if (recordIsActive(section)) {
+      const archive = document.createElement('button')
+      archive.type = 'button'
+      archive.className = 'secondary-button compact-button'
+      archive.textContent = 'Archive'
+      if (count > 0) {
+        archive.disabled = true
+        archive.title = `Move all ${formatCount(count)} assigned cigars before archiving this section.`
+      }
+      archive.addEventListener('click', async () => {
+        if (!confirm('Archive this drawer / section?')) {
+          return
+        }
+        try {
+          await apiPatch(`/records/storage-sub-locations/${section.id}/archive`)
+          state.editingHumidorSectionId = null
+          await refreshCollections(['storage-sub-locations'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(edit, archive)
+    } else {
+      const restore = document.createElement('button')
+      restore.type = 'button'
+      restore.className = 'secondary-button compact-button'
+      restore.textContent = 'Restore'
+      restore.addEventListener('click', async () => {
+        try {
+          await apiPatch(`/records/storage-sub-locations/${section.id}/restore`)
+          await refreshCollections(['storage-sub-locations'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      actions.append(restore, remove)
+    }
     tbody.append(row)
   })
 
@@ -2825,9 +3166,11 @@ function removalEventDetails(event) {
   const cigar = lot?.catalogCigarId
     ? recordById('catalog-cigars', lot.catalogCigarId)
     : recordById('catalog-cigars', event.catalogCigarId)
-  const location = humidorName(event.storageLocationId)
-  const section = event.storageSubLocationId
-    ? sectionName(recordById('storage-sub-locations', event.storageSubLocationId))
+  const sourceLocationId = event.fromStorageLocationId ?? event.storageLocationId
+  const sourceSectionId = event.fromStorageSubLocationId ?? event.storageSubLocationId
+  const location = humidorName(sourceLocationId)
+  const section = sourceSectionId
+    ? sectionName(recordById('storage-sub-locations', sourceSectionId))
     : ''
   return {
     cigar,
@@ -2840,8 +3183,8 @@ function removalEventDetails(event) {
 function filteredRemovalEvents() {
   const currentYear = new Date().getFullYear()
   const search = String(state.reportSearch || '').trim().toLowerCase()
-  return records('inventory-events')
-    .filter((event) => ['SMOKED', 'GIFTED'].includes(normalizeEventType(event.eventType)))
+  return effectiveInventoryEvents()
+    .filter((event) => ['SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event.eventType)))
     .filter((event) => {
       const eventType = normalizeEventType(event.eventType)
       return state.reportRemovalType === 'all' || eventType === state.reportRemovalType
@@ -2887,6 +3230,7 @@ function removalReportMetrics(events) {
     quantity,
     smoked: events.filter((event) => normalizeEventType(event.eventType) === 'SMOKED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
     gifted: events.filter((event) => normalizeEventType(event.eventType) === 'GIFTED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
+    discarded: events.filter((event) => normalizeEventType(event.eventType) === 'DISCARDED').reduce((sum, event) => sum + numericValue(event.quantity), 0),
     totalCost: costComplete ? knownCostTotal : null,
     totalMsrp: msrpComplete ? knownMsrpTotal : null,
     totalSavings: costComplete && msrpComplete ? knownMsrpTotal - knownCostTotal : null,
@@ -2952,6 +3296,7 @@ function renderRemovalHistory(view) {
     reportFilterButton('All Removals', 'all', 'reportRemovalType'),
     reportFilterButton('Smoked', 'SMOKED', 'reportRemovalType'),
     reportFilterButton('Gifted', 'GIFTED', 'reportRemovalType'),
+    reportFilterButton('Discarded / Damaged', 'DISCARDED', 'reportRemovalType'),
   )
   removalType.append(typeButtons)
   filters.append(period, removalType)
@@ -2999,6 +3344,7 @@ function renderRemovalHistory(view) {
     metricCard('Total Removed', metrics.quantity, ''),
     metricCard('Smoked', metrics.smoked, ''),
     metricCard('Gifted', metrics.gifted, ''),
+    metricCard('Discarded / Damaged', metrics.discarded, ''),
   )
   panel.append(counts)
 
@@ -3006,7 +3352,7 @@ function renderRemovalHistory(view) {
   valuesTitle.className = 'report-values-title'
   valuesTitle.textContent = state.reportRemovalType === 'all'
     ? 'All Removal Values'
-    : `${state.reportRemovalType === 'SMOKED' ? 'Smoked' : 'Gifted'} Values`
+    : `${removalEventLabel(state.reportRemovalType)} Values`
   const values = document.createElement('div')
   values.className = 'report-value-grid'
   values.append(
@@ -3026,7 +3372,7 @@ function renderRemovalHistory(view) {
   if (events.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = '<p>No smoked or gifted events match the selected filters.</p>'
+    empty.innerHTML = '<p>No smoked, gifted, or discarded events match the selected filters.</p>'
     panel.append(empty)
   } else {
     const tableWrap = document.createElement('div')
@@ -3034,21 +3380,24 @@ function renderRemovalHistory(view) {
     const table = document.createElement('table')
     table.className = 'data-table'
     table.innerHTML = `
-      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th><th>Rating</th><th>Journal Notes</th></tr></thead>
       <tbody></tbody>
     `
     const tbody = table.querySelector('tbody')
     events.forEach((event) => {
       const details = removalEventDetails(event)
+      const journal = smokingJournalEntryForEvent(event.id)
       const row = document.createElement('tr')
       row.innerHTML = `
         <td>${escapeHtml(removalEventDate(event))}</td>
-        <td>${escapeHtml(normalizeEventType(event.eventType))}</td>
+        <td>${escapeHtml(removalEventLabel(event.eventType))}</td>
         <td>${escapeHtml(details.cigarLabel)}</td>
         <td>${escapeHtml(details.locationLabel || 'Unassigned')}</td>
         <td>${formatCount(event.quantity)}</td>
         <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
         <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+        <td>${journal ? escapeHtml(String(journal.rating)) : '—'}</td>
+        <td>${escapeHtml(journal?.notes || '')}</td>
       `
       tbody.append(row)
     })
@@ -3067,10 +3416,20 @@ function renderReportsPage(view) {
     <div class="section-heading">
       <div>
         <h3>Activity</h3>
-        <p class="muted">Purchase receipts, moves, smoked cigars, gifts, and discard events.</p>
+        <p class="muted">Purchase receipts, moves, removals, and their append-only reversals.</p>
       </div>
     </div>
   `
+  const activityToggle = document.createElement('button')
+  activityToggle.type = 'button'
+  activityToggle.className = 'secondary-button'
+  activityToggle.textContent = state.showAllActivity ? 'Show Recent 12' : 'Show All Activity'
+  activityToggle.addEventListener('click', () => {
+    state.showAllActivity = !state.showAllActivity
+    state.reversingEventId = null
+    render()
+  })
+  activity.querySelector('.section-heading').append(activityToggle)
   const tableWrap = document.createElement('div')
   tableWrap.className = 'table-scroll'
   const table = document.createElement('table')
@@ -3084,6 +3443,7 @@ function renderReportsPage(view) {
         <th>Qty</th>
         <th>Cost / Cigar</th>
         <th>MSRP / Cigar</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -3095,13 +3455,64 @@ function renderReportsPage(view) {
     const row = document.createElement('tr')
     row.innerHTML = `
       <td>${escapeHtml(displayDate(event.eventDate || event.occurredAt || event.updatedAt))}</td>
-      <td>${escapeHtml(normalizeEventType(event.eventType))}</td>
+      <td>${escapeHtml(inventoryEventDisplayType(event))}</td>
       <td>${escapeHtml(cigar ? cigarName(cigar) : '')}</td>
       <td>${formatCount(event.quantity)}</td>
       <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
       <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+      <td class="row-actions"></td>
     `
+    const actions = row.querySelector('.row-actions')
+    if (inventoryEventCanBeReversed(event)) {
+      const reverse = document.createElement('button')
+      reverse.type = 'button'
+      reverse.className = 'secondary-button compact-button'
+      reverse.textContent = 'Reverse'
+      reverse.addEventListener('click', () => {
+        state.reversingEventId = Number(state.reversingEventId || 0) === Number(event.id) ? null : Number(event.id)
+        render()
+      })
+      actions.append(reverse)
+    }
     tbody.append(row)
+    if (Number(state.reversingEventId || 0) === Number(event.id)) {
+      const formRow = document.createElement('tr')
+      formRow.className = 'collection-expanded-row'
+      formRow.innerHTML = `
+        <td colspan="7">
+          <form class="inline-move-form is-open" data-reversal-form>
+            <label class="form-field"><span>Reversal Date</span><input name="eventDate" type="date" min="${escapeHtml(displayDate(event.eventDate))}" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
+            <label class="form-field wide"><span>Correction Reason</span><textarea name="notes" rows="2" required></textarea></label>
+            <button type="submit" class="primary-button compact-button">Confirm Reversal</button>
+            <button type="button" class="secondary-button compact-button" data-cancel-reversal>Cancel</button>
+          </form>
+        </td>
+      `
+      const form = formRow.querySelector('[data-reversal-form]')
+      form.querySelector('[data-cancel-reversal]').addEventListener('click', () => {
+        state.reversingEventId = null
+        render()
+      })
+      form.addEventListener('submit', async (submitEvent) => {
+        submitEvent.preventDefault()
+        const data = new FormData(form)
+        try {
+          await apiPost(`/inventory-events/${event.id}/reverse`, {
+            eventDate: String(data.get('eventDate') || '').trim(),
+            notes: String(data.get('notes') || '').trim(),
+            idempotencyKey: reversalIdempotencyKey(event.id),
+          })
+          delete state.reversalKeys[String(Number(event.id))]
+          state.reversingEventId = null
+          state.formError = null
+          await refreshCollections(['purchases', 'purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
+        } catch (error) {
+          state.formError = error.message
+        }
+        render()
+      })
+      tbody.append(formRow)
+    }
   })
   tableWrap.append(table)
   activity.append(tableWrap)

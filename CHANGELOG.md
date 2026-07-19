@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.15.0
+Revision: 1.19.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-17 7:00 PM ET
+Modified Date: 2026-07-19 10:00 AM ET
 -->
 
 # Changelog
@@ -20,6 +20,58 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.19.1 - 2026-07-19
+
+Changed by: Matt
+
+- Made `APP_ROOT/data` the runtime-data default while retaining `HUMIDORHQ_DATA_ROOT` as an optional override.
+- Retired external-only startup checks and aligned local startup, authentication provisioning, integrity tooling, tests, and deployment documentation with the in-application default.
+- Preserved strict startup validation, transaction recovery, authentication and security controls, Git ignore protection, and Apache denial of direct `data/` access without changing runtime JSON.
+
+## 1.19.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added transactional, append-only full-event reversals for purchase receipts, moves, smokes, gifts, and discards through `POST /api/inventory-events/{id}/reverse`.
+- Required a validated reversal date, correction reason, and idempotency key; exact retries return the original compensating event while conflicting keys and second reversals are rejected without writes.
+- Preserved original InventoryEvents, cost/MSRP snapshots, Lots, depleted history, counters, and Smoking Journal entries while restoring only the target event's inventory effect.
+- Derived receipt quantities and purchase status from effective unreversed receipt events, allowing an incorrect receipt to be reversed and replaced through the existing partial-receipt workflow.
+- Excluded reversed removals from Dashboard/report metrics and added reversible Activity controls that clearly mark original and compensating events.
+- Updated the read-only integrity checker and isolated smoke suite for reversal references, effective-ledger reconciliation, unavailable quantities, journal preservation, retries, and corrected replacement receipts.
+
+## 1.18.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added transactional archive/restore lifecycle routes for Catalog cigars, Vendors, Humidors, and Humidor sections without deleting or rewriting historical relationships.
+- Treated existing records without `isActive` as active, marked newly created lifecycle records active, and avoided any automatic runtime-data migration.
+- Kept archived identities available to Collection and report history while excluding them from new purchase, receipt, move, Humidor filter, and section choices.
+- Blocked archiving Humidors or sections with positive inventory, required active sections to be archived before their Humidor, and rejected direct API assignment, receiving, or movement into archived records.
+- Added active/archived management toggles and archive/restore controls using the existing interface design; permanent deletion remains protected for every linked record.
+- Added isolated coverage for lifecycle retries, linked-history preservation, active-inventory guards, archived destination rejection, and rejected-request hash stability.
+
+## 1.17.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added quantity-aware Smoke, Give, and Discard / Damage forms with validated historical event dates and transaction-safe removal mutations.
+- Added required removal idempotency keys so exact retries return the original event without changing balances, Lots, counters, events, or audit success records, while conflicting reuse is rejected.
+- Corrected removal reports and Smoking Journal snapshots to use the event's original Humidor and optional section, including General locations.
+- Added discarded/damaged quantities and values to Dashboard lifetime totals and removal report filters, summaries, and history.
+- Reconnected smoked removals to a 1-10 Smoking Journal follow-up and displayed journal ratings and notes in removal history.
+- Added isolated regression coverage for retry safety, rejected dates, exact source locations, all three removal types, inventory reconciliation, journal constraints, and read-only journal reporting.
+
+## 1.16.0 - 2026-07-18
+
+Changed by: Matt
+
+- Added a transactional `POST /api/purchase-lines/{id}/receive` workflow for full or partial line receipts into an exact Humidor and optional section.
+- Made purchase-receipt InventoryEvents authoritative for received quantity and derived `pending`, `partially-received`, and `received` purchase status after every receipt.
+- Added required idempotency keys, exact replay responses, conflicting-key rejection, over-receipt protection, real-date validation, and pre-mutation Lot reconciliation checks.
+- Kept one Lot per purchase line while accumulating its received quantity, exact location balances, immutable cost/MSRP snapshots, and line-level first/latest/completion receipt dates.
+- Replaced the manual all-at-once receiving control with line-level quantity/date/location forms without changing the existing visual design.
+- Added isolated regression coverage for retries, rejected-request hash stability, split receipt locations, multi-line completion, partial notes edits, counters, Lots, balances, events, and status dates.
 
 ## 1.15.0 - 2026-07-17
 

@@ -1,8 +1,8 @@
 <!--
 Filename: DECISIONS.md
-Revision: 1.0.0
+Revision: 1.2.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # HumidorHQ Project Decisions
@@ -36,6 +36,9 @@ Inventory will be derived from purchases, lots, and events rather than manually 
 
 Reason:
 This preserves complete history and makes calculations reliable.
+
+Correction decision:
+Inventory mistakes are corrected with one full, append-only reversal of the immutable event. Reversal is allowed only when its physical quantity can be reconciled safely, and corrected receipt facts are then entered through the normal idempotent receiving workflow. Original events, snapshots, and Smoking Journal history remain available.
 
 ---
 
@@ -76,7 +79,9 @@ Receiving and storage are tracked at the purchase-line level.
   - Fully Stored: all lots have positive location balances.
 - These operational states are inferred and are not manually maintained.
 - The UI should eventually allow a received date to be applied to all lines when the entire order arrives together.
-- A Receive and Store workflow should eventually set the line received date, update the lot snapshot, create the initial placement event, and create the location balance atomically.
+- The Receive and Store workflow records each accepted quantity, date, and exact location atomically; it creates or updates the line's single Lot, exact balance, and immutable purchase-receipt event.
+- Every receipt request requires an idempotency key. An exact retry returns the original event without another mutation; conflicting reuse is rejected.
+- Receipt events are authoritative for received quantity. Purchase and line received-quantity/date fields are derived caches and are updated in the same transaction.
 - This design supports split shipments without requiring a separate shipment model in Version 1.
 
 Reason:

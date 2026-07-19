@@ -1,7 +1,7 @@
 # Filename: .gitignore
-# Revision: 1.1.0
+# Revision: 1.2.0
 # Description: Git ignore rules for local secrets, runtime artifacts, and tooling output.
-# Modified Date: 2026-07-17 11:30 ET
+# Modified Date: 2026-07-18 13:15 ET
 
 # Logs and local diagnostics
 logs/
@@ -13,6 +13,17 @@ logs/
 *.local
 /data/auth-users.json
 /data/audit-log.jsonl
+/data/catalog-cigars.json
+/data/vendors.json
+/data/storage-locations.json
+/data/storage-sub-locations.json
+/data/purchases.json
+/data/purchase-lines.json
+/data/lots.json
+/data/lot-location-balances.json
+/data/inventory-events.json
+/data/smoking-journal-entries.json
+/data/counters.json
 
 # PHP and flat-file runtime artifacts
 /data/*.lock

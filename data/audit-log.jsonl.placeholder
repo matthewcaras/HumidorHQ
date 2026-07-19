@@ -1,14 +1,14 @@
 # Filename: audit-log.jsonl.placeholder
-# Revision: 1.1.0
-# Description: Legacy marker retained while local audit history is explicitly copied to external runtime storage.
-# Modified Date: 2026-07-17 11:30 ET
+# Revision: 1.2.0
+# Description: Marker documenting the ignored runtime audit log.
+# Modified Date: 2026-07-19 10:00 ET
 
-This placeholder marks the legacy local audit file used only as an explicit migration source:
+This placeholder documents the default runtime audit file:
 
   data/audit-log.jsonl
 
-The application no longer reads this path. It creates and appends audit-log.jsonl under the external HUMIDORHQ_DATA_ROOT.
+The application creates and appends this file under the selected runtime data root.
 
-Do not commit the live audit log. Do not delete the legacy file until its external copy has been verified.
+Do not commit the live audit log. `HUMIDORHQ_DATA_ROOT` may optionally select another runtime directory.
 
 

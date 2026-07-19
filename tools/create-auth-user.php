@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: create-auth-user.php
- * Revision: 1.1.0
- * Description: Creates or updates a user in the configured external HumidorHQ runtime data directory.
- * Modified Date: 2026-07-17 11:30 ET
+ * Revision: 1.2.0
+ * Description: Creates or updates a user in the selected HumidorHQ runtime data directory.
+ * Modified Date: 2026-07-19 10:00 ET
  */
 
 $script = basename(__FILE__);
@@ -26,23 +26,11 @@ if (strlen($password) < 8) {
 $root = dirname(__DIR__);
 $configuredDataRoot = trim((string) getenv('HUMIDORHQ_DATA_ROOT'));
 if ($configuredDataRoot === '') {
-    fwrite(STDERR, "Set HUMIDORHQ_DATA_ROOT to the external runtime data directory first.\n");
-    exit(1);
+    $configuredDataRoot = $root . DIRECTORY_SEPARATOR . 'data';
 }
 $dataRoot = realpath($configuredDataRoot);
-$appRoot = realpath($root);
 if ($dataRoot === false || !is_dir($dataRoot)) {
-    fwrite(STDERR, "HUMIDORHQ_DATA_ROOT does not identify an existing directory.\n");
-    exit(1);
-}
-$normalizedDataRoot = rtrim(str_replace('\\', '/', $dataRoot), '/');
-$normalizedAppRoot = rtrim(str_replace('\\', '/', (string) $appRoot), '/');
-if (DIRECTORY_SEPARATOR === '\\') {
-    $normalizedDataRoot = strtolower($normalizedDataRoot);
-    $normalizedAppRoot = strtolower($normalizedAppRoot);
-}
-if ($normalizedDataRoot === $normalizedAppRoot || str_starts_with($normalizedDataRoot, $normalizedAppRoot . '/')) {
-    fwrite(STDERR, "Runtime credentials must be stored outside the HumidorHQ repository.\n");
+    fwrite(STDERR, "The selected runtime data path does not identify an existing directory.\n");
     exit(1);
 }
 if (!is_readable($dataRoot) || !is_writable($dataRoot)) {
@@ -94,7 +82,7 @@ if (!is_string($json) || file_put_contents($temporaryPath, $json . PHP_EOL) === 
     exit(1);
 }
 
-fwrite(STDOUT, ($updated ? 'Updated' : 'Created') . " auth user '$username' in the configured external runtime directory.\n");
-fwrite(STDOUT, "Keep the runtime directory outside Git and outside the deployed web root.\n");
+fwrite(STDOUT, ($updated ? 'Updated' : 'Created') . " auth user '$username' in the selected runtime directory.\n");
+fwrite(STDOUT, "Keep auth-users.json ignored by Git and protected from direct browser access.\n");
 
 

@@ -1,76 +1,57 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.2.0
-Description: Windows and Hostinger setup for HumidorHQ external runtime JSON storage.
-Modified Date: 2026-07-17 19:00 ET
+Revision: 1.3.0
+Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
+Modified Date: 2026-07-19 10:00 ET
 -->
 
-# External Runtime Data Setup
+# Runtime Data Setup
 
-HumidorHQ requires `HUMIDORHQ_DATA_ROOT` to identify an existing, readable, writable directory outside the repository or deployed application directory. The API has no repository-data fallback. A code deployment can replace the entire application tree without touching live JSON because live JSON is not below that tree.
+HumidorHQ defaults runtime storage to `APP_ROOT/data`. `HUMIDORHQ_DATA_ROOT` is optional and may select another existing runtime directory. The selected directory may be inside the application tree.
 
-The tracked `seed-data/` directory contains empty initialization records only. The repository `data/` directory is retained temporarily as the explicit legacy-copy source for existing local records; the application will reject it as a runtime root.
+Startup validates that the selected directory exists and is readable and writable. Every required JSON file must exist, be readable and writable, and decode to a JSON array. Transaction journal recovery runs before normal API startup. No startup validation rewrites or repairs runtime JSON.
 
-## Windows: preserve the current local data
+Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Tracked `data/.htaccess` denies direct Apache browser access, while application data routes remain protected by PHP session authentication. Keep backups outside `data/` and outside any directory replaced by deployment tooling.
 
-Choose external sibling directories that are not inside `C:\Development\HumidorHQ`. Preview the copy first:
+## Windows
 
-```powershell
-.\tools\copy-runtime-data.ps1 `
-  -SourceRoot 'C:\Development\HumidorHQ\data' `
-  -DestinationRoot 'C:\HumidorHQ\runtime-data' `
-  -ManifestRoot 'C:\HumidorHQ\migration-manifests'
-```
-
-The default is dry-run. After reviewing the source, empty destination, and manifest location, perform the one-time copy explicitly:
-
-```powershell
-.\tools\copy-runtime-data.ps1 `
-  -SourceRoot 'C:\Development\HumidorHQ\data' `
-  -DestinationRoot 'C:\HumidorHQ\runtime-data' `
-  -ManifestRoot 'C:\HumidorHQ\migration-manifests' `
-  -Apply `
-  -Confirmation 'COPY-HUMIDORHQ-RUNTIME-DATA'
-```
-
-The utility refuses a destination inside the repository and refuses any nonempty destination. It copies only required JSON plus an existing audit log, verifies SHA-256 hashes, writes a timestamped external manifest, and removes newly created files if verification fails.
-
-Set the variable for the current PowerShell session and, optionally, future sessions:
-
-```powershell
-$env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
-[Environment]::SetEnvironmentVariable('HUMIDORHQ_DATA_ROOT', 'C:\HumidorHQ\runtime-data', 'User')
-```
-
-Validate the copied data and start the app:
+With runtime files already under the repository `data/` directory, start normally:
 
 ```powershell
 .\tools\check-data-integrity.ps1
 .\start-local-server.ps1
 ```
 
-For a new empty installation, omit `-SourceRoot` to copy tracked seed data. Then set the environment variable and create the first user before starting PHP:
+No environment variable is required. To intentionally use another directory for a session:
+
+```powershell
+$env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
+.\start-local-server.ps1
+```
+
+Create or update a user in the selected runtime directory:
 
 ```powershell
 php .\tools\create-auth-user.php 'username' 'strong password' 'Display Name'
 ```
 
-Do not delete or reset the legacy `data/` directory until the external copy, manifest, integrity result, login, and backup have all been verified separately.
+The guarded `tools/copy-runtime-data.ps1` utility remains available for deliberately initializing a different, empty runtime directory. It is dry-run by default and does not overwrite an existing destination.
 
 ## Hostinger
 
-1. Create a private directory outside `public_html` and outside any Git deployment target, for example `/home/ACCOUNT/humidorhq-runtime`.
-2. Copy verified runtime JSON into that directory using SFTP/SSH or a separately rehearsed migration. Do not initialize it by deploying repository `data/`.
-3. Restrict ownership to the account/PHP worker. A typical target is directory mode `700` and file mode `600`, adjusted only if Hostinger's PHP worker requires a shared group.
-4. Configure `HUMIDORHQ_DATA_ROOT=/home/ACCOUNT/humidorhq-runtime` in Hostinger's persistent environment/PHP configuration. If Hostinger requires Apache `SetEnv`, add it through the server-managed configuration and keep the account-specific absolute path out of Git.
-   Also set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Enable `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when Hostinger's proxy overwrites `X-Forwarded-Proto` and `X-Forwarded-For` rather than accepting client-supplied values.
-5. Confirm PHP can read and write the directory and required JSON. The API returns HTTP 503 with a `DATA_ROOT_*` error until configuration is valid.
-6. Keep backups and copy manifests outside both `public_html` and the runtime directory.
-7. Deploy only code and tracked `seed-data/`. Never make the external runtime directory a webhook, Git checkout, release-extraction, or synchronization target.
+1. Keep live JSON and the audit log in the deployed HumidorHQ `data/` directory.
+2. Deploy the tracked `data/.htaccess` and confirm Apache honors its deny rules.
+3. Ensure PHP can read and write the directory and required runtime files.
+4. Do not add live JSON, credentials, audit logs, locks, or temporary files to Git.
+5. Leave `HUMIDORHQ_DATA_ROOT` unset to use `APP_ROOT/data`; set it only when intentionally using another existing directory.
+6. Set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Enable `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when Hostinger's proxy overwrites forwarded headers.
+7. Keep backups outside the runtime directory and outside any deployment replacement target.
+
+During the one-time transition from formerly tracked JSON, back up `data/` before pulling the commit that removes those paths from Git tracking and verify every live file remains afterward. Once untracked and ignored, later code pulls do not manage those files.
 
 ## Required runtime files
 
-The external directory must contain readable, writable JSON files named:
+The selected directory must contain readable, writable JSON arrays named:
 
 - `auth-users.json`
 - `catalog-cigars.json`
@@ -85,27 +66,24 @@ The external directory must contain readable, writable JSON files named:
 - `storage-sub-locations.json`
 - `vendors.json`
 
-`audit-log.jsonl` is optional at startup and is created on the first audited action. If it exists, it must also be readable and writable.
-
-The optional `.auth-login-state.json` and its lock are created automatically in the external runtime directory after login activity. The state contains hashed throttle keys and timestamps, never passwords or password hashes.
+`audit-log.jsonl` is optional at startup and is created on the first audited action. If it exists, it must be readable and writable. The optional `.auth-login-state.json` and lock files are created automatically and contain no passwords or password hashes.
 
 ## Authentication environment controls
 
-- `HUMIDORHQ_FORCE_SECURE_COOKIES=1`: always marks the session cookie Secure; recommended for Hostinger HTTPS.
-- `HUMIDORHQ_TRUST_PROXY_HEADERS=1`: trusts forwarded protocol/client headers; use only behind a trusted, overwriting proxy.
+- `HUMIDORHQ_FORCE_SECURE_COOKIES=1`: always marks the session cookie Secure.
+- `HUMIDORHQ_TRUST_PROXY_HEADERS=1`: trusts forwarded protocol/client headers only behind a trusted overwriting proxy.
 - `HUMIDORHQ_SESSION_IDLE_SECONDS`: inactivity limit, default `1800`.
 - `HUMIDORHQ_SESSION_ABSOLUTE_SECONDS`: total session limit, default `43200`.
 - `HUMIDORHQ_LOGIN_USERNAME_LIMIT`: failures per username window, default `5`.
 - `HUMIDORHQ_LOGIN_CLIENT_LIMIT`: failures per client window, default `20`.
 - `HUMIDORHQ_LOGIN_WINDOW_SECONDS`: failure-count window, default `900`.
 - `HUMIDORHQ_LOGIN_LOCK_SECONDS`: throttle duration, default `900`.
-- `HUMIDORHQ_TIMEZONE`: local calendar timezone for inventory event dates, default `America/Indiana/Indianapolis`.
+- `HUMIDORHQ_TIMEZONE`: local calendar timezone, default `America/Indiana/Indianapolis`.
 
 ## Startup failures
 
-- `DATA_ROOT_NOT_CONFIGURED`: the environment variable is empty.
-- `DATA_ROOT_MISSING` or `DATA_ROOT_NOT_DIRECTORY`: the configured path is unavailable.
-- `DATA_ROOT_INSIDE_APP`: the path points into the Git/deployment tree.
+- `DATA_ROOT_MISSING` or `DATA_ROOT_NOT_DIRECTORY`: the selected path is unavailable.
 - `DATA_ROOT_NOT_WRITABLE`: PHP cannot read or write the directory.
 - `DATA_FILE_MISSING`, `DATA_FILE_NOT_WRITABLE`, or `DATA_FILE_INVALID_JSON`: a required collection cannot be used safely.
 - `AUDIT_FILE_NOT_WRITABLE`: the existing audit log cannot be safely accessed.
+- `DATA_TRANSACTION_RECOVERY_FAILED`: an interrupted transaction could not be safely recovered.

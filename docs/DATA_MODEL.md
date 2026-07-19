@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.0.0
+Revision: 1.2.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-18 11:00 AM ET
 -->
 
 # HumidorHQ Data Model
@@ -56,10 +56,14 @@ Each purchase line references one catalog cigar.
 
 Purchase line fields may include:
 - Catalog cigar
-- Quantity
+- Ordered quantity
+- Received quantity cache, reconciled to purchase-receipt events
+- First, latest, and completion receipt dates
 - Unit price
 - Line subtotal
 - MSRP per cigar
+
+Each accepted receipt creates one immutable purchase-receipt event. A required idempotency key makes an exact request retry return the original event and prevents duplicate quantity, Lot, balance, counter, or audit changes. Multiple receipts for one line accumulate into the line's single Lot and may create or increment different exact location balances.
 
 Shipping, excise tax, sales tax, and discounts should be allocated across purchase lines based on each line's share of the purchase subtotal.
 
@@ -107,6 +111,8 @@ Consumption reasons:
 - Damaged
 
 Events should drive calculated inventory instead of manually maintaining totals.
+
+Corrections are append-only. A `REVERSAL` InventoryEvent references exactly one prior purchase receipt, move, smoke, gift, or discard through `reversesInventoryEventId`. The original event remains immutable. Effective receipt and removal calculations exclude an event after one valid reversal, while Activity History retains both records. A reversal copies the target cost/MSRP snapshots, reverses the complete target quantity, and never deletes a Lot or Smoking Journal entry. Incorrect receipts are corrected by reversing the receipt and entering replacement receipt facts through Receive and Store.
 
 ## Smoking Journal
 

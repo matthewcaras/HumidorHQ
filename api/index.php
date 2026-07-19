@@ -2,13 +2,15 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.9.0
+ * Revision: 1.13.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-17 19:00 ET
+ * Modified Date: 2026-07-18 11:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
+require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
+require_once API_ROOT . '/lib/services/InventoryReversalService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -183,6 +185,15 @@ function managed_collection_configs(): array
         'inventory-events' => [
             'page' => 'Reports',
             'label' => 'Inventory Event',
+            'readOnly' => true,
+            'required' => [],
+            'text' => [],
+            'int' => [],
+            'money' => [],
+        ],
+        'smoking-journal-entries' => [
+            'page' => 'Reports',
+            'label' => 'Smoking Journal Entry',
             'readOnly' => true,
             'required' => [],
             'text' => [],
@@ -366,6 +377,16 @@ function normalized_relationship_id(mixed $value): ?int
     }
     $normalized = (int) $value;
     return $normalized > 0 ? $normalized : null;
+}
+
+function record_is_active(?array $record): bool
+{
+    return $record !== null && ($record['isActive'] ?? true) !== false;
+}
+
+function lifecycle_managed_collections(): array
+{
+    return ['catalog-cigars', 'vendors', 'storage-locations', 'storage-sub-locations'];
 }
 
 function row_references_id(array $row, array $fields, int $id): bool
@@ -773,6 +794,9 @@ function move_inventory(array $input): array
     if (!$destinationHumidor) {
         throw new ApiError('VALIDATION_ERROR', 'Destination humidor was not found.', 422);
     }
+    if (!record_is_active($destinationHumidor)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Destination humidor is archived and cannot receive inventory.', 409);
+    }
 
     if ($toStorageSubLocationId !== null) {
         $destinationSection = find_by_id('storage-sub-locations', $toStorageSubLocationId);
@@ -781,6 +805,9 @@ function move_inventory(array $input): array
         }
         if ((int) ($destinationSection['storageLocationId'] ?? 0) !== $toStorageLocationId) {
             throw new ApiError('VALIDATION_ERROR', 'Destination drawer or section does not belong to the selected humidor.', 422);
+        }
+        if (!record_is_active($destinationSection)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Destination drawer or section is archived and cannot receive inventory.', 409);
         }
     }
 
@@ -892,12 +919,46 @@ function remove_inventory(array $input): array
     $sourceBalanceId = positive_int_param($input['sourceBalanceId'] ?? null, 'source balance id', 'VALIDATION_ERROR');
     $quantity = positive_int_param($input['quantity'] ?? null, 'quantity', 'VALIDATION_ERROR');
     $eventTypeInput = strtoupper(trim((string) ($input['eventType'] ?? '')));
-    $notes = trim((string) ($input['notes'] ?? ''));
+    $eventDate = validate_iso_date($input['eventDate'] ?? today_local_date(), 'eventDate', true);
+    $idempotencyKey = receipt_idempotency_key($input['idempotencyKey'] ?? null);
+    $notes = clean_text_field($input, 'notes');
 
     $eventType = match ($eventTypeInput) {
         'SMOKED', 'GIFTED', 'DISCARDED' => $eventTypeInput,
         default => throw new ApiError('VALIDATION_ERROR', 'eventType must be SMOKED, GIFTED, or DISCARDED.', 422),
     };
+
+    if ($eventDate > today_local_date()) {
+        throw new ApiError('VALIDATION_ERROR', 'eventDate cannot be in the future.', 422);
+    }
+
+    $events = load_collection('inventory-events');
+    foreach ($events as $existingEvent) {
+        if (!is_array($existingEvent) || (string) ($existingEvent['removalKey'] ?? '') !== $idempotencyKey) {
+            continue;
+        }
+        $matches = (int) ($existingEvent['sourceBalanceId'] ?? 0) === $sourceBalanceId
+            && (int) ($existingEvent['quantity'] ?? 0) === $quantity
+            && strtoupper((string) ($existingEvent['eventType'] ?? '')) === $eventType
+            && (string) ($existingEvent['eventDate'] ?? '') === $eventDate
+            && (string) ($existingEvent['notes'] ?? '') === $notes;
+        if (!$matches) {
+            throw new ApiError(
+                'REMOVAL_IDEMPOTENCY_CONFLICT',
+                'This idempotency key was already used for a different removal request.',
+                409
+            );
+        }
+        return [
+            'sourceBalanceId' => $sourceBalanceId,
+            'lotId' => (int) ($existingEvent['lotId'] ?? 0),
+            'quantityRemoved' => $quantity,
+            'eventType' => $eventType,
+            'inventoryEventId' => (int) ($existingEvent['id'] ?? 0),
+            'inventoryEvent' => $existingEvent,
+            'idempotentReplay' => true,
+        ];
+    }
 
     $sourceBalance = find_by_id('lot-location-balances', $sourceBalanceId);
     if (!$sourceBalance) {
@@ -913,6 +974,13 @@ function remove_inventory(array $input): array
     $lot = find_by_id('lots', $lotId);
     if (!$lot) {
         throw new ApiError('VALIDATION_ERROR', 'The source lot was not found.', 404);
+    }
+    $lotReceivedDate = validate_iso_date(
+        $lot['receivedDateSnapshot'] ?? $lot['receivedDate'] ?? $lot['purchaseDateSnapshot'] ?? null,
+        'stored lot receipt date'
+    );
+    if ($lotReceivedDate !== null && $eventDate < $lotReceivedDate) {
+        throw new ApiError('VALIDATION_ERROR', 'eventDate cannot be earlier than the Lot receipt date.', 422);
     }
 
     $balances = load_collection('lot-location-balances');
@@ -938,7 +1006,6 @@ function remove_inventory(array $input): array
     save_collection('lot-location-balances', $balances);
     synchronize_lot_quantity_cache($lotId, $balances, $now);
 
-    $events = load_collection('inventory-events');
     $event = [
         'id' => next_id('inventory-events'),
         'eventType' => $eventType,
@@ -946,14 +1013,16 @@ function remove_inventory(array $input): array
         'purchaseLineId' => $lot['purchaseLineId'] ?? null,
         'purchaseId' => $lot['purchaseId'] ?? null,
         'catalogCigarId' => $lot['catalogCigarId'] ?? null,
+        'sourceBalanceId' => $sourceBalanceId,
         'fromStorageLocationId' => $sourceBalance['storageLocationId'] ?? null,
         'fromStorageSubLocationId' => $sourceBalance['storageSubLocationId'] ?? null,
         'quantity' => $quantity,
-        'eventDate' => today_local_date(),
+        'eventDate' => $eventDate,
         'occurredAt' => $now,
         'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
         'notes' => $notes,
+        'removalKey' => $idempotencyKey,
         'createdAt' => $now,
         'updatedAt' => $now,
     ];
@@ -972,6 +1041,8 @@ function remove_inventory(array $input): array
         'quantityRemoved' => $quantity,
         'eventType' => $eventType,
         'inventoryEventId' => $event['id'],
+        'inventoryEvent' => $event,
+        'idempotentReplay' => false,
     ];
 }
 
@@ -998,19 +1069,26 @@ function clean_managed_record(string $collection, array $input, ?array $existing
 
     validate_managed_numeric_ranges($collection, $record);
 
-    if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null && !find_by_id('vendors', (int) $record['vendorId'])) {
-        throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
+    if ($collection === 'purchases' && isset($record['vendorId']) && $record['vendorId'] !== null) {
+        $vendor = find_by_id('vendors', (int) $record['vendorId']);
+        if (!$vendor) {
+            throw new ApiError('VALIDATION_ERROR', 'Selected vendor was not found.', 422);
+        }
+        $vendorChanged = $existing === null || (int) ($existing['vendorId'] ?? 0) !== (int) $record['vendorId'];
+        if ($vendorChanged && !record_is_active($vendor)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected vendor is archived and cannot be assigned to a purchase.', 409);
+        }
     }
     if ($collection === 'purchases') {
         $record['status'] = normalize_purchase_status_value((string) ($record['status'] ?? ''));
-        validate_purchase_status($record);
+        validate_purchase_status($record, $existing);
         normalize_purchase_dates_and_total($record);
     }
     if ($collection === 'storage-sub-locations') {
-        validate_storage_sub_location_links($record);
+        validate_storage_sub_location_links($record, $existing);
     }
     if ($collection === 'purchase-lines') {
-        validate_purchase_line_links($record);
+        validate_purchase_line_links($record, $existing);
         hydrate_purchase_line_msrp($record, $existing);
     }
 
@@ -1030,11 +1108,20 @@ function normalize_purchase_status_value(string $value): string
     };
 }
 
-function validate_purchase_status(array $record): void
+function validate_purchase_status(array $record, ?array $existing = null): void
 {
     $allowed = ['pending', 'received'];
-    if (!in_array((string) ($record['status'] ?? ''), $allowed, true)) {
-        throw new ApiError('VALIDATION_ERROR', 'status must be pending or received.', 422);
+    $status = (string) ($record['status'] ?? '');
+    if ($existing === null && $status !== 'pending') {
+        throw new ApiError('VALIDATION_ERROR', 'New purchases must begin in pending status and be completed through receipt events.', 422);
+    }
+    if ($status === 'partially-received'
+        && $existing !== null
+        && normalize_purchase_status_value((string) ($existing['status'] ?? '')) === 'partially-received') {
+        return;
+    }
+    if (!in_array($status, $allowed, true)) {
+        throw new ApiError('VALIDATION_ERROR', 'status must be pending or received; partially received status is managed by receipt events.', 422);
     }
 }
 
@@ -1098,15 +1185,20 @@ function normalize_purchase_dates_and_total(array &$record): void
     $record['totalPaid'] = cents_to_money($totalCents);
 }
 
-function validate_storage_sub_location_links(array $record): void
+function validate_storage_sub_location_links(array $record, ?array $existing = null): void
 {
     $id = (int) ($record['storageLocationId'] ?? 0);
-    if ($id < 1 || !find_by_id('storage-locations', $id)) {
+    $location = $id > 0 ? find_by_id('storage-locations', $id) : null;
+    if ($location === null) {
         throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    }
+    $locationChanged = $existing === null || (int) ($existing['storageLocationId'] ?? 0) !== $id;
+    if ($locationChanged && !record_is_active($location)) {
+        throw new ApiError('RECORD_ARCHIVED', 'Selected humidor is archived and cannot receive new sections.', 409);
     }
 }
 
-function validate_purchase_line_links(array $record): void
+function validate_purchase_line_links(array $record, ?array $existing = null): void
 {
     $quantity = (int) ($record['quantity'] ?? 0);
     if ($quantity < 1) {
@@ -1119,14 +1211,26 @@ function validate_purchase_line_links(array $record): void
     ];
     foreach ($links as $field => $link) {
         $id = (int) ($record[$field] ?? 0);
-        if ($id < 1 || !find_by_id($link['collection'], $id)) {
+        $linkedRecord = $id > 0 ? find_by_id($link['collection'], $id) : null;
+        if ($linkedRecord === null) {
             throw new ApiError('VALIDATION_ERROR', $link['label'] . ' was not found.', 422);
+        }
+        $changed = $existing === null || (int) ($existing[$field] ?? 0) !== $id;
+        if ($changed && $link['collection'] === 'catalog-cigars' && !record_is_active($linkedRecord)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected Catalog cigar is archived and cannot be assigned to a purchase line.', 409);
         }
     }
 
     $storageLocationId = (int) ($record['storageLocationId'] ?? 0);
-    if ($storageLocationId > 0 && !find_by_id('storage-locations', $storageLocationId)) {
-        throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+    if ($storageLocationId > 0) {
+        $storageLocation = find_by_id('storage-locations', $storageLocationId);
+        if (!$storageLocation) {
+            throw new ApiError('VALIDATION_ERROR', 'Selected humidor was not found.', 422);
+        }
+        $changed = $existing === null || (int) ($existing['storageLocationId'] ?? 0) !== $storageLocationId;
+        if ($changed && !record_is_active($storageLocation)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected humidor is archived and cannot be assigned to a purchase line.', 409);
+        }
     }
 
     $subLocationId = (int) ($record['storageSubLocationId'] ?? 0);
@@ -1140,6 +1244,10 @@ function validate_purchase_line_links(array $record): void
         }
         if ((int) ($subLocation['storageLocationId'] ?? 0) !== $storageLocationId) {
             throw new ApiError('VALIDATION_ERROR', 'Selected humidor section does not belong to the selected humidor.', 422);
+        }
+        $changed = $existing === null || (int) ($existing['storageSubLocationId'] ?? 0) !== $subLocationId;
+        if ($changed && !record_is_active($subLocation)) {
+            throw new ApiError('RECORD_ARCHIVED', 'Selected humidor section is archived and cannot be assigned to a purchase line.', 409);
         }
     }
 }
@@ -1180,6 +1288,9 @@ function create_managed_record(string $collection, array $input): array
     }
     $rows = load_collection($collection);
     $record = clean_managed_record($collection, $input);
+    if (in_array($collection, lifecycle_managed_collections(), true)) {
+        $record['isActive'] = true;
+    }
     if ($collection === 'purchase-lines' && purchase_inventory_is_locked((int) ($record['purchaseId'] ?? 0))) {
         throw new ApiError(
             'RECEIVED_INVENTORY_IMMUTABLE',
@@ -1217,7 +1328,19 @@ function update_managed_record(string $collection, int $id, array $input): array
     $rows = load_collection($collection);
     foreach ($rows as $index => $row) {
         if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
+            if (in_array($collection, lifecycle_managed_collections(), true) && !record_is_active($row)) {
+                throw new ApiError('RECORD_ARCHIVED', 'Restore this archived record before editing it.', 409);
+            }
             $mergedInput = array_merge($row, $input);
+            if ($collection === 'purchases'
+                && normalize_purchase_status_value((string) ($mergedInput['status'] ?? ''))
+                    !== normalize_purchase_status_value((string) ($row['status'] ?? ''))) {
+                throw new ApiError(
+                    'RECEIPT_WORKFLOW_REQUIRED',
+                    'Purchase status is derived from receipt events. Use the Receive and Store workflow.',
+                    409
+                );
+            }
             $lineInventoryLocked = $collection === 'purchase-lines' && purchase_line_is_inventory_locked($row, $id);
             if ($collection === 'purchase-lines') {
                 $originalPurchaseId = (int) ($row['purchaseId'] ?? 0);
@@ -1247,7 +1370,7 @@ function update_managed_record(string $collection, int $id, array $input): array
                     );
                 }
             }
-            if ($collection === 'purchases' && (purchase_relationship_summary($id)['hasInventory'] ?? false) === true) {
+            if ($collection === 'purchases' && purchase_inventory_is_locked($id)) {
                 $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
                 $protectedFields = array_values(array_diff(
                     array_merge($config['text'], $config['int'], $config['money']),
@@ -1282,8 +1405,7 @@ function update_managed_record(string $collection, int $id, array $input): array
                 }
             }
             if ($collection === 'purchases') {
-                $relationships = purchase_relationship_summary($id);
-                if (($relationships['hasInventory'] ?? false) === true) {
+                if (purchase_inventory_is_locked($id)) {
                     $safeHeaderFields = ['invoiceNumber', 'expectedDate', 'trackingNumber', 'notes'];
                     $protectedFields = array_values(array_diff(
                         array_merge($config['text'], $config['int'], $config['money']),
@@ -1319,6 +1441,66 @@ function update_managed_record(string $collection, int $id, array $input): array
             audit_record($config['page'], 'update ' . $config['label'], ['collection' => $collection, 'id' => $id]);
             return $updated;
         }
+    }
+    throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
+}
+
+function set_managed_record_active_state(string $collection, int $id, bool $isActive): array
+{
+    if (!data_transaction_active()) {
+        return with_data_transaction(static fn (): array => set_managed_record_active_state($collection, $id, $isActive));
+    }
+    $config = managed_collection_config($collection);
+    if (!in_array($collection, lifecycle_managed_collections(), true)) {
+        throw new ApiError('ARCHIVE_NOT_SUPPORTED', 'Archive and restore are not supported for this collection.', 405);
+    }
+    $rows = load_collection($collection);
+    foreach ($rows as $index => $row) {
+        if (!is_array($row) || (int) ($row['id'] ?? 0) !== $id) {
+            continue;
+        }
+        if (!$isActive && in_array($collection, ['storage-locations', 'storage-sub-locations'], true)) {
+            $relationshipField = $collection === 'storage-locations' ? 'storageLocationId' : 'storageSubLocationId';
+            foreach (load_collection('lot-location-balances') as $balance) {
+                if (is_array($balance)
+                    && (int) ($balance[$relationshipField] ?? 0) === $id
+                    && (int) ($balance['quantity'] ?? 0) > 0) {
+                    throw new ApiError(
+                        'ACTIVE_INVENTORY_ASSIGNED',
+                        'Move all current inventory out of this storage record before archiving it.',
+                        409
+                    );
+                }
+            }
+        }
+        if (!$isActive && $collection === 'storage-locations') {
+            foreach (load_collection('storage-sub-locations') as $section) {
+                if (is_array($section)
+                    && (int) ($section['storageLocationId'] ?? 0) === $id
+                    && record_is_active($section)) {
+                    throw new ApiError(
+                        'ACTIVE_SECTIONS_ASSIGNED',
+                        'Archive this Humidor\'s active sections before archiving the Humidor.',
+                        409
+                    );
+                }
+            }
+        }
+        if ($isActive && $collection === 'storage-sub-locations') {
+            $parent = find_by_id('storage-locations', (int) ($row['storageLocationId'] ?? 0));
+            if (!record_is_active($parent)) {
+                throw new ApiError('RECORD_ARCHIVED', 'Restore the parent Humidor before restoring this section.', 409);
+            }
+        }
+        if (record_is_active($row) === $isActive) {
+            return $row;
+        }
+        $rows[$index]['isActive'] = $isActive;
+        $rows[$index]['updatedAt'] = now_iso();
+        save_collection($collection, $rows);
+        $action = $isActive ? 'restore ' : 'archive ';
+        audit_record($config['page'], $action . $config['label'], ['collection' => $collection, 'id' => $id]);
+        return $rows[$index];
     }
     throw new ApiError('RECORD_NOT_FOUND', $config['label'] . ' was not found.', 404);
 }
@@ -1477,6 +1659,13 @@ try {
         require_auth();
         json_success(remove_inventory(request_json()));
     }
+    if (preg_match('#^/purchase-lines/([1-9][0-9]*)/receive$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'POST') {
+            json_success(receive_purchase_line(positive_int_param($matches[1], 'purchase line id'), request_json()), 201);
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
     if (preg_match('#^/records/([a-z0-9\-]+)$#', $path, $matches)) {
         require_auth();
         $collection = $matches[1];
@@ -1502,6 +1691,15 @@ try {
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }
+    if (preg_match('#^/records/([a-z0-9\-]+)/([1-9][0-9]*)/(archive|restore)$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'PATCH') {
+            $collection = $matches[1];
+            $id = positive_int_param($matches[2], 'record id');
+            json_success(set_managed_record_active_state($collection, $id, $matches[3] === 'restore'));
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
     if (preg_match('#^/inventory-events/([1-9][0-9]*)/smoking-journal$#', $path, $matches)) {
         require_auth();
         $inventoryEventId = smoking_journal_inventory_event_id_param($matches[1]);
@@ -1518,6 +1716,13 @@ try {
             $result = delete_smoking_journal($inventoryEventId);
             audit_record('Smoking Journal', 'delete', ['inventoryEventId' => $inventoryEventId]);
             json_success($result);
+        }
+        json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+    if (preg_match('#^/inventory-events/([1-9][0-9]*)/reverse$#', $path, $matches)) {
+        require_auth();
+        if ($method === 'POST') {
+            json_success(reverse_inventory_event(positive_int_param($matches[1], 'Inventory Event id'), request_json()), 201);
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
     }

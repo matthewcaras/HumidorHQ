@@ -1,10 +1,11 @@
 # Filename: sync-workbook-strengths.ps1
-# Revision : 1.1.0
-# Description : Syncs cigar strength values into an explicitly configured external runtime catalog JSON.
+# Revision : 1.2.0
+# Description : Syncs cigar strength values into the selected runtime catalog JSON.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-19
 # Changelog :
+# 1.2.0 default to repository data while retaining DataRoot and environment overrides
 # 1.1.0 require an external DataRoot or HUMIDORHQ_DATA_ROOT instead of repository data
 # 1.0.0 initial release
 
@@ -169,16 +170,14 @@ function Read-CatalogStrengthRows {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$configuredDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) { $env:HUMIDORHQ_DATA_ROOT } else { $DataRoot }
-if ([string]::IsNullOrWhiteSpace($configuredDataRoot)) {
-    throw 'DataRoot is required. Pass -DataRoot or set HUMIDORHQ_DATA_ROOT to the external runtime directory.'
+$configuredDataRoot = if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+    $DataRoot
+} elseif (-not [string]::IsNullOrWhiteSpace($env:HUMIDORHQ_DATA_ROOT)) {
+    $env:HUMIDORHQ_DATA_ROOT
+} else {
+    Join-Path $repoRoot 'data'
 }
 $resolvedDataRoot = [System.IO.Path]::GetFullPath($configuredDataRoot)
-$resolvedRepoRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
-if ($resolvedDataRoot.Equals($resolvedRepoRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-    $resolvedDataRoot.StartsWith($resolvedRepoRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Catalog strength sync refuses to write inside the HumidorHQ repository.'
-}
 $catalogPath = Join-Path $resolvedDataRoot 'catalog-cigars.json'
 if (-not (Test-Path -LiteralPath $WorkbookPath)) {
     throw "Workbook not found: $WorkbookPath"
