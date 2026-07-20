@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.4.0
+Revision: 1.4.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 18:00 ET
+Modified Date: 2026-07-20 08:00 ET
 -->
 
 # HumidorHQ Data Model
@@ -141,6 +141,8 @@ SmokingJournalEntry stores only:
 The Smoking Journal form can also update the linked Catalog cigar's Buy Again status and decision notes. Those fields remain on the Catalog record and are not duplicated in `smoking-journal-entries.json`.
 
 Date Smoked is not duplicated in the Journal table. Journal notes are separate from InventoryEvent removal notes. Deleting Journal details does not restore inventory or delete the underlying Smoked event.
+
+Catalog presents Journal history by joining each entry to its immutable Smoked InventoryEvent and linked Lot. Reversed smoke entries remain visible as preserved history but are excluded from effective smoked quantity, average rating, and latest-smoke summaries.
 
 Version 1 does not include pairing, images, photos, uploads, or image storage.
 

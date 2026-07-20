@@ -1,10 +1,12 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.28.4
+# Revision : 1.29.1
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-20 07:20 ET
+# Modified Date : 2026-07-20 08:30 ET
 # Changelog :
+# 1.29.1 verify full-width mobile Catalog Journal details and bordered cigar cards
+# 1.29.0 verify read-only Catalog Smoking Journal history, reversal status, and report links/search
 # 1.28.4 verify whole-card Collection expansion and keyboard accessibility
 # 1.28.3 verify mobile Collection avoids selected-row summary duplication and retains blend details
 # 1.28.2 verify concise Collection details, two-column mobile actions, and staging-only reconciliation
@@ -232,8 +234,8 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.20\.4') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.10\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.21\.1') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.10\.5') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -282,6 +284,12 @@ if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Acti
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
+}
+foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'function smokingJournalHistoryMetrics', 'function renderCatalogSmokingHistory', 'Journal Entries', 'Reversed — history retained', 'data-journal-catalog-id', 'journal?.notes', 'journal?.rating')) {
+    if ($appJs -notmatch [regex]::Escape($journalHistoryHook)) { throw "Smoking Journal history visibility is missing hook: $journalHistoryHook" }
+}
+foreach ($mobileCatalogHook in @('catalog-records-table', '.responsive-table > tbody > tr.responsive-detail-row > td', 'max-width: none', 'border: 2px solid rgba(242, 182, 109, 0.48)')) {
+    if ($appJs -notmatch [regex]::Escape($mobileCatalogHook) -and $appCss -notmatch [regex]::Escape($mobileCatalogHook)) { throw "Mobile Catalog presentation is missing hook: $mobileCatalogHook" }
 }
 foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', 'function preInventoryWorklist', "metricCard('Pre Inventory'", 'Pre Inventory Worklist', 'Placed Elsewhere', 'Placement Progress', 'interactive-metric-card', 'data-pre-inventory-cigar-id')) {
     if ($appJs -notmatch [regex]::Escape($preInventoryHook)) { throw "Pre Inventory Dashboard staging is missing hook: $preInventoryHook" }

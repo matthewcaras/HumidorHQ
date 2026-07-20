@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.6.3
+ * Revision: 1.6.5
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-20 06:30 ET
+ * Modified Date: 2026-07-20 08:30 ET
  */
 
 :root {
@@ -292,6 +292,10 @@ h3 {
 
 .metric-grid.compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-grid.journal-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card {
@@ -1038,6 +1042,11 @@ h3 {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.smoking-journal-table td:nth-child(6) {
+  min-width: 220px;
+  white-space: normal;
+}
+
 
 .hidden-page-tools {
   display: flex;
@@ -1362,8 +1371,11 @@ code {
 
   .responsive-table > tbody > tr.responsive-detail-row > td {
     border-bottom: 0;
+    box-sizing: border-box;
     display: block;
+    max-width: none;
     padding: 0 0 12px;
+    width: 100%;
   }
 
   .responsive-table > tbody > tr.responsive-detail-row > td::before {
@@ -1397,6 +1409,12 @@ code {
   .collection-expanded-card {
     margin-top: 0;
     padding: 12px;
+    width: 100%;
+  }
+
+  .catalog-records-table > tbody > tr:not(.responsive-detail-row) {
+    border: 2px solid rgba(242, 182, 109, 0.48);
+    box-shadow: inset 3px 0 0 rgba(212, 154, 82, 0.14);
   }
 
   .collection-detail-table {

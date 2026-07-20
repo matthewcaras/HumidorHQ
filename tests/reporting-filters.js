@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.6.4
- * Description: Isolated assertions for Collection, Catalog, purchase-history, and Buy Again behavior.
- * Modified Date: 2026-07-20 07:20 ET
+ * Revision: 1.7.0
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, and Smoking Journal history behavior.
+ * Modified Date: 2026-07-20 08:00 ET
  */
 
 const fs = require('node:fs')
@@ -43,14 +43,14 @@ state.records = {
   'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }, { id: 2, name: 'Pre Inventory', isActive: true }],
   'storage-sub-locations': [],
   'inventory-events': [
-    { id: 10, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1 },
-    { id: 11, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1 },
-    { id: 12, eventType: 'SMOKED', lotId: 2, catalogCigarId: 2 },
+    { id: 10, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1, eventDate: '2026-01-05', quantity: 1, fromStorageLocationId: 1 },
+    { id: 11, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1, eventDate: '2026-02-05', quantity: 1, fromStorageLocationId: 1 },
+    { id: 12, eventType: 'SMOKED', lotId: 2, catalogCigarId: 2, eventDate: '2026-03-05', quantity: 1, fromStorageLocationId: 2 },
   ],
   'smoking-journal-entries': [
-    { id: 1, inventoryEventId: 10, rating: 8 },
-    { id: 2, inventoryEventId: 11, rating: 9 },
-    { id: 3, inventoryEventId: 12, rating: 10 },
+    { id: 1, inventoryEventId: 10, rating: 8, notes: 'Cedar and cream' },
+    { id: 2, inventoryEventId: 11, rating: 9, notes: 'Pepper finish' },
+    { id: 3, inventoryEventId: 12, rating: 10, notes: 'Dark chocolate' },
   ],
 }
 
@@ -60,6 +60,17 @@ testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').lengt
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
+let catalogJournalRows = smokingJournalHistoryRows(1)
+let catalogJournalMetrics = smokingJournalHistoryMetrics(catalogJournalRows)
+testAssert(catalogJournalRows.length === 2 && catalogJournalRows[0].event.id === 11 && catalogJournalRows[1].event.id === 10, 'Catalog Smoking Journal history is not ordered newest first.')
+testAssert(catalogJournalRows.every((row) => row.locationLabel === 'Main Humidor'), 'Catalog Smoking Journal history lost its source Humidor context.')
+testAssert(catalogJournalMetrics.totalEntries === 2 && catalogJournalMetrics.effectiveQuantity === 2, 'Catalog Smoking Journal entry or effective quantity totals are incorrect.')
+testAssert(catalogJournalMetrics.averageRating === 8.5 && catalogJournalMetrics.lastSmokedDate === '2026-02-05', 'Catalog Smoking Journal rating or last-smoked summary is incorrect.')
+state.reportPeriod = 'lifetime'
+state.reportRemovalType = 'all'
+state.reportSearch = 'pepper finish'
+testAssert(filteredRemovalEvents().length === 1 && filteredRemovalEvents()[0].id === 11, 'Removal History search did not match Smoking Journal notes.')
+state.reportSearch = ''
 let preInventory = preInventoryDashboardSummary()
 testAssert(preInventory?.humidor.id === 2 && preInventory.totalQuantity === 2, 'Dashboard Pre Inventory summary is incorrect.')
 let stagingRows = preInventoryWorklist(preInventory)
@@ -167,6 +178,12 @@ testAssert(state.collectionHumidorFilterId === 2 && state.collectionSectionFilte
 testAssert(balanceAllowsCountReconciliation({ humidor: { name: 'Pre Inventory', isActive: true } }), 'Active Pre Inventory balance should allow count reconciliation.')
 testAssert(!balanceAllowsCountReconciliation({ humidor: { name: 'Main Humidor', isActive: true } }), 'Permanently placed balance should not show count reconciliation.')
 testAssert(!balanceAllowsCountReconciliation({ humidor: { name: 'Pre Inventory', isActive: false } }), 'Archived Pre Inventory balance should not show count reconciliation.')
+state.records['inventory-events'].push({ id: 13, eventType: 'REVERSAL', reversesInventoryEventId: 11 })
+catalogJournalRows = smokingJournalHistoryRows(1)
+catalogJournalMetrics = smokingJournalHistoryMetrics(catalogJournalRows)
+testAssert(catalogJournalRows.find((row) => row.event.id === 11)?.reversed === true, 'Catalog Smoking Journal did not mark reversed smoke history.')
+testAssert(catalogJournalMetrics.totalEntries === 2 && catalogJournalMetrics.effectiveQuantity === 1, 'Reversed Smoking Journal history was not excluded from effective quantity.')
+testAssert(catalogJournalMetrics.averageRating === 8 && catalogJournalMetrics.lastSmokedDate === '2026-01-05', 'Reversed Smoking Journal history was not excluded from effective rating and date summaries.')
 state.selectedCollectionCigarId = null
 toggleCollectionCigarSelection('2')
 testAssert(state.selectedCollectionCigarId === 2, 'Whole-card Collection selection did not expand the requested cigar.')
