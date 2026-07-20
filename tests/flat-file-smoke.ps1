@@ -1,10 +1,13 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.3
+# Revision : 1.32.6
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-20 11:45 ET
+# Modified Date : 2026-07-20 13:00 ET
 # Changelog :
+# 1.32.6 verify concise collapsible report section headers
+# 1.32.5 verify collapsible report sections and removed Buy Again report section
+# 1.32.4 verify headless-safe Activity drill-through helpers
 # 1.32.3 verify headless-safe buy-again and aging drill-through helpers
 # 1.32.2 verify Buy Again and Inventory Aging drill-through navigation
 # 1.32.1 verify clickable Purchase Trend drill-through into filtered Purchases
@@ -241,7 +244,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.5') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.9') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.12\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -287,8 +290,8 @@ if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing pr
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.') { throw 'Reports page must render the activity history section.' }
-foreach ($activityReportHook in @('function filteredActivityEvents', 'function activityEventLocationLabel', 'function activityRelationshipEvent', 'function renderActivityReference', 'activityPeriod', 'activityType', 'activityLotId', 'activityHumidorId', 'Search Activity', 'Reversed by Event #')) {
+if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch "title: 'Activity'" -or $appJs -notmatch 'matching purchase, movement, removal, and reversal events.') { throw 'Reports page must render the activity history section.' }
+foreach ($activityReportHook in @('function filteredActivityEvents', 'function activityEventLocationLabel', 'function activityRelationshipEvent', 'function activityEventContextTarget', 'function openActivityEventContext', 'function createCollapsibleReportSection', 'report-collapsible', 'report-collapsible-body', 'function renderActivityReference', 'activityPeriod', 'activityType', 'activityLotId', 'activityHumidorId', 'Search Activity', 'Reversed by Event #', 'Open Purchase', 'Open Collection')) {
     if ($appJs -notmatch [regex]::Escape($activityReportHook)) { throw "Filterable Activity reporting is missing hook: $activityReportHook" }
 }
 foreach ($agingReportHook in @('function inventoryAgingRows', 'function summarizeInventoryAging', 'function inventoryAgingBucketSummaries', 'function renderInventoryAgingReport', 'Unknown Receipt Date', 'Future Receipt Date', 'agingManufacturer', 'agingHumidorId', 'data-aging-cigar-id', 'costValueCents', 'msrpValueCents')) {
@@ -308,7 +311,8 @@ foreach ($trendReportHook in @('function renderPurchaseTrendReport', 'function p
 foreach ($buyAgainDrillHook in @('function openCatalogForBuyAgainCigar', 'data-buy-again-cigar-id')) {
     if ($appJs -notmatch [regex]::Escape($buyAgainDrillHook)) { throw "Buy Again drill-through is missing hook: $buyAgainDrillHook" }
 }
-foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
+if ($appJs -match 'renderPurchaseHistoryReport\(view\)\s+renderBuyAgainReport\(view\)') { throw 'Reports page must not render the Buy Again report section.' }
+foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
 }
 foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'function smokingJournalHistoryMetrics', 'function renderCatalogSmokingHistory', 'Journal Entries', 'Reversed — history retained', 'data-journal-catalog-id', 'journal?.notes', 'journal?.rating')) {

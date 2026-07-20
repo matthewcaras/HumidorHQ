@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.4
+Revision: 1.30.8
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 10:30 ET
+Modified Date: 2026-07-20 13:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,30 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.8 - 2026-07-20
+
+Changed by: Matt
+
+- Tightened the report header layout and shortened the summary text on the collapsible report sections.
+
+## 1.30.7 - 2026-07-20
+
+Changed by: Matt
+
+- Made the report sections collapsible and removed the dedicated Buy Again report section from Reports.
+
+## 1.30.6 - 2026-07-20
+
+Changed by: Matt
+
+- Added direct drill-through actions from Activity rows into the matching Purchase or Collection context.
+
+## 1.30.5 - 2026-07-20
+
+Changed by: Matt
+
+- Added Activity drill-through actions for opening the matching Purchase or Collection context directly from report rows.
 
 ## 1.30.4 - 2026-07-20
 
