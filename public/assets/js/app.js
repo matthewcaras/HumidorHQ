@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.23.1
+ * Revision: 1.24.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 09:45 ET
+ * Modified Date: 2026-07-20 10:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -66,6 +66,7 @@ const state = {
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
   purchaseHistoryBuyAgainFilter: '',
+  purchaseTrendPeriod: 'year',
   agingManufacturer: '',
   agingHumidorId: '',
   selectedAgingBucketKey: null,
@@ -4368,6 +4369,286 @@ function purchaseHistoryTotalPaid(rows) {
   return completeMoneyTotal(uniquePurchaseHistoryPurchases(rows).map((purchase) => purchase.totalPaid))
 }
 
+function purchaseTrendMonthLabel(year, month) {
+  const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${monthLabels[month - 1] || 'Unknown'} ${year}`
+}
+
+function purchaseTrendPeriodInfo(purchase) {
+  const purchaseDate = String(purchase?.purchaseDate || '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(purchaseDate)
+  if (!match) {
+    return { key: 'unknown', label: 'Unknown Purchase Date', sortKey: -1 }
+  }
+  const year = Number(match[1])
+  const month = Number(match[2])
+  if (state.purchaseTrendPeriod === 'month') {
+    return {
+      key: `${match[1]}-${match[2]}`,
+      label: purchaseTrendMonthLabel(year, month),
+      sortKey: year * 100 + month,
+    }
+  }
+  return {
+    key: match[1],
+    label: match[1],
+    sortKey: year,
+  }
+}
+
+function purchaseTrendPurchaseQuantity(purchaseId) {
+  return records('purchase-lines')
+    .filter((line) => Number(line.purchaseId || 0) === Number(purchaseId || 0))
+    .reduce((sum, line) => sum + numericValue(line.quantity), 0)
+}
+
+function summarizePurchaseTrendPurchases(purchases) {
+  const totalCigars = purchases.reduce((sum, purchase) => sum + purchaseTrendPurchaseQuantity(purchase.id), 0)
+  const totalPaid = completeMoneyTotal(purchases.map((purchase) => purchase.totalPaid))
+  return {
+    purchaseCount: purchases.length,
+    cigarCount: totalCigars,
+    totalPaid,
+    averagePaidPerCigar: totalPaid !== null && totalCigars > 0 ? roundMoney(totalPaid / totalCigars) : null,
+  }
+}
+
+function purchaseTrendRows() {
+  const rowsByKey = new Map()
+  sortPurchasesNewest(records('purchases')).forEach((purchase) => {
+    const period = purchaseTrendPeriodInfo(purchase)
+    if (!rowsByKey.has(period.key)) {
+      rowsByKey.set(period.key, {
+        key: period.key,
+        label: period.label,
+        sortKey: period.sortKey,
+        purchases: [],
+      })
+    }
+    rowsByKey.get(period.key).purchases.push(purchase)
+  })
+  return [...rowsByKey.values()]
+    .map((row) => ({ ...row, ...summarizePurchaseTrendPurchases(row.purchases) }))
+    .sort((left, right) => right.sortKey - left.sortKey || left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }))
+}
+
+function purchaseTrendVendorRows() {
+  const rowsByKey = new Map()
+  records('purchases').forEach((purchase) => {
+    const vendorId = Number(purchase.vendorId || 0)
+    const label = vendorName(vendorId) || (vendorId > 0 ? `Vendor ${vendorId}` : 'Unknown Vendor')
+    if (!rowsByKey.has(vendorId)) {
+      rowsByKey.set(vendorId, {
+        key: vendorId,
+        label,
+        purchases: [],
+      })
+    }
+    rowsByKey.get(vendorId).purchases.push(purchase)
+  })
+  return [...rowsByKey.values()]
+    .map((row) => ({ ...row, ...summarizePurchaseTrendPurchases(row.purchases) }))
+    .sort((left, right) => {
+      const leftKnown = hasKnownMoney(left.totalPaid)
+      const rightKnown = hasKnownMoney(right.totalPaid)
+      if (leftKnown !== rightKnown) return leftKnown ? -1 : 1
+      const leftCents = leftKnown ? Math.round(Number(left.totalPaid) * 100) : 0
+      const rightCents = rightKnown ? Math.round(Number(right.totalPaid) * 100) : 0
+      return rightCents - leftCents || left.label.localeCompare(right.label, undefined, { sensitivity: 'base' })
+    })
+}
+
+function purchaseTrendManufacturerRows() {
+  const allocations = purchaseHistoryPaidAllocations()
+  const rowsByKey = new Map()
+  records('purchase-lines').forEach((line) => {
+    const purchase = recordById('purchases', line.purchaseId)
+    if (!purchase) return
+    const cigar = recordById('catalog-cigars', line.catalogCigarId)
+    const label = String(cigar?.manufacturer || 'Unknown Manufacturer').trim() || 'Unknown Manufacturer'
+    const key = label.toLowerCase()
+    if (!rowsByKey.has(key)) {
+      rowsByKey.set(key, {
+        key,
+        label,
+        purchases: new Set(),
+        allocatedPaidValues: [],
+        cigarCount: 0,
+      })
+    }
+    const row = rowsByKey.get(key)
+    row.purchases.add(Number(purchase.id))
+    row.cigarCount += numericValue(line.quantity)
+    const attributedPaid = allocations.get(Number(line.id))
+    row.allocatedPaidValues.push(attributedPaid === undefined ? null : attributedPaid)
+  })
+  return [...rowsByKey.values()]
+    .map((row) => {
+      const totalPaid = completeMoneyTotal(row.allocatedPaidValues)
+      return {
+        key: row.key,
+        label: row.label,
+        purchaseCount: row.purchases.size,
+        cigarCount: row.cigarCount,
+        totalPaid,
+        averagePaidPerCigar: totalPaid !== null && row.cigarCount > 0 ? roundMoney(totalPaid / row.cigarCount) : null,
+      }
+    })
+    .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }))
+}
+
+function renderPurchaseTrendReport(view) {
+  const summary = summarizePurchaseTrendPurchases(records('purchases'))
+  const trendRows = purchaseTrendRows()
+  const vendorRows = purchaseTrendVendorRows()
+  const manufacturerRows = purchaseTrendManufacturerRows()
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel removal-report-panel purchase-trend-panel'
+  panel.innerHTML = `
+    <div class="section-heading report-title">
+      <div>
+        <h3>Purchase Trend Analytics</h3>
+        <p class="muted">Review stored purchase totals by year or month. Vendor and manufacturer breakdowns stay read-only, and manufacturer shares use the same weighted line allocations as Purchase History.</p>
+      </div>
+    </div>
+  `
+
+  const filters = document.createElement('div')
+  filters.className = 'report-filter-grid'
+  const period = document.createElement('fieldset')
+  period.className = 'report-filter-group'
+  period.innerHTML = '<legend>Period Grouping</legend>'
+  const periodButtons = document.createElement('div')
+  periodButtons.className = 'report-filter-buttons purchase-report-group-buttons'
+  periodButtons.append(
+    reportFilterButton('By Year', 'year', 'purchaseTrendPeriod'),
+    reportFilterButton('By Month', 'month', 'purchaseTrendPeriod'),
+  )
+  period.append(periodButtons)
+  filters.append(period)
+  panel.append(filters)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid report-count-grid'
+  metrics.append(
+    metricCard('Purchase Orders', summary.purchaseCount, ''),
+    metricCard('Cigars Purchased', summary.cigarCount, ''),
+    metricCard('Total Paid', summary.totalPaid, '', true),
+    metricCard('Avg Paid / Cigar', summary.averagePaidPerCigar, '', true),
+  )
+  panel.append(metrics)
+
+  if (trendRows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No purchases are available for trend analytics.</p>'
+    panel.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const trendHeading = document.createElement('h4')
+  trendHeading.className = 'report-values-title'
+  trendHeading.textContent = state.purchaseTrendPeriod === 'month' ? 'Monthly Trend' : 'Yearly Trend'
+  panel.append(trendHeading)
+
+  const trendTableWrap = document.createElement('div')
+  trendTableWrap.className = 'table-scroll compact-top-gap'
+  trendTableWrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>${escapeHtml(state.purchaseTrendPeriod === 'month' ? 'Month' : 'Year')}</th>
+          <th>Purchase Orders</th>
+          <th>Cigars Purchased</th>
+          <th>Total Paid</th>
+          <th>Avg Paid / Cigar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${trendRows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${formatCount(row.purchaseCount)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${escapeHtml(money(row.totalPaid))}</td>
+            <td>${escapeHtml(money(row.averagePaidPerCigar))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  panel.append(trendTableWrap)
+
+  const vendorHeading = document.createElement('h4')
+  vendorHeading.className = 'report-values-title'
+  vendorHeading.textContent = 'Vendor Breakdown'
+  panel.append(vendorHeading)
+
+  const vendorTableWrap = document.createElement('div')
+  vendorTableWrap.className = 'table-scroll compact-top-gap'
+  vendorTableWrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Vendor</th>
+          <th>Purchase Orders</th>
+          <th>Cigars Purchased</th>
+          <th>Total Paid</th>
+          <th>Avg Paid / Cigar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${vendorRows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${formatCount(row.purchaseCount)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${escapeHtml(money(row.totalPaid))}</td>
+            <td>${escapeHtml(money(row.averagePaidPerCigar))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  panel.append(vendorTableWrap)
+
+  const manufacturerHeading = document.createElement('h4')
+  manufacturerHeading.className = 'report-values-title'
+  manufacturerHeading.textContent = 'Manufacturer Breakdown'
+  panel.append(manufacturerHeading)
+
+  const manufacturerTableWrap = document.createElement('div')
+  manufacturerTableWrap.className = 'table-scroll compact-top-gap'
+  manufacturerTableWrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Manufacturer</th>
+          <th>Purchase Orders</th>
+          <th>Cigars Purchased</th>
+          <th>Total Paid</th>
+          <th>Avg Paid / Cigar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${manufacturerRows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${formatCount(row.purchaseCount)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${escapeHtml(money(row.totalPaid))}</td>
+            <td>${escapeHtml(money(row.averagePaidPerCigar))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  panel.append(manufacturerTableWrap)
+
+  view.append(panel)
+}
+
 function renderPurchaseHistoryReport(view) {
   const rows = purchaseHistoryRows()
   const purchases = uniquePurchaseHistoryPurchases(rows)
@@ -4786,6 +5067,7 @@ function renderActivityReference(cell, event) {
 }
 
 function renderReportsPage(view) {
+  renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)
   renderBuyAgainReport(view)
   renderInventoryAgingReport(view)
