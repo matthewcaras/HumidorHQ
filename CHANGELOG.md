@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.2
+Revision: 1.30.4
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-20 10:30 ET
 -->
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.4 - 2026-07-20
+
+Changed by: Matt
+
+- Made the drill-through page navigation safe for isolated regression tests that do not provide a browser window.
+
+## 1.30.3 - 2026-07-20
+
+Changed by: Matt
+
+- Added drill-through from Buy Again rows to the matching Catalog cigar and from Inventory Aging rows to the filtered Collection view.
 
 ## 1.30.2 - 2026-07-20
 

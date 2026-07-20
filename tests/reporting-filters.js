@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.2
+ * Revision: 1.10.4
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-20 11:00 ET
+ * Modified Date: 2026-07-20 11:45 ET
  */
 
 const fs = require('node:fs')
@@ -227,6 +227,14 @@ testAssert(filteredPurchases.length === 2 && filteredPurchases[0].id === 2 && fi
 state.purchaseRecordsFilterType = ''
 state.purchaseRecordsFilterValue = ''
 state.purchaseRecordsFilterLabel = ''
+openCatalogForBuyAgainCigar(1)
+testAssert(state.selectedCatalogHistoryCigarId === 1 && state.catalogSearch === '' && state.activePage === 'Catalog', 'Buy Again drill-through did not select the Catalog cigar.')
+state.selectedCatalogHistoryCigarId = null
+state.agingHumidorId = '2'
+openCollectionForAgingCigar(2)
+testAssert(state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === null && state.selectedCollectionCigarId === 2 && state.collectionScrollTargetCigarId === 2 && state.activePage === 'Collection', 'Inventory Aging drill-through did not open the filtered Collection view.')
+state.agingHumidorId = ''
+state.activePage = 'Dashboard'
 state.purchaseTrendPeriod = 'year'
 const pennyAllocation = allocatePurchasePaidCents(
   { totalPaid: '0.01' },
