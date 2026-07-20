@@ -1,10 +1,11 @@
 # Filename: rebuild-inventory-state.ps1
-# Revision : 1.1.0
+# Revision : 1.2.0
 # Description : Rebuilds lot balances and purchase-receipt inventory events from purchases, purchase lines, lots, and non-receipt events.
 # Author : OpenAI Codex
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-19 18:00 ET
 # Changelog :
+# 1.2.0 refuse rebuilds that cannot preserve reversals or inventory adjustments
 # 1.1.0 require an isolated data root or explicit destructive override
 # 1.0.0 initial rebuild utility after purchase-sync scoping fix
 
@@ -89,6 +90,14 @@ $purchaseLines = @(Load-JsonFile $linesPath)
 $lots = @(Load-JsonFile $lotsPath)
 $events = @(Load-JsonFile $eventsPath)
 $counters = Load-JsonFile $countersPath
+
+$unsupportedLedgerEvents = @($events | Where-Object {
+    $normalizedType = ([string]$_.eventType).Trim().ToUpperInvariant().Replace('-', '_')
+    $normalizedType -in @('REVERSAL', 'INVENTORY_ADJUSTMENT')
+})
+if ($unsupportedLedgerEvents.Count -gt 0) {
+    throw 'SAFETY STOP: this rebuild algorithm cannot preserve REVERSAL or INVENTORY_ADJUSTMENT ledger semantics. Use the normal authenticated API workflows instead.'
+}
 
 $purchasesById = @{}
 foreach ($purchase in $purchases) { $purchasesById[[int]$purchase.id] = $purchase }

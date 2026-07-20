@@ -1,10 +1,11 @@
 # Filename: check-data-integrity.ps1
-# Revision : 1.3.0
+# Revision : 1.4.0
 # Description : Performs a read-only integrity review of HumidorHQ flat-file JSON data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-19
+# Modified Date : 2026-07-19 18:00 ET
 # Changelog :
+# 1.4.0 reconcile and validate effective append-only inventory adjustments
 # 1.3.0 default to the repository data directory while retaining DataRoot and environment overrides
 # 1.2.0 validate compensating-event references and calculate inventory from effective unreversed events
 # 1.1.0 resolve the default data root from HUMIDORHQ_DATA_ROOT instead of repository data
@@ -163,6 +164,7 @@ $receiptQuantity = 0
 $smokedQuantity = 0
 $giftedQuantity = 0
 $discardedQuantity = 0
+$adjustmentNetQuantity = 0
 foreach ($event in $collections['inventory-events']) {
     $eventId = [int]($event.id ?? 0)
     $quantity = [int]($event.quantity ?? 0)
@@ -173,6 +175,18 @@ foreach ($event in $collections['inventory-events']) {
             'SMOKED' { $smokedQuantity += $quantity }
             'GIFTED' { $giftedQuantity += $quantity }
             'DISCARDED' { $discardedQuantity += $quantity }
+            'INVENTORY-ADJUSTMENT' {
+                $direction = ([string]$event.adjustmentDirection).Trim().ToUpperInvariant()
+                $quantityChange = [int]($event.quantityChange ?? 0)
+                $beforeQuantity = [int]($event.balanceQuantityBefore ?? -1)
+                $afterQuantity = [int]($event.balanceQuantityAfter ?? -1)
+                $expectedChange = if ($direction -eq 'INCREASE') { $quantity } elseif ($direction -eq 'DECREASE') { -$quantity } else { 0 }
+                if ($direction -notin @('INCREASE', 'DECREASE') -or $quantity -lt 1 -or $quantityChange -ne $expectedChange -or $beforeQuantity -lt 0 -or $afterQuantity -lt 0 -or ($afterQuantity - $beforeQuantity) -ne $quantityChange) {
+                    Write-IntegrityMessage ERROR 'INVALID_INVENTORY_ADJUSTMENT' "Inventory Adjustment event id $($event.id) has inconsistent direction, quantity, or before/after values."
+                } else {
+                    $adjustmentNetQuantity += $quantityChange
+                }
+            }
         }
     }
 
@@ -197,15 +211,16 @@ foreach ($event in $collections['inventory-events']) {
     }
 }
 
-$expectedCurrentQuantity = $receiptQuantity - $smokedQuantity - $giftedQuantity - $discardedQuantity
+$expectedCurrentQuantity = $receiptQuantity + $adjustmentNetQuantity - $smokedQuantity - $giftedQuantity - $discardedQuantity
 Write-IntegrityMessage INFO 'POSITIVE_BALANCE_QUANTITY' "Positive balance quantity: $positiveBalanceQuantity"
 Write-IntegrityMessage INFO 'RECEIPT_QUANTITY' "Receipt quantity: $receiptQuantity"
 Write-IntegrityMessage INFO 'SMOKED_QUANTITY' "Smoked quantity: $smokedQuantity"
 Write-IntegrityMessage INFO 'GIFTED_QUANTITY' "Gifted quantity: $giftedQuantity"
 Write-IntegrityMessage INFO 'DISCARDED_QUANTITY' "Discarded quantity: $discardedQuantity"
+Write-IntegrityMessage INFO 'ADJUSTMENT_NET_QUANTITY' "Net inventory adjustment quantity: $adjustmentNetQuantity"
 Write-IntegrityMessage INFO 'EXPECTED_CURRENT_QUANTITY' "Expected current quantity: $expectedCurrentQuantity"
 if ($positiveBalanceQuantity -ne $expectedCurrentQuantity) {
-    Write-IntegrityMessage ERROR 'BALANCE_TOTAL_MISMATCH' "Positive balances ($positiveBalanceQuantity) do not equal receipts less removals ($expectedCurrentQuantity)."
+    Write-IntegrityMessage ERROR 'BALANCE_TOTAL_MISMATCH' "Positive balances ($positiveBalanceQuantity) do not equal receipts plus net adjustments less removals ($expectedCurrentQuantity)."
 }
 
 $positiveBalancesByLot = @($collections['lot-location-balances'] | Where-Object { [int]($_.quantity ?? 0) -gt 0 } | Group-Object { [int]($_.lotId ?? 0) })

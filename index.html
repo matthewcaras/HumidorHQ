@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.4.20
+Revision: 1.4.28
 Description: HTML entry point for the HumidorHQ flat-file app.
-Modified Date: 2026-07-19 17:00 ET
+Modified Date: 2026-07-20 07:20 ET
 -->
 
 <!doctype html>
@@ -13,13 +13,23 @@ Modified Date: 2026-07-19 17:00 ET
     <meta name="description" content="HumidorHQ flat-file cigar collection manager">
     <title>HumidorHQ</title>
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.0">
-    <link rel="stylesheet" href="public/assets/css/app.css?v=1.9.8">
+    <link rel="stylesheet" href="public/assets/css/app.css?v=1.10.3">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand">
-          <h1>HumidorHQ</h1>
+          <div class="brand-row">
+            <h1>HumidorHQ</h1>
+            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="app-nav" aria-expanded="true">
+              <span aria-hidden="true" data-sidebar-toggle-icon>&lsaquo;</span>
+              <span class="sidebar-toggle-label" data-sidebar-toggle-label>Collapse</span>
+            </button>
+          </div>
+        </div>
+        <div class="mobile-primary-nav" aria-label="Mobile primary pages">
+          <button type="button" data-mobile-primary-page="Dashboard">Dashboard</button>
+          <button type="button" data-mobile-primary-page="Collection">Collection</button>
         </div>
         <nav class="nav" id="app-nav"></nav>
         <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
@@ -38,7 +48,7 @@ Modified Date: 2026-07-19 17:00 ET
       </main>
     </div>
 
-    <script src="public/assets/js/app.js?v=1.18.0" defer></script>
+    <script src="public/assets/js/app.js?v=1.20.4" defer></script>
   </body>
 </html>
 

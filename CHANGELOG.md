@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.24.0
+Revision: 1.26.4
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 17:00 ET
+Modified Date: 2026-07-20 07:20 ET
 -->
 
 # Changelog
@@ -21,6 +21,79 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.26.4 - 2026-07-20
+
+Changed by: Matt
+
+- Made the complete Collection cigar summary row/card toggle its expanded Lot/location details instead of limiting the click target to the cigar name.
+- Added focus, expanded-state labeling, and Enter/Space keyboard activation while preserving interactive child-control behavior.
+- Added regression coverage for selection toggling and accessible whole-card hooks.
+
+## 1.26.3 - 2026-07-20
+
+Changed by: Matt
+
+- Hid the aggregate On Hand, Lots, Oldest, average cost/MSRP, and Humidor-location cells from mobile cigar cards even while expanded, leaving the Lot/location detail as the single mobile source for those values.
+- Restored wrapper, binder, and filler information beside strength and Buy Again in the primary cigar identity shown on desktop and mobile.
+- Added regression coverage for the non-duplicated mobile summary and retained blend information.
+
+## 1.26.2 - 2026-07-20
+
+Changed by: Matt
+
+- Removed the duplicated cigar heading and blend summary from expanded Collection details on desktop and mobile.
+- Arranged mobile Collection actions in two columns to shorten each expanded Lot/location card.
+- Limited the Reconcile Count action to positive balances inside the active `Pre Inventory` Humidor so it disappears after permanent placement.
+- Added regression coverage for active staging visibility and permanent/archived location suppression.
+
+## 1.26.1 - 2026-07-19
+
+Changed by: Matt
+
+- Kept the desktop sidebar toggle arrow-only while retaining an accessible label and a visible Menu label on mobile.
+- Added paired Dashboard and Collection shortcuts to the initial collapsed mobile header.
+- Compacted mobile Dashboard and purchase cards and placed Collection On Hand, Cost Basis, and MSRP summary values in one row.
+- Limited collapsed mobile Collection records to cigar identity and collapsed purchase records to a concise date/vendor/total summary until selected.
+- Linked active Humidor names on both Dashboard and Humidors management to Collection with the selected Humidor filter applied.
+- Added regression coverage for shortcut navigation, compact mobile hooks, progressive disclosure, and shared Humidor filtering.
+
+## 1.26.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added an accessible collapsible sidebar that becomes a compact closed menu by default on mobile and closes after mobile navigation.
+- Replaced horizontal-scrolling mobile data tables with labeled stacked records while preserving expanded detail panels and table behavior on larger screens.
+- Compacted Collection sort/filter controls into a two-column mobile grid with explicit accessible labels and kept Search actions side by side.
+- Tightened mobile spacing and report controls without changing desktop workflow behavior or application data.
+- Added isolated regression coverage for navigation, responsive-table enhancement, mobile overflow prevention, and updated asset cache versions.
+
+## 1.25.2 - 2026-07-19
+
+Changed by: Matt
+
+- Strengthened the shared border treatment around expanded Collection records, managed-record edit panels, and purchase details.
+- Added a matching bordered surface around open Smoke, Give, Discard, Move, Reconcile Count, and Activity reversal forms.
+- Added isolated regression coverage for the expanded-state styling and updated the stylesheet cache version.
+
+## 1.25.1 - 2026-07-19
+
+Changed by: Matt
+
+- Defaulted each Collection move to the full quantity available in the selected Lot/location balance while retaining the ability to enter a smaller split quantity.
+- Made Pre Inventory worklist cigar links center and focus the expanded matching Collection record after navigation.
+- Added isolated regression coverage for both behaviors.
+
+## 1.25.0 - 2026-07-19
+
+Changed by: Matt
+
+- Added a guarded Collection physical-count workflow showing expected quantity, actual count, and signed variance before confirmation.
+- Added an authenticated, transactional, idempotent adjustment endpoint with exact expected-balance preconditions, required date/reason, immutable cost/MSRP snapshots, and atomic balance/Lot/event updates.
+- Added append-only reversal support for both increasing and decreasing `INVENTORY_ADJUSTMENT` events without rewriting purchase or receipt history.
+- Added signed adjustments to Activity and updated the read-only integrity checker to reconcile effective adjustment quantities into expected inventory.
+- Standardized user-facing terminology on `Discard` and `Discarded`, removing damage wording from current workflows and documentation.
+- Added isolated regression coverage for rejected/stale requests, exact replay, conflicting keys, upward/downward counts, adjustment reversals, snapshot preservation, and runtime-data hash safety.
+
 ## 1.24.0 - 2026-07-19
 
 Changed by: Matt
@@ -38,7 +111,7 @@ Changed by: Matt
 
 - Designated the existing active `Pre Inventory` Humidor by name as the staging location without adding schema fields or migrating runtime data.
 - Added a Dashboard staging count for cigars awaiting permanent placement; the count remains visible at zero while the Humidor is active and disappears automatically after archive.
-- Shortened the Dashboard removal-total label from `Discarded / Damaged` to `Discarded`.
+- Shortened the Dashboard removal-total label to `Discarded`.
 - Removed internal runtime JSON filename wording from Catalog, Vendor, and Humidor record counts.
 - Added isolated regression coverage for active/archived Pre Inventory visibility and its reconciled positive balance quantity.
 
@@ -124,10 +197,10 @@ Changed by: Matt
 
 Changed by: Matt
 
-- Added quantity-aware Smoke, Give, and Discard / Damage forms with validated historical event dates and transaction-safe removal mutations.
+- Added quantity-aware Smoke, Give, and Discard forms with validated historical event dates and transaction-safe removal mutations.
 - Added required removal idempotency keys so exact retries return the original event without changing balances, Lots, counters, events, or audit success records, while conflicting reuse is rejected.
 - Corrected removal reports and Smoking Journal snapshots to use the event's original Humidor and optional section, including General locations.
-- Added discarded/damaged quantities and values to Dashboard lifetime totals and removal report filters, summaries, and history.
+- Added discarded quantities and values to Dashboard lifetime totals and removal report filters, summaries, and history.
 - Reconnected smoked removals to a 1-10 Smoking Journal follow-up and displayed journal ratings and notes in removal history.
 - Added isolated regression coverage for retry safety, rejected dates, exact source locations, all three removal types, inventory reconciliation, journal constraints, and read-only journal reporting.
 

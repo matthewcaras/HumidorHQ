@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.4.0
+ * Revision: 1.6.4
  * Description: Isolated assertions for Collection, Catalog, purchase-history, and Buy Again behavior.
- * Modified Date: 2026-07-19 17:00 ET
+ * Modified Date: 2026-07-20 07:20 ET
  */
 
 const fs = require('node:fs')
@@ -66,6 +66,8 @@ let stagingRows = preInventoryWorklist(preInventory)
 testAssert(stagingRows.length === 1 && stagingRows[0].cigar.id === 2, 'Pre Inventory worklist cigar selection is incorrect.')
 testAssert(stagingRows[0].stagedQuantity === 2 && stagingRows[0].placedQuantity === 1 && stagingRows[0].totalQuantity === 3, 'Pre Inventory staged and placed quantities do not reconcile.')
 testAssert(Math.abs(stagingRows[0].placementPercent - (100 / 3)) < 0.0001, 'Pre Inventory placement progress is incorrect.')
+testAssert(inventoryEventCanBeReversed({ eventType: 'INVENTORY_ADJUSTMENT', id: 99 }), 'Inventory adjustments must support append-only reversal.')
+testAssert(inventoryEventDisplayQuantity({ eventType: 'INVENTORY_ADJUSTMENT', quantity: 2, quantityChange: -2 }) === -2, 'Activity must display a signed adjustment quantity.')
 state.records['storage-locations'][1].isActive = false
 preInventory = preInventoryDashboardSummary()
 testAssert(preInventory === null, 'Archived Pre Inventory Humidor should not appear in the Dashboard summary.')
@@ -136,6 +138,40 @@ testAssert(pennyAllocation.get(4) === 1 && pennyAllocation.get(5) === 0, 'Cent r
 testAssert(allocatePurchasePaidCents({ totalPaid: '4.00' }, [{ id: 1 }, { id: 2 }]) === null, 'Missing allocation weights should remain unknown.')
 testAssert(completeMoneyTotal([0, '0.00']) === 0, 'Known zero money was not preserved.')
 testAssert(completeMoneyTotal([null, '1.00']) === null, 'Unknown money was incorrectly converted to zero.')
+
+function mockClassList() {
+  const values = new Set()
+  return {
+    add(value) { values.add(value) },
+    toggle(value, enabled) { if (enabled) values.add(value); else values.delete(value) },
+    contains(value) { return values.has(value) },
+  }
+}
+const responsiveCells = [{ colSpan: 1, dataset: {} }, { colSpan: 1, dataset: {} }]
+const responsiveRow = { cells: responsiveCells, classList: mockClassList() }
+const responsiveDetailRow = { cells: [{ colSpan: 2, dataset: {} }], classList: mockClassList() }
+const responsiveTable = {
+  tHead: { rows: [{ cells: [{ textContent: 'Cigar' }, { textContent: 'On Hand' }] }] },
+  tBodies: [{ rows: [responsiveRow, responsiveDetailRow] }],
+  classList: mockClassList(),
+}
+enhanceResponsiveTables({ querySelectorAll: () => [responsiveTable] })
+testAssert(responsiveTable.classList.contains('responsive-table'), 'Responsive table enhancement did not mark the table.')
+testAssert(responsiveCells[0].dataset.label === 'Cigar' && responsiveCells[1].dataset.label === 'On Hand', 'Responsive table enhancement did not assign column labels.')
+testAssert(responsiveDetailRow.classList.contains('responsive-detail-row'), 'Responsive table enhancement did not preserve an expanded detail row.')
+state.collectionHumidorFilterId = null
+state.collectionSectionFilterId = 10
+state.selectedCollectionCigarId = 2
+selectCollectionHumidor('2')
+testAssert(state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === null && state.selectedCollectionCigarId === null, 'Humidor navigation did not apply a clean Collection filter.')
+testAssert(balanceAllowsCountReconciliation({ humidor: { name: 'Pre Inventory', isActive: true } }), 'Active Pre Inventory balance should allow count reconciliation.')
+testAssert(!balanceAllowsCountReconciliation({ humidor: { name: 'Main Humidor', isActive: true } }), 'Permanently placed balance should not show count reconciliation.')
+testAssert(!balanceAllowsCountReconciliation({ humidor: { name: 'Pre Inventory', isActive: false } }), 'Archived Pre Inventory balance should not show count reconciliation.')
+state.selectedCollectionCigarId = null
+toggleCollectionCigarSelection('2')
+testAssert(state.selectedCollectionCigarId === 2, 'Whole-card Collection selection did not expand the requested cigar.')
+toggleCollectionCigarSelection(2)
+testAssert(state.selectedCollectionCigarId === null, 'Whole-card Collection selection did not collapse the selected cigar.')
 console.log('Reporting filter assertions passed.')
 `
 

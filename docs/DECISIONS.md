@@ -1,8 +1,8 @@
 <!--
 Filename: DECISIONS.md
-Revision: 1.2.0
+Revision: 1.3.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-18 11:00 AM ET
+Modified Date: 2026-07-19 18:00 ET
 -->
 
 # HumidorHQ Project Decisions
@@ -39,6 +39,8 @@ This preserves complete history and makes calculations reliable.
 
 Correction decision:
 Inventory mistakes are corrected with one full, append-only reversal of the immutable event. Reversal is allowed only when its physical quantity can be reconciled safely, and corrected receipt facts are then entered through the normal idempotent receiving workflow. Original events, snapshots, and Smoking Journal history remain available.
+
+Physical-count variances on an existing positive balance are recorded as immutable, idempotent `INVENTORY_ADJUSTMENT` events rather than edits to purchases, receipts, or prior events. The user must review the expected quantity, actual count, and variance and provide a count date and reason. An exact expected-quantity precondition protects against stale forms. Incorrect adjustments are corrected through the same append-only reversal model.
 
 ---
 
@@ -115,7 +117,7 @@ Decision:
 Version 1 supports:
 - Smoked
 - Gifted / Shared
-- Damaged
+- Discarded
 
 Trading and loss tracking are intentionally out of scope.
 
@@ -147,7 +149,7 @@ iPhone-primary workflows:
 - Receiving and storing a purchase line.
 - Searching for a cigar and locating its humidor, drawer, or shelf.
 - Moving selected quantities between locations.
-- Recording cigars as smoked, gifted/shared, or damaged.
+- Recording cigars as smoked, gifted/shared, or discarded.
 - Browsing Collection and Humidor contents.
 - Opening Cigar Details.
 

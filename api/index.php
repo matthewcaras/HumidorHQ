@@ -2,15 +2,16 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.15.0
+ * Revision: 1.16.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-19 17:00 ET
+ * Modified Date: 2026-07-19 18:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
 require_once API_ROOT . '/lib/services/CatalogPreferenceService.php';
 require_once API_ROOT . '/lib/services/SmokingJournalService.php';
 require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
+require_once API_ROOT . '/lib/services/InventoryAdjustmentService.php';
 require_once API_ROOT . '/lib/services/InventoryReversalService.php';
 require_once API_ROOT . '/lib/services/BackupRestoreService.php';
 send_security_headers();
@@ -1716,6 +1717,10 @@ try {
     if ($path === '/inventory/remove' && $method === 'POST') {
         require_auth();
         json_success(remove_inventory(request_json()));
+    }
+    if ($path === '/inventory/adjust-count' && $method === 'POST') {
+        require_auth();
+        json_success(adjust_inventory_to_physical_count(request_json()), 201);
     }
     if (preg_match('#^/purchase-lines/([1-9][0-9]*)/receive$#', $path, $matches)) {
         require_auth();

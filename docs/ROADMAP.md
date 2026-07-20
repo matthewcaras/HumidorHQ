@@ -1,8 +1,8 @@
 <!--
 Filename: ROADMAP.md
-Revision: 1.0.0
+Revision: 1.0.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-19 18:00 ET
 -->
 
 # HumidorHQ Roadmap
@@ -44,7 +44,7 @@ HumidorHQ is being built around cigar collecting workflows: Catalog, Purchases, 
 ### Core Collection and Consumption
 
 - Calculate collection inventory from lots and transactions.
-- Track smoked cigars, gifted or shared cigars, and damaged cigars.
+- Track smoked cigars, gifted or shared cigars, and discarded cigars.
 - Support movement between humidors while keeping location history.
 
 ### Import Wizard - After Core Data Model

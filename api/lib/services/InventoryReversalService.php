@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: InventoryReversalService.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: Transactional append-only reversals for HumidorHQ inventory events.
- * Modified Date: 2026-07-18 11:00 ET
+ * Modified Date: 2026-07-19 18:00 ET
  */
 
 function reversal_normalized_event_type(array $event): string
@@ -153,7 +153,7 @@ function reverse_inventory_event(int $targetEventId, array $input): array
         throw new ApiError('RECORD_NOT_FOUND', 'Inventory Event was not found.', 404);
     }
     $targetType = reversal_normalized_event_type($target);
-    if (!in_array($targetType, ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED'], true)) {
+    if (!in_array($targetType, ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED', 'INVENTORY_ADJUSTMENT'], true)) {
         throw new ApiError('REVERSAL_NOT_SUPPORTED', 'This Inventory Event type cannot be reversed.', 409);
     }
     foreach ($events as $event) {
@@ -197,6 +197,22 @@ function reverse_inventory_event(int $targetEventId, array $input): array
         reversal_require_active_location($toLocationId, $toSectionId);
         reversal_decrement_balance($balances, $lotId, $fromLocationId, $fromSectionId, $quantity, $now);
         reversal_increment_balance($balances, $lotId, $purchaseLineId, $toLocationId, $toSectionId, $quantity, $now);
+    } elseif ($targetType === 'INVENTORY_ADJUSTMENT') {
+        $adjustmentDirection = strtoupper((string) ($target['adjustmentDirection'] ?? ''));
+        $adjustmentLocationId = positive_int_param($target['storageLocationId'] ?? null, 'adjustment Humidor id', 'INVENTORY_INTEGRITY_CONFLICT');
+        $adjustmentSectionId = normalized_relationship_id($target['storageSubLocationId'] ?? null);
+        if ($adjustmentDirection === 'INCREASE') {
+            $fromLocationId = $adjustmentLocationId;
+            $fromSectionId = $adjustmentSectionId;
+            reversal_decrement_balance($balances, $lotId, $fromLocationId, $fromSectionId, $quantity, $now);
+        } elseif ($adjustmentDirection === 'DECREASE') {
+            $toLocationId = $adjustmentLocationId;
+            $toSectionId = $adjustmentSectionId;
+            reversal_require_active_location($toLocationId, $toSectionId);
+            reversal_increment_balance($balances, $lotId, $purchaseLineId, $toLocationId, $toSectionId, $quantity, $now);
+        } else {
+            throw new ApiError('INVENTORY_INTEGRITY_CONFLICT', 'The Inventory Adjustment direction is invalid.', 409);
+        }
     } else {
         $toLocationId = positive_int_param($target['fromStorageLocationId'] ?? null, 'removal source Humidor id', 'INVENTORY_INTEGRITY_CONFLICT');
         $toSectionId = normalized_relationship_id($target['fromStorageSubLocationId'] ?? null);

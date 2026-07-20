@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.5.8
+ * Revision: 1.6.3
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-19 17:00 ET
+ * Modified Date: 2026-07-20 06:30 ET
  */
 
 :root {
@@ -34,6 +34,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 button,
@@ -49,6 +50,10 @@ textarea {
   min-height: 100vh;
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+
 .sidebar {
   background: #120d0b;
   border-right: 1px solid var(--line);
@@ -62,6 +67,61 @@ textarea {
   border-bottom: 1px solid var(--line);
   margin-bottom: 18px;
   padding-bottom: 18px;
+}
+
+.brand-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sidebar-toggle {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible {
+  background: var(--panel-muted);
+  border-color: var(--line-strong);
+  color: var(--accent-strong);
+}
+
+.sidebar-toggle-label,
+.mobile-primary-nav,
+.mobile-record-summary {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar {
+  padding: 14px 10px;
+}
+
+.sidebar-collapsed .brand {
+  border-bottom: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.sidebar-collapsed .brand-row {
+  justify-content: center;
+}
+
+.sidebar-collapsed .brand h1,
+.sidebar-collapsed .sidebar-toggle-label,
+.sidebar-collapsed .nav,
+.sidebar-collapsed .sidebar-footer {
+  display: none;
 }
 
 .brand h1 {
@@ -169,6 +229,7 @@ textarea {
   display: grid;
   align-content: start;
   gap: 16px;
+  min-width: 0;
   padding: 22px;
 }
 
@@ -178,6 +239,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 
 .hero-panel {
@@ -556,6 +618,7 @@ h3 {
 
 .selected-row td {
   background: rgba(212, 154, 82, 0.08);
+  box-shadow: inset 0 2px 0 rgba(242, 182, 109, 0.48);
 }
 
 .collection-expanded-row td {
@@ -565,8 +628,9 @@ h3 {
 
 .collection-expanded-card {
   background: var(--bg-elevated);
-  border: 1px solid var(--line);
+  border: 2px solid rgba(242, 182, 109, 0.48);
   border-radius: 7px;
+  box-shadow: inset 4px 0 0 rgba(212, 154, 82, 0.18);
   margin-top: 8px;
   padding: 14px;
 }
@@ -688,7 +752,11 @@ h3 {
 }
 
 .inline-move-form.is-open {
+  background: var(--panel-muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
   display: grid;
+  padding: 12px;
 }
 
 .strength-badge {
@@ -851,6 +919,7 @@ h3 {
 .form-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .form-field.wide {
@@ -1021,8 +1090,73 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
-    padding: 18px;
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+    padding: 12px 16px;
+  }
+
+  .sidebar-collapsed .sidebar {
+    padding: 12px 16px;
+  }
+
+  .sidebar-collapsed .brand h1,
+  .sidebar-toggle-label,
+  .sidebar-collapsed .sidebar-toggle-label {
+    display: block;
+  }
+
+  .sidebar-collapsed .brand-row {
+    justify-content: space-between;
+  }
+
+  .sidebar-collapsed .nav,
+  .sidebar-collapsed .sidebar-footer {
+    display: none;
+  }
+
+  .brand {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .sidebar-collapsed .brand {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .mobile-primary-nav {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 10px;
+  }
+
+  .app-shell:not(.sidebar-collapsed) .mobile-primary-nav {
+    display: none;
+  }
+
+  .mobile-primary-nav button {
+    background: var(--panel-muted);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 800;
+    min-height: 38px;
+    padding: 7px 8px;
+  }
+
+  .mobile-primary-nav button:hover,
+  .mobile-primary-nav button.active {
+    background: var(--accent-soft);
+    border-color: rgba(242, 182, 109, 0.42);
+    color: var(--accent-strong);
   }
 
   .nav {
@@ -1030,7 +1164,8 @@ code {
   }
 
   .main-content {
-    padding: 16px;
+    gap: 12px;
+    padding: 12px;
   }
 
   .hero-panel {
@@ -1044,6 +1179,44 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .metric-grid,
+  .dashboard-summary {
+    gap: 8px;
+  }
+
+  .metric-card {
+    padding: 10px;
+  }
+
+  .metric-card strong {
+    font-size: 1.3rem;
+    margin: 6px 0;
+  }
+
+  .metric-card small {
+    font-size: 0.72rem;
+  }
+
+  .collection-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .collection-summary-grid .metric-card {
+    padding: 8px;
+  }
+
+  .collection-summary-grid .metric-card span {
+    font-size: 0.7rem;
+  }
+
+  .collection-summary-grid .metric-card strong {
+    font-size: 1.05rem;
+  }
+
+  .collection-summary-grid .metric-card small {
+    display: none;
+  }
+
   .metric-grid.compact.lifetime-metric-grid {
     grid-template-columns: minmax(120px, 0.8fr) repeat(2, minmax(0, 1fr));
   }
@@ -1054,16 +1227,25 @@ code {
 
   .collection-controls {
     align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .collection-controls select,
   .collection-controls button {
+    flex: none;
+    font-size: 0.86rem;
+    min-height: 36px;
+    padding: 6px 8px;
     width: 100%;
   }
 
   .collection-search-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .collection-search-form .form-field {
+    grid-column: 1 / -1;
   }
 
   .collection-search-form button {
@@ -1072,6 +1254,15 @@ code {
 
   .inline-move-form.is-open {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-action-buttons button {
+    width: 100%;
   }
 
   .inline-select-row,
@@ -1096,13 +1287,125 @@ code {
   .report-filter-grid {
     grid-template-columns: 1fr;
   }
+
+  .report-filter-buttons,
+  .report-type-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-filter-button {
+    min-height: 44px;
+    padding: 7px 8px;
+  }
+
+  .table-scroll {
+    overflow-x: visible;
+  }
+
+  .responsive-table,
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-table thead {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .responsive-table > tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .responsive-table > tbody > tr:not(.responsive-detail-row) {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .responsive-table > tbody > tr:not(.responsive-detail-row) > td {
+    align-items: start;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(96px, 0.7fr) minmax(0, 1.3fr);
+    padding: 9px 10px;
+    text-align: left;
+    width: 100%;
+  }
+
+  .responsive-table > tbody > tr:not(.responsive-detail-row) > td::before {
+    color: var(--accent);
+    content: attr(data-label);
+    font-size: 0.7rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+  }
+
+  .responsive-table > tbody > tr:not(.responsive-detail-row) > td.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .responsive-table > tbody > tr:not(.responsive-detail-row) > td.row-actions::before {
+    flex-basis: 100%;
+  }
+
+  .responsive-table > tbody > tr.responsive-detail-row > td {
+    border-bottom: 0;
+    display: block;
+    padding: 0 0 12px;
+  }
+
+  .responsive-table > tbody > tr.responsive-detail-row > td::before {
+    display: none;
+  }
+
+  .collection-table > tbody > tr:not(.responsive-detail-row) > td:not(:first-child),
+  .purchase-records-table > tbody > tr:not(.selected-row):not(.responsive-detail-row) > td:not(:first-child) {
+    display: none;
+  }
+
+  .purchase-records-table > tbody > tr:not(.selected-row):not(.responsive-detail-row) > td:first-child {
+    display: block;
+  }
+
+  .purchase-records-table > tbody > tr:not(.selected-row):not(.responsive-detail-row) > td:first-child::before {
+    display: none;
+  }
+
+  .mobile-record-summary {
+    color: var(--muted);
+    display: block;
+    font-size: 0.76rem;
+    margin-top: 5px;
+  }
+
+  .purchase-records-table > tbody > tr.selected-row .mobile-record-summary {
+    display: none;
+  }
+
+  .collection-expanded-card {
+    margin-top: 0;
+    padding: 12px;
+  }
+
+  .collection-detail-table {
+    margin-top: 8px;
+  }
 }
 
 @media (max-width: 520px) {
   .nav,
-  .metric-grid,
-  .metric-grid.compact,
-  .dashboard-summary,
   .dashboard-body,
   .form-grid {
     grid-template-columns: 1fr;
@@ -1114,7 +1417,7 @@ code {
 
   .content-panel,
   .hero-panel {
-    padding: 16px;
+    padding: 13px;
   }
 
   .data-table th,
@@ -1123,7 +1426,7 @@ code {
   }
 
   .inline-action-buttons {
-    flex-direction: column;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .inline-action-buttons button,
@@ -1136,15 +1439,13 @@ code {
   }
 
   .metric-grid.compact.lifetime-metric-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .lifetime-quantity-card {
     grid-row: auto;
   }
 
-  .report-filter-buttons,
-  .report-type-buttons,
   .report-custom-dates,
   .report-value-grid,
   .report-search-form {
