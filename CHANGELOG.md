@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.27.0
+Revision: 1.28.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 08:30 ET
+Modified Date: 2026-07-20 09:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.28.0 - 2026-07-20
+
+Changed by: Matt
+
+- Expanded Activity into a read-only audit report with Lifetime, Current Year, Prior Year, and Custom date filters.
+- Added event-type, Humidor, Lot, cigar/reference text, location, and notes filtering without changing InventoryEvents.
+- Added source/destination location context and explicit Event, Lot, original-event, and reversal references.
+- Made cigar names open the matching Catalog Journal and event references focus the related original/reversal pair.
+- Preserved the recent-12 default for unfiltered Activity while showing every matching record when filters are active.
+- Added isolated regression coverage for event type, location, Humidor, Lot, date, notes, and reversal relationship behavior.
 
 ## 1.27.0 - 2026-07-20
 

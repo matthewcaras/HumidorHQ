@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.7.0
- * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, and Smoking Journal history behavior.
- * Modified Date: 2026-07-20 08:00 ET
+ * Revision: 1.8.0
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, Smoking Journal, and Activity report behavior.
+ * Modified Date: 2026-07-20 09:00 ET
  */
 
 const fs = require('node:fs')
@@ -41,11 +41,14 @@ state.records = {
     { id: 3, lotId: 2, purchaseLineId: 2, purchaseId: 2, storageLocationId: 1, storageSubLocationId: null, quantity: 1 },
   ],
   'storage-locations': [{ id: 1, name: 'Main Humidor', isActive: true }, { id: 2, name: 'Pre Inventory', isActive: true }],
-  'storage-sub-locations': [],
+  'storage-sub-locations': [{ id: 5, storageLocationId: 1, name: 'Top Tray', isActive: true }],
   'inventory-events': [
     { id: 10, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1, eventDate: '2026-01-05', quantity: 1, fromStorageLocationId: 1 },
     { id: 11, eventType: 'SMOKED', lotId: 1, catalogCigarId: 1, eventDate: '2026-02-05', quantity: 1, fromStorageLocationId: 1 },
     { id: 12, eventType: 'SMOKED', lotId: 2, catalogCigarId: 2, eventDate: '2026-03-05', quantity: 1, fromStorageLocationId: 2 },
+    { id: 20, eventType: 'MOVE', lotId: 2, catalogCigarId: 2, eventDate: '2025-12-31', quantity: 1, fromStorageLocationId: 1, fromStorageSubLocationId: 5, toStorageLocationId: 2, notes: 'Moved for staging' },
+    { id: 21, eventType: 'PURCHASE_RECEIPT', lotId: 2, purchaseId: 2, catalogCigarId: 2, eventDate: '2026-04-01', quantity: 3, storageLocationId: 2 },
+    { id: 22, eventType: 'INVENTORY_ADJUSTMENT', lotId: 2, catalogCigarId: 2, eventDate: '2026-04-02', quantity: 1, quantityChange: -1, storageLocationId: 2, notes: 'Physical count correction' },
   ],
   'smoking-journal-entries': [
     { id: 1, inventoryEventId: 10, rating: 8, notes: 'Cedar and cream' },
@@ -71,6 +74,28 @@ state.reportRemovalType = 'all'
 state.reportSearch = 'pepper finish'
 testAssert(filteredRemovalEvents().length === 1 && filteredRemovalEvents()[0].id === 11, 'Removal History search did not match Smoking Journal notes.')
 state.reportSearch = ''
+state.activityType = 'MOVE'
+testAssert(filteredActivityEvents().length === 1 && filteredActivityEvents()[0].id === 20, 'Activity event-type filtering is incorrect.')
+testAssert(activityEventLocationLabel(filteredActivityEvents()[0]) === 'Main Humidor / Top Tray → Pre Inventory', 'Activity move location context is incorrect.')
+state.activityType = 'all'
+state.activityHumidorId = '2'
+testAssert(filteredActivityEvents().map((event) => event.id).join(',') === '22,21,12,20', 'Activity Humidor filtering must include source, destination, and assigned locations.')
+state.activityHumidorId = ''
+state.activityLotId = '1'
+testAssert(filteredActivityEvents().length === 2 && filteredActivityEvents().every((event) => Number(event.lotId) === 1), 'Activity Lot filtering is incorrect.')
+state.activityLotId = ''
+state.activitySearch = 'physical count correction'
+testAssert(filteredActivityEvents().length === 1 && filteredActivityEvents()[0].id === 22, 'Activity search did not match event notes.')
+state.activitySearch = ''
+state.activityPeriod = 'custom'
+state.activityCustomStart = '2026-04-01'
+state.activityCustomEnd = '2026-04-01'
+testAssert(filteredActivityEvents().length === 1 && filteredActivityEvents()[0].id === 21, 'Activity custom-date filtering is incorrect.')
+state.activityPeriod = 'lifetime'
+state.activityCustomStart = ''
+state.activityCustomEnd = ''
+state.showAllActivity = false
+testAssert(activityEventsForDisplay(filteredActivityEvents()).length === 6, 'Activity recent-event display unexpectedly removed fixture events.')
 let preInventory = preInventoryDashboardSummary()
 testAssert(preInventory?.humidor.id === 2 && preInventory.totalQuantity === 2, 'Dashboard Pre Inventory summary is incorrect.')
 let stagingRows = preInventoryWorklist(preInventory)
@@ -184,6 +209,12 @@ catalogJournalMetrics = smokingJournalHistoryMetrics(catalogJournalRows)
 testAssert(catalogJournalRows.find((row) => row.event.id === 11)?.reversed === true, 'Catalog Smoking Journal did not mark reversed smoke history.')
 testAssert(catalogJournalMetrics.totalEntries === 2 && catalogJournalMetrics.effectiveQuantity === 1, 'Reversed Smoking Journal history was not excluded from effective quantity.')
 testAssert(catalogJournalMetrics.averageRating === 8 && catalogJournalMetrics.lastSmokedDate === '2026-01-05', 'Reversed Smoking Journal history was not excluded from effective rating and date summaries.')
+state.activitySearch = 'event 11'
+const relatedActivity = filteredActivityEvents()
+testAssert(relatedActivity.length === 2 && relatedActivity.some((event) => event.id === 11) && relatedActivity.some((event) => event.id === 13), 'Activity event-reference search did not link an original event and its reversal.')
+testAssert(activityRelationshipEvent(state.records['inventory-events'].find((event) => event.id === 11))?.id === 13, 'Activity original event did not resolve its reversal relationship.')
+testAssert(activityRelationshipEvent(state.records['inventory-events'].find((event) => event.id === 13))?.id === 11, 'Activity reversal did not resolve its original event relationship.')
+state.activitySearch = ''
 state.selectedCollectionCigarId = null
 toggleCollectionCigarSelection('2')
 testAssert(state.selectedCollectionCigarId === 2, 'Whole-card Collection selection did not expand the requested cigar.')
