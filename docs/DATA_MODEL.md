@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.3.0
+Revision: 1.4.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-19 17:00 ET
+Modified Date: 2026-07-19 18:00 ET
 -->
 
 # HumidorHQ Data Model
@@ -111,11 +111,13 @@ Initial event types:
 Consumption reasons:
 - Smoked
 - Gifted / Shared
-- Damaged
+- Discarded
 
 Events should drive calculated inventory instead of manually maintaining totals.
 
-Corrections are append-only. A `REVERSAL` InventoryEvent references exactly one prior purchase receipt, move, smoke, gift, or discard through `reversesInventoryEventId`. The original event remains immutable. Effective receipt and removal calculations exclude an event after one valid reversal, while Activity History retains both records. A reversal copies the target cost/MSRP snapshots, reverses the complete target quantity, and never deletes a Lot or Smoking Journal entry. Incorrect receipts are corrected by reversing the receipt and entering replacement receipt facts through Receive and Store.
+Physical count corrections use `INVENTORY_ADJUSTMENT` events. Each event stores a positive absolute `quantity`, signed `quantityChange`, `INCREASE` or `DECREASE` direction, exact balance quantity before and after the count, Humidor/section, count date, required reason, idempotency key, and immutable cost/MSRP snapshots. The balance and Lot cache change in the same serialized transaction. A stale expected balance or a count with no variance is rejected before mutation.
+
+Corrections are append-only. A `REVERSAL` InventoryEvent references exactly one prior purchase receipt, move, smoke, gift, discard, or inventory adjustment through `reversesInventoryEventId`. The original event remains immutable. Effective receipt, removal, and adjustment calculations exclude an event after one valid reversal, while Activity History retains both records. A reversal copies the target cost/MSRP snapshots, reverses the complete target quantity, and never deletes a Lot or Smoking Journal entry. Incorrect receipts are corrected by reversing the receipt and entering replacement receipt facts through Receive and Store.
 
 ## Smoking Journal
 

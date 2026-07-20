@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.18.0
+ * Revision: 1.20.4
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-19 17:00 ET
+ * Modified Date: 2026-07-20 07:20 ET
  */
 
 const API_BASE_URL = 'api'
@@ -30,6 +30,7 @@ const state = {
   collectionSearch: '',
   catalogSearch: '',
   selectedCollectionCigarId: null,
+  collectionScrollTargetCigarId: null,
   selectedPurchaseId: null,
   editingPurchaseLineId: null,
   purchaseLineCatalogId: null,
@@ -38,6 +39,7 @@ const state = {
   purchaseDraftEntry: null,
   receiptKeys: {},
   removalKeys: {},
+  adjustmentKeys: {},
   pendingSmokingJournalEventId: null,
   showArchivedRecords: {},
   reversalKeys: {},
@@ -59,6 +61,7 @@ const state = {
   backupData: null,
   backupPreview: null,
   backupMessage: '',
+  sidebarCollapsed: Boolean(globalThis.matchMedia?.('(max-width: 850px)').matches),
 }
 
 const pages = [
@@ -886,6 +889,10 @@ function isPreInventoryHumidor(humidor) {
   return String(humidor?.name || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ') === 'pre inventory'
 }
 
+function balanceAllowsCountReconciliation(balance) {
+  return recordIsActive(balance?.humidor) && isPreInventoryHumidor(balance?.humidor)
+}
+
 function preInventoryDashboardSummary() {
   return buildHumidorSummaries().find((item) => recordIsActive(item.humidor) && isPreInventoryHumidor(item.humidor)) || null
 }
@@ -1198,10 +1205,66 @@ function renderNav() {
       button.className = page.id === state.activePage ? 'nav-item active' : 'nav-item'
       button.textContent = page.label
       button.disabled = !isAuthenticated()
-      button.addEventListener('click', () => navigateToPage(page.id))
+      button.addEventListener('click', () => {
+        if (globalThis.matchMedia?.('(max-width: 850px)').matches) {
+          state.sidebarCollapsed = true
+        }
+        navigateToPage(page.id)
+      })
       return button
     }),
   )
+}
+
+function renderSidebarState() {
+  const shell = document.querySelector('.app-shell')
+  const toggle = document.querySelector('#sidebar-toggle')
+  if (!shell || !toggle) return
+  shell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed)
+  toggle.setAttribute('aria-expanded', String(!state.sidebarCollapsed))
+  toggle.setAttribute('aria-label', state.sidebarCollapsed ? 'Open navigation menu' : 'Collapse navigation menu')
+  toggle.title = state.sidebarCollapsed ? 'Open navigation menu' : 'Collapse navigation menu'
+  const icon = toggle.querySelector('[data-sidebar-toggle-icon]')
+  const label = toggle.querySelector('[data-sidebar-toggle-label]')
+  if (icon) icon.textContent = state.sidebarCollapsed ? '☰' : '‹'
+  if (label) label.textContent = state.sidebarCollapsed ? 'Menu' : 'Collapse'
+  document.querySelectorAll('[data-mobile-primary-page]').forEach((button) => {
+    button.disabled = !isAuthenticated()
+    button.classList.toggle('active', button.dataset.mobilePrimaryPage === state.activePage)
+  })
+}
+
+function initializeSidebarToggle() {
+  const toggle = document.querySelector('#sidebar-toggle')
+  toggle?.addEventListener('click', () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed
+    renderSidebarState()
+  })
+  document.querySelectorAll('[data-mobile-primary-page]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!isAuthenticated()) return
+      state.sidebarCollapsed = true
+      navigateToPage(button.dataset.mobilePrimaryPage)
+    })
+  })
+}
+
+function enhanceResponsiveTables(root) {
+  root.querySelectorAll('table').forEach((table) => {
+    const headings = Array.from(table.tHead?.rows?.[0]?.cells || []).map((cell) => cell.textContent.trim())
+    if (headings.length === 0) return
+    table.classList.add('responsive-table')
+    Array.from(table.tBodies || []).forEach((body) => {
+      Array.from(body.rows).forEach((row) => {
+        const cells = Array.from(row.cells)
+        const isDetailRow = cells.some((cell) => cell.colSpan > 1) || cells.length !== headings.length
+        row.classList.toggle('responsive-detail-row', isDetailRow)
+        if (!isDetailRow) {
+          cells.forEach((cell, index) => { cell.dataset.label = headings[index] || '' })
+        }
+      })
+    })
+  })
 }
 
 function renderSidebarAccount() {
@@ -1282,11 +1345,11 @@ function apiPatch(path, payload = null) {
 }
 
 function removalActionLabel(type) {
-  return ({ SMOKED: 'Smoke', GIFTED: 'Give', DISCARDED: 'Discard / Damage' })[normalizeEventType(type)] || 'Remove'
+  return ({ SMOKED: 'Smoke', GIFTED: 'Give', DISCARDED: 'Discard' })[normalizeEventType(type)] || 'Remove'
 }
 
 function removalEventLabel(type) {
-  return ({ SMOKED: 'Smoked', GIFTED: 'Gifted', DISCARDED: 'Discarded / Damaged' })[normalizeEventType(type)] || 'Removed'
+  return ({ SMOKED: 'Smoked', GIFTED: 'Gifted', DISCARDED: 'Discarded' })[normalizeEventType(type)] || 'Removed'
 }
 
 function removalIdempotencyKey(balanceId, type) {
@@ -1302,6 +1365,19 @@ function clearRemovalIdempotencyKey(balanceId, type) {
   delete state.removalKeys[`${Number(balanceId)}:${normalizeEventType(type)}`]
 }
 
+function adjustmentIdempotencyKey(balanceId) {
+  const key = String(Number(balanceId))
+  if (!state.adjustmentKeys[key]) {
+    const unique = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    state.adjustmentKeys[key] = `adjustment-${unique}`
+  }
+  return state.adjustmentKeys[key]
+}
+
+function clearAdjustmentIdempotencyKey(balanceId) {
+  delete state.adjustmentKeys[String(Number(balanceId))]
+}
+
 function reversalIdempotencyKey(eventId) {
   const key = String(Number(eventId))
   if (!state.reversalKeys[key]) {
@@ -1312,7 +1388,7 @@ function reversalIdempotencyKey(eventId) {
 }
 
 function inventoryEventCanBeReversed(event) {
-  return ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event?.eventType))
+  return ['PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED', 'INVENTORY_ADJUSTMENT'].includes(normalizeEventType(event?.eventType))
     && !inventoryEventIsReversed(event)
 }
 
@@ -1321,7 +1397,16 @@ function inventoryEventDisplayType(event) {
   if (type === 'REVERSAL') {
     return `Reversal: ${String(event.reversedEventType || '').replaceAll('_', ' ')}`
   }
+  if (type === 'INVENTORY_ADJUSTMENT') {
+    return `Inventory Adjustment: ${String(event.adjustmentDirection || '').toLowerCase()}${inventoryEventIsReversed(event) ? ' — Reversed' : ''}`
+  }
   return `${type.replaceAll('_', ' ')}${inventoryEventIsReversed(event) ? ' — Reversed' : ''}`
+}
+
+function inventoryEventDisplayQuantity(event) {
+  return normalizeEventType(event?.eventType) === 'INVENTORY_ADJUSTMENT'
+    ? Number(event.quantityChange || 0)
+    : Number(event.quantity || 0)
 }
 
 function smokingJournalEntryForEvent(eventId) {
@@ -1371,6 +1456,17 @@ function inventoryStatusCard(onHandQuantity, enRouteQuantity, uniqueCigarCount) 
     <small>${escapeHtml(formatCount(uniqueCigarCount))} unique cigars</small>
   `
   return card
+}
+
+function selectCollectionHumidor(humidorId) {
+  state.collectionHumidorFilterId = Number(humidorId || 0) || null
+  state.collectionSectionFilterId = null
+  state.selectedCollectionCigarId = null
+}
+
+function openCollectionForHumidor(humidorId) {
+  selectCollectionHumidor(humidorId)
+  navigateToPage('Collection')
 }
 
 function renderDashboard(view) {
@@ -1490,11 +1586,7 @@ function renderDashboard(view) {
   humidorTableWrap.append(humidorTable)
   humidorPanel.append(humidorTableWrap)
   humidorPanel.querySelectorAll('button[data-humidor-id]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.collectionHumidorFilterId = Number(button.dataset.humidorId || 0)
-      state.selectedCollectionCigarId = null
-      navigateToPage('Collection')
-    })
+    button.addEventListener('click', () => openCollectionForHumidor(button.dataset.humidorId))
   })
 
   let preInventoryPanel = null
@@ -1539,6 +1631,7 @@ function renderDashboard(view) {
           state.collectionHumidorFilterId = Number(preInventory.humidor.id)
           state.collectionSectionFilterId = null
           state.selectedCollectionCigarId = Number(button.dataset.preInventoryCigarId || 0)
+          state.collectionScrollTargetCigarId = state.selectedCollectionCigarId
           navigateToPage('Collection')
         })
       })
@@ -1613,6 +1706,11 @@ function renderPendingSmokingJournal(view) {
   view.append(panel)
 }
 
+function toggleCollectionCigarSelection(cigarId) {
+  const normalizedCigarId = Number(cigarId || 0)
+  state.selectedCollectionCigarId = Number(state.selectedCollectionCigarId || 0) === normalizedCigarId ? null : normalizedCigarId
+}
+
 function renderCollectionPage(view) {
   const metrics = currentCollectionMetrics()
   const items = sortCollectionItems(metrics.items)
@@ -1635,6 +1733,7 @@ function renderCollectionPage(view) {
   const controlBar = document.createElement('div')
   controlBar.className = 'collection-controls'
   const sortSelect = document.createElement('select')
+  sortSelect.setAttribute('aria-label', 'Sort collection by')
   ;[
     { value: 'alpha', label: 'Alphabetical' },
     { value: 'location', label: 'Humidor Location' },
@@ -1652,6 +1751,7 @@ function renderCollectionPage(view) {
   })
 
   const humidorFilterSelect = document.createElement('select')
+  humidorFilterSelect.setAttribute('aria-label', 'Filter collection by Humidor')
   humidorFilterSelect.append(new Option('All Humidors', ''))
   records('storage-locations')
     .filter(recordIsActive)
@@ -1667,6 +1767,7 @@ function renderCollectionPage(view) {
   })
 
   const sectionFilterSelect = document.createElement('select')
+  sectionFilterSelect.setAttribute('aria-label', 'Filter collection by drawer')
   sectionFilterSelect.append(new Option('All Drawers', ''))
   availableSections.forEach((section) => sectionFilterSelect.append(new Option(sectionName(section), String(section.id))))
   sectionFilterSelect.value = state.collectionSectionFilterId ? String(state.collectionSectionFilterId) : ''
@@ -1678,6 +1779,7 @@ function renderCollectionPage(view) {
   })
 
   const strengthFilterSelect = document.createElement('select')
+  strengthFilterSelect.setAttribute('aria-label', 'Filter collection by strength')
   strengthFilterSelect.append(new Option('All Strengths', ''))
   Array.from(new Set(buildCollectionItems().map((item) => String(item.cigar.strength || '').trim()).filter(Boolean)))
     .sort((left, right) => strengthSortRank(left) - strengthSortRank(right) || left.localeCompare(right))
@@ -1690,6 +1792,7 @@ function renderCollectionPage(view) {
   })
 
   const buyAgainFilterSelect = document.createElement('select')
+  buyAgainFilterSelect.setAttribute('aria-label', 'Filter collection by Buy Again decision')
   buyAgainFilterSelect.append(new Option('All Buy Again', ''))
   buyAgainStatusOptions.forEach((option) => {
     buyAgainFilterSelect.append(new Option(option.label, option.value || 'NOT_EVALUATED'))
@@ -1750,7 +1853,7 @@ function renderCollectionPage(view) {
   controls.append(searchForm)
 
   const summary = document.createElement('div')
-  summary.className = 'metric-grid compact'
+  summary.className = 'metric-grid compact collection-summary-grid'
   summary.append(
     metricCard('On Hand', metrics.totalQuantity, 'Current cigars available'),
     metricCard('Cost Basis', metrics.currentCostBasis, 'Current cost basis of on-hand cigars', true),
@@ -1790,12 +1893,17 @@ function renderCollectionPage(view) {
   items.forEach((item) => {
     const row = document.createElement('tr')
     const isSelected = Number(item.cigar.id) === selectedCigarId
-    row.className = isSelected ? 'selected-row' : ''
+    row.className = isSelected ? 'clickable-record-row selected-row' : 'clickable-record-row'
+    row.tabIndex = 0
+    row.setAttribute('aria-expanded', String(isSelected))
+    row.setAttribute('aria-label', `${isSelected ? 'Collapse' : 'Expand'} ${cigarName(item.cigar)} inventory details`)
+    row.dataset.collectionCigarId = String(item.cigar.id)
     row.innerHTML = `
       <td>
         <div class="collection-cigar-cell">
           <button type="button" class="linkish-button" data-cigar-id="${item.cigar.id}"><strong>${escapeHtml(cigarName(item.cigar))}</strong></button>
-          <small>${strengthBadge(item.cigar.strength)} ${escapeHtml(item.cigar.wrapper || '')} &bull; Buy Again: ${escapeHtml(buyAgainLabel(item.cigar.buyAgainStatus))}</small>
+          <small>${strengthBadge(item.cigar.strength)} <span>Wrapper: ${escapeHtml(item.cigar.wrapper || 'Unknown')} &bull; Binder: ${escapeHtml(item.cigar.binder || 'Unknown')} &bull; Filler: ${escapeHtml(item.cigar.filler || 'Unknown')}</span></small>
+          <small>Buy Again: ${escapeHtml(buyAgainLabel(item.cigar.buyAgainStatus))}</small>
         </div>
       </td>
       <td>${formatCount(item.totalQuantity)}</td>
@@ -1809,6 +1917,20 @@ function renderCollectionPage(view) {
         </div>
       </td>
     `
+    const toggleCigarDetails = () => {
+      toggleCollectionCigarSelection(item.cigar.id)
+      render()
+    }
+    row.addEventListener('click', (event) => {
+      if (event.target.closest('button, a, input, select, textarea, label')) return
+      toggleCigarDetails()
+    })
+    row.addEventListener('keydown', (event) => {
+      if (event.target === row && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault()
+        toggleCigarDetails()
+      }
+    })
     tbody.append(row)
 
     if (isSelected) {
@@ -1817,12 +1939,6 @@ function renderCollectionPage(view) {
       detailRow.innerHTML = `
         <td colspan="7">
           <div class="collection-expanded-card">
-            <div class="section-heading compact-heading">
-              <div>
-                <h3>${escapeHtml(cigarName(item.cigar))}</h3>
-                <p class="muted">${strengthBadge(item.cigar.strength)} Wrapper ${escapeHtml(item.cigar.wrapper || 'Unknown')} • Binder ${escapeHtml(item.cigar.binder || 'Unknown')} • Filler ${escapeHtml(item.cigar.filler || 'Unknown')}</p>
-              </div>
-            </div>
             <table class="data-table collection-detail-table">
               <thead>
                 <tr>
@@ -1848,7 +1964,8 @@ function renderCollectionPage(view) {
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="SMOKED">Smoke</button>
                           <button type="button" class="secondary-button compact-button" data-move-toggle-id="${balance.balance.id}">Move</button>
                           <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED">Give</button>
-                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED">Discard / Damage</button>
+                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED">Discard</button>
+                          ${balanceAllowsCountReconciliation(balance) ? `<button type="button" class="secondary-button compact-button" data-adjustment-toggle-id="${balance.balance.id}">Reconcile Count</button>` : ''}
                         </div>
                         <form class="inline-move-form" data-removal-form="${balance.balance.id}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
@@ -1864,7 +1981,7 @@ function renderCollectionPage(view) {
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <label class="form-field">
                             <span>Qty</span>
-                            <input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="1" required>
+                            <input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="${Math.max(1, Number(balance.quantity || 1))}" required>
                           </label>
                           <label class="form-field">
                             <span>Humidor</span>
@@ -1882,6 +1999,17 @@ function renderCollectionPage(view) {
                           <input type="hidden" name="cigarName" value="${escapeHtml(cigarName(item.cigar))}">
                           <button type="submit" class="primary-button compact-button">Confirm Move</button>
                         </form>
+                        <form class="inline-move-form" data-adjustment-form="${balance.balance.id}">
+                          <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
+                          <input type="hidden" name="expectedQuantity" value="${balance.quantity}">
+                          <label class="form-field"><span>Expected Quantity</span><input type="number" value="${balance.quantity}" readonly></label>
+                          <label class="form-field"><span>Physical Count</span><input name="countedQuantity" type="number" min="0" step="1" value="${balance.quantity}" required></label>
+                          <label class="form-field"><span>Variance</span><input data-adjustment-variance value="0" readonly></label>
+                          <label class="form-field"><span>Count Date</span><input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
+                          <label class="form-field wide"><span>Adjustment Reason</span><textarea name="notes" rows="2" required></textarea></label>
+                          <button type="submit" class="primary-button compact-button" data-adjustment-submit disabled>Confirm Adjustment</button>
+                          <button type="button" class="secondary-button compact-button" data-cancel-adjustment>Cancel</button>
+                        </form>
                       </div>
                     </td>
                   </tr>
@@ -1896,8 +2024,7 @@ function renderCollectionPage(view) {
   })
   table.querySelectorAll('button[data-cigar-id]').forEach((button) => {
     button.addEventListener('click', () => {
-      const cigarId = Number(button.dataset.cigarId || 0)
-      state.selectedCollectionCigarId = Number(state.selectedCollectionCigarId || 0) === cigarId ? null : cigarId
+      toggleCollectionCigarSelection(button.dataset.cigarId)
       render()
     })
   })
@@ -1948,6 +2075,59 @@ function renderCollectionPage(view) {
     button.addEventListener('click', () => {
       const form = table.querySelector(`form[data-move-balance-id="${button.dataset.moveToggleId}"]`)
       form?.classList.toggle('is-open')
+    })
+  })
+  table.querySelectorAll('button[data-adjustment-toggle-id]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const form = table.querySelector(`form[data-adjustment-form="${button.dataset.adjustmentToggleId}"]`)
+      form?.classList.toggle('is-open')
+    })
+  })
+  table.querySelectorAll('form[data-adjustment-form]').forEach((form) => {
+    const expectedQuantity = Number(form.elements.expectedQuantity.value || 0)
+    const countedInput = form.elements.countedQuantity
+    const varianceOutput = form.querySelector('[data-adjustment-variance]')
+    const submitButton = form.querySelector('[data-adjustment-submit]')
+    const updateVariance = () => {
+      const countedQuantity = Number(countedInput.value)
+      const validCount = Number.isInteger(countedQuantity) && countedQuantity >= 0
+      const variance = validCount ? countedQuantity - expectedQuantity : 0
+      varianceOutput.value = validCount ? (variance > 0 ? `+${variance}` : String(variance)) : 'Invalid'
+      submitButton.disabled = !validCount || variance === 0
+    }
+    countedInput.addEventListener('input', updateVariance)
+    updateVariance()
+    form.querySelector('[data-cancel-adjustment]').addEventListener('click', () => form.classList.remove('is-open'))
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const data = new FormData(form)
+      const balanceId = Number(data.get('sourceBalanceId') || 0)
+      const countedQuantity = Number(data.get('countedQuantity'))
+      const variance = countedQuantity - expectedQuantity
+      if (!Number.isInteger(countedQuantity) || countedQuantity < 0 || variance === 0) {
+        state.formError = 'Enter a non-negative physical count that differs from the expected quantity.'
+        render()
+        return
+      }
+      if (!confirm(`Apply a physical-count adjustment of ${variance > 0 ? '+' : ''}${variance} cigar${Math.abs(variance) === 1 ? '' : 's'}?`)) {
+        return
+      }
+      try {
+        await apiPost('/inventory/adjust-count', {
+          sourceBalanceId: String(balanceId),
+          expectedQuantity: String(expectedQuantity),
+          countedQuantity: String(countedQuantity),
+          eventDate: String(data.get('eventDate') || '').trim(),
+          notes: String(data.get('notes') || '').trim(),
+          idempotencyKey: adjustmentIdempotencyKey(balanceId),
+        })
+        clearAdjustmentIdempotencyKey(balanceId)
+        state.formError = null
+        await refreshCollections(['lot-location-balances', 'lots', 'inventory-events'])
+      } catch (error) {
+        state.formError = error.message
+      }
+      render()
     })
   })
   table.querySelectorAll('form[data-move-balance-id]').forEach((form) => {
@@ -2002,6 +2182,15 @@ function renderCollectionPage(view) {
   view.append(controls, summary)
   renderPendingSmokingJournal(view)
   view.append(tableWrap)
+  const scrollTargetCigarId = Number(state.collectionScrollTargetCigarId || 0)
+  state.collectionScrollTargetCigarId = null
+  if (scrollTargetCigarId) {
+    const scrollTarget = table.querySelector(`tr[data-collection-cigar-id="${scrollTargetCigarId}"]`)
+    window.requestAnimationFrame(() => {
+      scrollTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      scrollTarget?.querySelector('button[data-cigar-id]')?.focus({ preventScroll: true })
+    })
+  }
 }
 
 function fieldValue(record, field) {
@@ -2238,9 +2427,19 @@ function renderManagedTable(view, pageConfig) {
   rows.forEach((record) => {
     const row = document.createElement('tr')
     const isEditing = inlineEdit && Number(state.editing[collection]?.id || 0) === Number(record.id)
-    pageConfig.columns.forEach((column) => {
+    pageConfig.columns.forEach((column, columnIndex) => {
       const cell = document.createElement('td')
-      cell.textContent = column.value(record)
+      if (collection === 'storage-locations' && columnIndex === 0 && recordIsActive(record)) {
+        const collectionLink = document.createElement('button')
+        collectionLink.type = 'button'
+        collectionLink.className = 'linkish-button'
+        collectionLink.textContent = column.value(record)
+        collectionLink.setAttribute('aria-label', `View ${column.value(record)} inventory in Collection`)
+        collectionLink.addEventListener('click', () => openCollectionForHumidor(record.id))
+        cell.append(collectionLink)
+      } else {
+        cell.textContent = column.value(record)
+      }
       row.append(cell)
     })
     if (supportsArchive && !recordIsActive(record) && row.firstElementChild) {
@@ -3232,12 +3431,18 @@ function renderPurchaseRecords(view) {
     const isExpanded = Number(state.selectedPurchaseId || 0) === Number(purchase.id)
     const isEditing = Number(state.editing.purchases?.id || 0) === Number(purchase.id)
     const row = document.createElement('tr')
-    row.className = 'clickable-record-row'
+    row.className = isExpanded ? 'clickable-record-row selected-row' : 'clickable-record-row'
     row.tabIndex = 0
     row.setAttribute('aria-expanded', String(isExpanded))
-    managedPages.Purchases.columns.forEach((column) => {
+    managedPages.Purchases.columns.forEach((column, columnIndex) => {
       const cell = document.createElement('td')
       cell.textContent = column.value(purchase)
+      if (columnIndex === 0) {
+        const mobileSummary = document.createElement('small')
+        mobileSummary.className = 'mobile-record-summary'
+        mobileSummary.textContent = `${vendorName(purchase.vendorId)} • ${money(purchase.totalPaid)}`
+        cell.append(mobileSummary)
+      }
       row.append(cell)
     })
     const actions = document.createElement('td')
@@ -3712,7 +3917,7 @@ function renderRemovalHistory(view) {
     reportFilterButton('All Removals', 'all', 'reportRemovalType'),
     reportFilterButton('Smoked', 'SMOKED', 'reportRemovalType'),
     reportFilterButton('Gifted', 'GIFTED', 'reportRemovalType'),
-    reportFilterButton('Discarded / Damaged', 'DISCARDED', 'reportRemovalType'),
+    reportFilterButton('Discarded', 'DISCARDED', 'reportRemovalType'),
   )
   removalType.append(typeButtons)
   filters.append(period, removalType)
@@ -3760,7 +3965,7 @@ function renderRemovalHistory(view) {
     metricCard('Total Removed', metrics.quantity, ''),
     metricCard('Smoked', metrics.smoked, ''),
     metricCard('Gifted', metrics.gifted, ''),
-    metricCard('Discarded / Damaged', metrics.discarded, ''),
+    metricCard('Discarded', metrics.discarded, ''),
   )
   panel.append(counts)
 
@@ -4053,7 +4258,7 @@ function renderReportsPage(view) {
     <div class="section-heading">
       <div>
         <h3>Activity</h3>
-        <p class="muted">Purchase receipts, moves, removals, and their append-only reversals.</p>
+        <p class="muted">Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.</p>
       </div>
     </div>
   `
@@ -4094,7 +4299,7 @@ function renderReportsPage(view) {
       <td>${escapeHtml(displayDate(event.eventDate || event.occurredAt || event.updatedAt))}</td>
       <td>${escapeHtml(inventoryEventDisplayType(event))}</td>
       <td>${escapeHtml(cigar ? cigarName(cigar) : '')}</td>
-      <td>${formatCount(event.quantity)}</td>
+      <td>${formatCount(inventoryEventDisplayQuantity(event))}</td>
       <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
       <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
       <td class="row-actions"></td>
@@ -4286,6 +4491,7 @@ function render() {
   renderProjectMeta()
   renderSidebarAccount()
   renderNav()
+  renderSidebarState()
 
   document.querySelector('#page-title').textContent = isAuthenticated() ? pageLabel(state.activePage) : 'Sign In'
   document.querySelector('.hero-panel').classList.remove('purchase-hero')
@@ -4295,6 +4501,7 @@ function render() {
   document.querySelector('#page-actions').replaceChildren()
   const view = document.querySelector('#app-view')
   view.replaceChildren()
+  window.requestAnimationFrame(() => enhanceResponsiveTables(view))
 
   if (state.isLoading) {
     view.innerHTML = '<p class="muted">Checking session...</p>'
@@ -4397,6 +4604,7 @@ function render() {
 }
 
 async function init() {
+  initializeSidebarToggle()
   setActivePage(pageFromHash(), { updateHash: false })
   render()
   try {

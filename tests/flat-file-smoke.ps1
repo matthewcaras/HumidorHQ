@@ -1,10 +1,18 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.26.0
+# Revision : 1.28.4
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-19 17:00 ET
+# Modified Date : 2026-07-20 07:20 ET
 # Changelog :
+# 1.28.4 verify whole-card Collection expansion and keyboard accessibility
+# 1.28.3 verify mobile Collection avoids selected-row summary duplication and retains blend details
+# 1.28.2 verify concise Collection details, two-column mobile actions, and staging-only reconciliation
+# 1.28.1 verify mobile primary shortcuts, compact summaries, progressive disclosure, and Humidor links
+# 1.28.0 verify collapsible navigation, responsive stacked tables, and compact mobile controls
+# 1.27.2 verify shared expanded-record and open-action border treatments
+# 1.27.1 verify full-balance move defaults and Pre Inventory Collection scrolling
+# 1.27.0 verify idempotent physical-count adjustments, stale guards, reversals, and ledger reconciliation
 # 1.26.0 verify the Pre Inventory reconciliation worklist and direct Collection access
 # 1.25.0 verify active Pre Inventory Dashboard staging and concise record-count copy
 # 1.24.0 verify Catalog alphabetical search and Smoking Journal Buy Again defaults
@@ -224,8 +232,8 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.18\.0') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.9\.8') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.20\.4') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.10\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
@@ -233,12 +241,44 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
 }
 
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
+$appCss = Get-Content -LiteralPath $appCssPath -Raw
+foreach ($responsiveUiHook in @('id="sidebar-toggle"', 'aria-controls="app-nav"')) {
+    if ($index -notmatch [regex]::Escape($responsiveUiHook)) { throw "Collapsible navigation markup is missing hook: $responsiveUiHook" }
+}
+foreach ($mobilePrimaryHook in @('class="mobile-primary-nav"', 'data-mobile-primary-page="Dashboard"', 'data-mobile-primary-page="Collection"')) {
+    if ($index -notmatch [regex]::Escape($mobilePrimaryHook)) { throw "Mobile primary navigation is missing hook: $mobilePrimaryHook" }
+}
+foreach ($responsiveJsHook in @('function renderSidebarState', 'function initializeSidebarToggle', 'function enhanceResponsiveTables', "table.classList.add('responsive-table')", "cell.dataset.label = headings[index] || ''")) {
+    if ($appJs -notmatch [regex]::Escape($responsiveJsHook)) { throw "Responsive application behavior is missing hook: $responsiveJsHook" }
+}
+foreach ($responsiveCssHook in @('.app-shell.sidebar-collapsed', '.sidebar-collapsed .nav', '.responsive-table > tbody', 'content: attr(data-label)', 'overflow-x: visible', 'grid-template-columns: repeat(2, minmax(0, 1fr))')) {
+    if ($appCss -notmatch [regex]::Escape($responsiveCssHook)) { throw "Responsive layout styling is missing hook: $responsiveCssHook" }
+}
+foreach ($compactMobileHook in @('.collection-summary-grid', '.mobile-primary-nav', '.mobile-record-summary', '.collection-table > tbody > tr:not(.responsive-detail-row)', '.purchase-records-table > tbody > tr:not(.selected-row)')) {
+    if ($appCss -notmatch [regex]::Escape($compactMobileHook)) { throw "Compact mobile layout is missing hook: $compactMobileHook" }
+}
+foreach ($conciseCollectionHook in @('function balanceAllowsCountReconciliation', 'balanceAllowsCountReconciliation(balance)', '.inline-action-buttons', 'grid-template-columns: repeat(2, minmax(0, 1fr))')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($conciseCollectionHook)) { throw "Concise Collection detail behavior is missing hook: $conciseCollectionHook" }
+}
+foreach ($mobileCigarHook in @('Wrapper:', 'Binder:', 'Filler:', '.collection-table > tbody > tr:not(.responsive-detail-row) > td:not(:first-child)')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($mobileCigarHook)) { throw "Mobile cigar detail cleanup is missing hook: $mobileCigarHook" }
+}
+foreach ($collectionCardHook in @('function toggleCollectionCigarSelection', "row.className = isSelected ? 'clickable-record-row selected-row' : 'clickable-record-row'", "row.setAttribute('aria-expanded'", "event.key === 'Enter' || event.key === ' '")) {
+    if ($appJs -notmatch [regex]::Escape($collectionCardHook)) { throw "Whole-card Collection expansion is missing hook: $collectionCardHook" }
+}
+if ($appJs -match '<h3>\$\{escapeHtml\(cigarName\(item\.cigar\)\)\}</h3>') { throw 'Expanded Collection detail must not repeat the selected cigar heading.' }
+foreach ($humidorNavigationHook in @('function selectCollectionHumidor', 'function openCollectionForHumidor', 'View ${column.value(record)} inventory in Collection')) {
+    if ($appJs -notmatch [regex]::Escape($humidorNavigationHook)) { throw "Humidor-to-Collection navigation is missing hook: $humidorNavigationHook" }
+}
+foreach ($expandedStyleHook in @('.collection-expanded-card', 'border: 2px solid rgba(242, 182, 109, 0.48)', '.inline-move-form.is-open', 'border: 1px solid var(--line-strong)')) {
+    if ($appCss -notmatch [regex]::Escape($expandedStyleHook)) { throw "Expanded-state styling is missing hook: $expandedStyleHook" }
+}
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, removals, and their append-only reversals.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.') { throw 'Reports page must render the activity history section.' }
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
@@ -246,12 +286,18 @@ foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function a
 foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', 'function preInventoryWorklist', "metricCard('Pre Inventory'", 'Pre Inventory Worklist', 'Placed Elsewhere', 'Placement Progress', 'interactive-metric-card', 'data-pre-inventory-cigar-id')) {
     if ($appJs -notmatch [regex]::Escape($preInventoryHook)) { throw "Pre Inventory Dashboard staging is missing hook: $preInventoryHook" }
 }
-if ($appJs -match 'Discarded / Damaged</small>') { throw 'Dashboard removal totals must label discarded cigars as Discarded.' }
+foreach ($collectionNavigationHook in @('collectionScrollTargetCigarId', 'data-collection-cigar-id', "scrollIntoView({ behavior: 'smooth', block: 'center' })", "focus({ preventScroll: true })")) {
+    if ($appJs -notmatch [regex]::Escape($collectionNavigationHook)) { throw "Pre Inventory Collection navigation is missing hook: $collectionNavigationHook" }
+}
+if ($appJs -notmatch 'name="quantity" type="number" min="1" max="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" step="1" value="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" required') {
+    throw 'Collection move quantity must default to the full selected balance quantity.'
+}
+if ($appJs -match 'Discard\s*/\s*Damage|Discarded\s*/\s*Damaged') { throw 'User-facing discard terminology must not mention damage.' }
 if ($appJs -notmatch [regex]::Escape("['catalog-cigars', 'vendors', 'storage-locations'].includes(collection)")) { throw 'Managed Catalog, Vendor, and Humidor record counts must omit runtime filenames.' }
 foreach ($removedPurchaseReportDetail in @("metricCard('Line Items'", "metricCard('Line Purchase Price'", 'Authoritative purchase totals')) {
     if ($appJs -match [regex]::Escape($removedPurchaseReportDetail)) { throw "Purchase summary still contains removed detail: $removedPurchaseReportDetail" }
 }
-foreach ($removalHook in @('Discard / Damage', 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
+foreach ($removalHook in @("DISCARDED: 'Discard'", 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
     if ($appJs -notmatch [regex]::Escape($removalHook)) { throw "Removal and journal workflow is missing hook: $removalHook" }
 }
 foreach ($archiveHook in @('Show Archived', 'Hide Archived', 'apiPatch', '/archive', '/restore', 'recordIsActive')) {
@@ -259,6 +305,9 @@ foreach ($archiveHook in @('Show Archived', 'Hide Archived', 'apiPatch', '/archi
 }
 foreach ($reversalHook in @('effectiveInventoryEvents', 'inventoryEventCanBeReversed', 'purchaseLineHasInventoryHistory', 'Confirm Reversal', '/reverse', 'reversalIdempotencyKey', 'Show All Activity')) {
     if ($appJs -notmatch [regex]::Escape($reversalHook)) { throw "Inventory correction/reversal workflow is missing hook: $reversalHook" }
+}
+foreach ($adjustmentHook in @('/inventory/adjust-count', 'Reconcile Count', 'Expected Quantity', 'Physical Count', 'Adjustment Reason', 'adjustmentIdempotencyKey', 'INVENTORY_ADJUSTMENT')) {
+    if ($appJs -notmatch [regex]::Escape($adjustmentHook)) { throw "Physical-count adjustment workflow is missing hook: $adjustmentHook" }
 }
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
@@ -796,6 +845,56 @@ try {
     $moveEvent = $eventsAfterMove | Where-Object { $_.eventType -eq 'move' -and $_.lotId -eq $linkedLot.id -and $_.quantity -eq 2 } | Select-Object -First 1
     if (-not $moveEvent -or $moveEvent.costPerCigarAtEvent -ne 10 -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the lot cost and MSRP on the move event.' }
 
+    $adjustmentGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '2'; eventDate = '2026-07-18'; notes = 'no variance'; idempotencyKey = 'adjustment-no-change-test-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '3'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = 'stale count'; idempotencyKey = 'adjustment-stale-test-00001' } -StatusCode 409 -ErrorCode 'ADJUSTMENT_STALE_BALANCE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = ''; idempotencyKey = 'adjustment-no-reason-test-01' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2020-01-01'; notes = 'too early'; idempotencyKey = 'adjustment-early-date-test-01' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2099-01-01'; notes = 'future'; idempotencyKey = 'adjustment-future-date-test-1' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $adjustmentGuardHashes -Context 'Rejected physical-count adjustments'
+
+    $decreaseAdjustmentRequest = @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = 'physical count found one fewer'; idempotencyKey = 'adjustment-decrease-test-001' }
+    $decreaseAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($decreaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($decreaseAdjustment.data.quantityChange -ne -1 -or $decreaseAdjustment.data.inventoryEvent.adjustmentDirection -ne 'DECREASE' -or $decreaseAdjustment.data.idempotentReplay -ne $false) { throw 'Downward physical-count adjustment did not return the expected event.' }
+    if ($decreaseAdjustment.data.inventoryEvent.costPerCigarAtEvent -ne 10 -or $decreaseAdjustment.data.inventoryEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Physical-count adjustment did not preserve Lot cost and MSRP snapshots.' }
+    $decreaseLot = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $decreaseBalanceTotal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($decreaseLot.currentQuantity -ne 4 -or $decreaseBalanceTotal.Sum -ne 4) { throw 'Downward physical-count adjustment did not reconcile balance and Lot quantities exactly once.' }
+    $decreaseAdjustmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $decreaseReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($decreaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($decreaseReplay.data.idempotentReplay -ne $true -or $decreaseReplay.data.inventoryEventId -ne $decreaseAdjustment.data.inventoryEventId) { throw 'Exact physical-count adjustment replay did not return the original event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $decreaseAdjustmentHashes -Context 'Exact physical-count adjustment replay'
+    $adjustmentConflict = $decreaseAdjustmentRequest.Clone(); $adjustmentConflict.countedQuantity = '0'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body $adjustmentConflict -StatusCode 409 -ErrorCode 'ADJUSTMENT_IDEMPOTENCY_CONFLICT' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $decreaseAdjustmentHashes -Context 'Conflicting physical-count adjustment replay'
+
+    $adjustmentReversalDate = Get-Date -Format 'yyyy-MM-dd'
+    $decreaseReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($decreaseAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct count entry'; idempotencyKey = 'reversal-adjust-down-test-001' } | ConvertTo-Json) -WebSession $session
+    if ($decreaseReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Downward adjustment reversal did not create a compensating event.' }
+
+    $increaseAdjustmentRequest = @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '3'; eventDate = '2026-07-18'; notes = 'physical count found one additional'; idempotencyKey = 'adjustment-increase-test-001' }
+    $increaseAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($increaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($increaseAdjustment.data.quantityChange -ne 1 -or $increaseAdjustment.data.inventoryEvent.adjustmentDirection -ne 'INCREASE') { throw 'Upward physical-count adjustment did not return the expected event.' }
+    $increaseReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($increaseAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct additional count entry'; idempotencyKey = 'reversal-adjust-up-test-0001' } | ConvertTo-Json) -WebSession $session
+    if ($increaseReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Upward adjustment reversal did not create a compensating event.' }
+
+    $zeroAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body (@{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '0'; eventDate = '2026-07-18'; notes = 'physical count found no cigars'; idempotencyKey = 'adjustment-zero-count-test-01' } | ConvertTo-Json) -WebSession $session
+    if ($zeroAdjustment.data.quantityChange -ne -2 -or @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.id -eq $movedDestination.id }).Count -ne 0) { throw 'Zero physical count did not remove the depleted balance through the adjustment transaction.' }
+    $zeroReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($zeroAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct zero count entry'; idempotencyKey = 'reversal-adjust-zero-test-01' } | ConvertTo-Json) -WebSession $session
+    if ($zeroReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Zero-count adjustment reversal did not create a compensating event.' }
+    $movedDestination = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id -and ($_.storageSubLocationId -eq $null -or $_.storageSubLocationId -eq '') }) | Select-Object -First 1
+    if (-not $movedDestination -or $movedDestination.quantity -ne 2) { throw 'Zero-count adjustment reversal did not recreate the exact location quantity.' }
+    $balancesAfterAdjustmentReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id })
+    $lotAfterAdjustmentReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    if (($balancesAfterAdjustmentReversals | Measure-Object -Property quantity -Sum).Sum -ne 5 -or $lotAfterAdjustmentReversals.currentQuantity -ne 5) { throw 'Adjustment reversals did not restore the original inventory quantity.' }
+    $rebuildGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $rebuildGuardOut = Join-Path $testRoot 'rebuild-guard.out.log'
+    $rebuildGuardErr = Join-Path $testRoot 'rebuild-guard.err.log'
+    $rebuildGuardProcess = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', (Join-Path $repoRoot 'tools\rebuild-inventory-state.ps1'), '-DataRoot', $testDataRoot) -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $rebuildGuardOut -RedirectStandardError $rebuildGuardErr
+    $rebuildGuardOutput = ((Get-Content -LiteralPath $rebuildGuardOut -Raw) + (Get-Content -LiteralPath $rebuildGuardErr -Raw))
+    if ($rebuildGuardProcess.ExitCode -eq 0 -or $rebuildGuardOutput -notmatch 'cannot preserve REVERSAL or INVENTORY_ADJUSTMENT') { throw 'Legacy rebuild utility did not stop before replacing the corrected inventory ledger.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $rebuildGuardHashes -Context 'Rebuild correction-ledger safety stop'
+
     $historyPaths = @('lots.json', 'lot-location-balances.json', 'inventory-events.json', 'counters.json') | ForEach-Object { Join-Path $testDataRoot $_ }
     $historyHashesBefore = @{}
     foreach ($path in $historyPaths) { $historyHashesBefore[$path] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
@@ -832,7 +931,7 @@ try {
 
     $giftRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'GIFTED'; eventDate = '2026-07-18'; notes = 'gift workflow test'; idempotencyKey = 'removal-gift-test-valid-00001' }
     $giftedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($giftRemoval | ConvertTo-Json) -WebSession $session
-    $discardRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'DISCARDED'; eventDate = '2026-07-18'; notes = 'damage workflow test'; idempotencyKey = 'removal-discard-test-valid-01' }
+    $discardRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'DISCARDED'; eventDate = '2026-07-18'; notes = 'discard workflow test'; idempotencyKey = 'removal-discard-test-valid-01' }
     $discardedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($discardRemoval | ConvertTo-Json) -WebSession $session
     if ($giftedRemoval.data.eventType -ne 'GIFTED' -or $discardedRemoval.data.eventType -ne 'DISCARDED') { throw 'Gift or discard removal did not create the requested event type.' }
     $removalEvents = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id -and $_.eventType -in @('SMOKED', 'GIFTED', 'DISCARDED') })
@@ -884,7 +983,7 @@ try {
     if ($journalAfterReversal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Reversing a smoked event deleted or orphaned its Smoking Journal history.' }
 
     $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
-    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken damage'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken discard'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
     if ($giftReversal.data.reversedEventType -ne 'GIFTED' -or $discardReversal.data.reversedEventType -ne 'DISCARDED') { throw 'Gift or discard reversal did not preserve the reversed event type.' }
 
     $moveReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken move'; idempotencyKey = 'reversal-move-test-valid-0001' } | ConvertTo-Json) -WebSession $session
@@ -938,7 +1037,8 @@ try {
             @{ id = 3; eventType = 'GIFTED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
             @{ id = 4; eventType = 'DISCARDED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
             @{ id = 5; eventType = 'move'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; fromStorageSubLocationId = 1; toStorageLocationId = 1; toStorageSubLocationId = 1; quantity = 1 },
-            @{ id = 6; eventType = 'REVERSAL'; reversesInventoryEventId = 999; lotId = 1; catalogCigarId = 1; quantity = 1 }
+            @{ id = 6; eventType = 'REVERSAL'; reversesInventoryEventId = 999; lotId = 1; catalogCigarId = 1; quantity = 1 },
+            @{ id = 7; eventType = 'INVENTORY_ADJUSTMENT'; lotId = 1; catalogCigarId = 1; storageLocationId = 1; quantity = 1; quantityChange = 1; balanceQuantityBefore = 2; balanceQuantityAfter = 3; adjustmentDirection = 'INVALID' }
         )
         'smoking-journal-entries' = @(@{ id = 1; inventoryEventId = 999; rating = 8 })
     }
@@ -965,7 +1065,7 @@ try {
         'EXPECTED_CURRENT_QUANTITY', 'DISTINCT_LOT_COUNT', 'SPLIT_LOT_COUNT', 'LOT_CURRENT_MISMATCH', 'MISSING_CATALOG',
         'MISSING_VENDOR', 'MISSING_HUMIDOR', 'MISSING_SECTION', 'BALANCE_LOCATION_ZERO', 'ORPHAN_JOURNAL', 'DUPLICATE_ID',
         'COUNTER_NOT_AHEAD', 'SAME_LOCATION_MOVE', 'PURCHASE_TOTAL_MISMATCH', 'NEGATIVE_DISCOUNT', 'MISSING_SUBTOTAL',
-        'REVERSAL_TARGET_MISSING'
+        'REVERSAL_TARGET_MISSING', 'ADJUSTMENT_NET_QUANTITY', 'INVALID_INVENTORY_ADJUSTMENT'
     )) {
         if ($integrityOutput -notmatch [regex]::Escape("[$code]")) {
             Write-Host $integrityOutput

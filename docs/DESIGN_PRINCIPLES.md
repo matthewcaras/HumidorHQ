@@ -1,8 +1,8 @@
 <!--
 Filename: DESIGN_PRINCIPLES.md
-Revision: 1.0.0
+Revision: 1.0.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-19 18:00 ET
 -->
 
 # HumidorHQ Design Principles
@@ -21,7 +21,7 @@ Search, autocomplete, lookup, import, and sensible defaults should prevent repea
 
 ### Preserve complete history.
 
-Inventory should be derived from purchases, lot changes, movements, consumption, gifts, damage, and adjustments. Historical records should remain available even when inventory reaches zero.
+Inventory should be derived from purchases, lot changes, movements, consumption, gifts, discards, and adjustments. Historical records should remain available even when inventory reaches zero.
 
 ### Let the software calculate everything possible.
 
