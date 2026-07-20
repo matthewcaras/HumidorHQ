@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.28.0
+Revision: 1.29.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 09:00 ET
+Modified Date: 2026-07-20 09:45 ET
 -->
 
 # Changelog
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.29.0 - 2026-07-20
+
+Changed by: Matt
+
+- Added a read-only Inventory Aging report using positive Lot/location balances and Lot receipt-date snapshots.
+- Added 0–30, 31–90, 91–180, 181–365, over-one-year, future-date, and unknown-date buckets.
+- Added manufacturer and Humidor filters with on-hand quantity, distinct Lot, quantity-weighted age, cost basis, MSRP, and potential-savings summaries.
+- Preserved unknown money semantics and calculated known monetary totals in integer cents so incomplete values cannot appear complete.
+- Added aging details by Lot/location with links into the existing filtered and centered Collection view.
+- Simplified the Aging summary to On Hand, Distinct Lots, and Weighted Average Age, and moved cigar-level detail into expandable nonempty age-bucket rows.
+- Added isolated reconciliation coverage for split Lots, filters, bucket boundaries, invalid/future/unknown dates, monetary totals, and missing-cost handling.
 
 ## 1.28.0 - 2026-07-20
 
