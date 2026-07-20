@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.1
+ * Revision: 1.10.2
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-20 10:45 ET
+ * Modified Date: 2026-07-20 11:00 ET
  */
 
 const fs = require('node:fs')
@@ -209,6 +209,24 @@ const manufacturerTrendRows = purchaseTrendManufacturerRows()
 testAssert(manufacturerTrendRows.length === 2 && manufacturerTrendRows.find((row) => row.label === 'Alpha')?.totalPaid === 20 && manufacturerTrendRows.find((row) => row.label === 'Bravo')?.totalPaid === 45, 'Purchase trend manufacturer breakdown is incorrect.')
 testAssert(manufacturerTrendRows.find((row) => row.label === 'Bravo')?.averagePaidPerCigar === 11.25, 'Purchase trend manufacturer average paid per cigar is incorrect.')
 testAssert(manufacturerTrendRows.map((row) => row.label).join(',') === 'Alpha,Bravo', 'Purchase trend manufacturer breakdown is not alphabetical.')
+state.purchaseRecordsFilterType = 'month'
+state.purchaseRecordsFilterValue = '2026-02'
+state.purchaseRecordsFilterLabel = 'Feb 2026'
+let filteredPurchases = purchaseRecordsForDisplay()
+testAssert(filteredPurchases.length === 1 && filteredPurchases[0].id === 2, 'Purchase trend month click-through is incorrect.')
+state.purchaseRecordsFilterType = 'vendor'
+state.purchaseRecordsFilterValue = '1'
+state.purchaseRecordsFilterLabel = 'Vendor One'
+filteredPurchases = purchaseRecordsForDisplay()
+testAssert(filteredPurchases.length === 1 && filteredPurchases[0].id === 1, 'Purchase trend vendor click-through is incorrect.')
+state.purchaseRecordsFilterType = 'manufacturer'
+state.purchaseRecordsFilterValue = 'bravo'
+state.purchaseRecordsFilterLabel = 'Bravo'
+filteredPurchases = purchaseRecordsForDisplay()
+testAssert(filteredPurchases.length === 2 && filteredPurchases[0].id === 2 && filteredPurchases[1].id === 1, 'Purchase trend manufacturer click-through is incorrect.')
+state.purchaseRecordsFilterType = ''
+state.purchaseRecordsFilterValue = ''
+state.purchaseRecordsFilterLabel = ''
 state.purchaseTrendPeriod = 'year'
 const pennyAllocation = allocatePurchasePaidCents(
   { totalPaid: '0.01' },

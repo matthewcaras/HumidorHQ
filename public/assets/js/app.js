@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.1
+ * Revision: 1.24.2
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 10:45 ET
+ * Modified Date: 2026-07-20 11:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -67,6 +67,9 @@ const state = {
   purchaseHistoryManufacturer: '',
   purchaseHistoryBuyAgainFilter: '',
   purchaseTrendPeriod: 'year',
+  purchaseRecordsFilterType: '',
+  purchaseRecordsFilterValue: '',
+  purchaseRecordsFilterLabel: '',
   agingManufacturer: '',
   agingHumidorId: '',
   selectedAgingBucketKey: null,
@@ -3557,8 +3560,8 @@ function renderPurchaseLinesPanel(view) {
 }
 
 function renderPurchaseOverview(view) {
-  const purchases = records('purchases')
-  const lines = records('purchase-lines')
+  const purchases = purchaseRecordsForDisplay()
+  const lines = records('purchase-lines').filter((line) => purchases.some((purchase) => Number(purchase.id) === Number(line.purchaseId)))
   const totalPaid = sumMoneyValues(purchases.map((purchase) => purchase.totalPaid))
   const totalPurchased = lines.reduce((sum, line) => sum + numericValue(line.quantity), 0)
 
@@ -3566,7 +3569,10 @@ function renderPurchaseOverview(view) {
   const subtitle = document.querySelector('#page-subtitle')
   const pageActions = document.querySelector('#page-actions')
   hero.classList.add('purchase-hero')
-  subtitle.textContent = 'Track vendor history, purchase costs, and line-level receiving.'
+  const purchaseFilterLabelText = purchaseRecordsFilterLabel()
+  subtitle.textContent = purchaseFilterLabelText
+    ? `Filtered to ${purchaseFilterLabelText}. Track vendor history, purchase costs, and line-level receiving.`
+    : 'Track vendor history, purchase costs, and line-level receiving.'
   subtitle.hidden = false
   const addPurchase = document.createElement('button')
   addPurchase.type = 'button'
@@ -3578,6 +3584,16 @@ function renderPurchaseOverview(view) {
     render()
   })
   pageActions.append(addPurchase)
+  if (purchaseFilterLabelText) {
+    const clearFilter = document.createElement('button')
+    clearFilter.type = 'button'
+    clearFilter.className = 'secondary-button purchase-add-button'
+    clearFilter.textContent = 'Clear Filter'
+    clearFilter.addEventListener('click', () => {
+      clearPurchaseRecordsFilter()
+    })
+    pageActions.append(clearFilter)
+  }
 
   const summary = document.createElement('div')
   summary.className = 'metric-grid purchase-summary-grid'
@@ -3639,13 +3655,13 @@ function renderPurchaseLineDetails(container, purchase) {
 }
 
 function renderPurchaseRecords(view) {
-  const purchases = sortPurchasesNewest(records('purchases'))
+  const purchases = purchaseRecordsForDisplay()
   const heading = document.createElement('div')
   heading.className = 'section-heading purchase-records-heading'
   heading.innerHTML = `
     <div>
       <h3>Purchase Records</h3>
-      <p class="muted">Select a purchase order to view its cigars and record full or partial receipts.</p>
+      <p class="muted">${purchaseRecordsFilterLabel() ? `Showing purchases filtered to ${escapeHtml(purchaseRecordsFilterLabel())}.` : 'Select a purchase order to view its cigars and record full or partial receipts.'}</p>
     </div>
   `
   view.append(heading)
@@ -3653,10 +3669,14 @@ function renderPurchaseRecords(view) {
   if (purchases.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = '<p>No purchase records yet.</p>'
+    empty.innerHTML = purchaseRecordsFilterLabel()
+      ? '<p>No purchase records match the current filter.</p>'
+      : '<p>No purchase records yet.</p>'
     view.append(empty)
     return
   }
+
+  ensureSelectedPurchaseVisible(purchases)
 
   const tableWrap = document.createElement('div')
   tableWrap.className = 'table-scroll'
@@ -4497,6 +4517,73 @@ function purchaseTrendManufacturerRows() {
     .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }))
 }
 
+function purchaseRecordsFilterLabel() {
+  if (!state.purchaseRecordsFilterType || !state.purchaseRecordsFilterValue) {
+    return ''
+  }
+  return state.purchaseRecordsFilterLabel || ''
+}
+
+function purchaseRecordsForDisplay() {
+  const filterType = String(state.purchaseRecordsFilterType || '').trim()
+  const filterValue = String(state.purchaseRecordsFilterValue || '').trim().toLowerCase()
+  const purchases = sortPurchasesNewest(records('purchases'))
+  if (!filterType || !filterValue) {
+    return purchases
+  }
+  return purchases.filter((purchase) => {
+    const purchaseDate = String(purchase.purchaseDate || '').trim().toLowerCase()
+    if (filterType === 'year' || filterType === 'month') {
+      return purchaseDate.startsWith(filterValue)
+    }
+    if (filterType === 'vendor') {
+      return Number(purchase.vendorId || 0) === Number(filterValue)
+    }
+    if (filterType === 'manufacturer') {
+      return records('purchase-lines')
+        .filter((line) => Number(line.purchaseId || 0) === Number(purchase.id))
+        .some((line) => {
+          const cigar = recordById('catalog-cigars', line.catalogCigarId)
+          return String(cigar?.manufacturer || '').trim().toLowerCase() === filterValue
+        })
+    }
+    return true
+  })
+}
+
+function ensureSelectedPurchaseVisible(purchases) {
+  if (purchases.length === 0) {
+    state.selectedPurchaseId = null
+    return null
+  }
+  const selectedId = Number(state.selectedPurchaseId || 0)
+  const selectedVisible = selectedId > 0 && purchases.some((purchase) => Number(purchase.id) === selectedId)
+  if (!selectedVisible) {
+    state.selectedPurchaseId = Number(purchases[0].id)
+  }
+  return recordById('purchases', state.selectedPurchaseId)
+}
+
+function setPurchaseRecordsFilter(type, value, label) {
+  state.purchaseRecordsFilterType = String(type || '')
+  state.purchaseRecordsFilterValue = String(value || '')
+  state.purchaseRecordsFilterLabel = String(label || '')
+  state.selectedPurchaseId = null
+  state.editingPurchaseLineId = null
+  state.showPurchaseCatalogCreate = false
+  navigateToPage('Purchases')
+}
+
+function clearPurchaseRecordsFilter() {
+  state.purchaseRecordsFilterType = ''
+  state.purchaseRecordsFilterValue = ''
+  state.purchaseRecordsFilterLabel = ''
+  state.selectedPurchaseId = null
+  state.editingPurchaseLineId = null
+  state.showPurchaseCatalogCreate = false
+  navigateToPage('Purchases')
+}
+
 function renderPurchaseTrendReport(view) {
   const summary = summarizePurchaseTrendPurchases(records('purchases'))
   const trendRows = purchaseTrendRows()
@@ -4567,7 +4654,7 @@ function renderPurchaseTrendReport(view) {
       </thead>
       <tbody>
         ${trendRows.map((row) => `
-          <tr>
+          <tr class="clickable-record-row" tabindex="0" data-purchase-trend-key="${escapeHtml(row.key)}">
             <td>${escapeHtml(row.label)}</td>
             <td>${formatCount(row.purchaseCount)}</td>
             <td>${formatCount(row.cigarCount)}</td>
@@ -4579,6 +4666,19 @@ function renderPurchaseTrendReport(view) {
     </table>
   `
   panel.append(trendTableWrap)
+  trendTableWrap.querySelectorAll('[data-purchase-trend-key]').forEach((rowElement) => {
+    const row = trendRows.find((item) => item.key === rowElement.dataset.purchaseTrendKey)
+    if (!row) return
+    rowElement.setAttribute('aria-label', `Open Purchases filtered to ${row.label}`)
+    const open = () => setPurchaseRecordsFilter(state.purchaseTrendPeriod, row.key, row.label)
+    rowElement.addEventListener('click', open)
+    rowElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        open()
+      }
+    })
+  })
 
   const vendorHeading = document.createElement('h4')
   vendorHeading.className = 'report-values-title'
@@ -4600,7 +4700,7 @@ function renderPurchaseTrendReport(view) {
       </thead>
       <tbody>
         ${vendorRows.map((row) => `
-          <tr>
+          <tr class="clickable-record-row" tabindex="0" data-purchase-trend-vendor-id="${escapeHtml(String(row.key))}">
             <td>${escapeHtml(row.label)}</td>
             <td>${formatCount(row.purchaseCount)}</td>
             <td>${formatCount(row.cigarCount)}</td>
@@ -4612,6 +4712,19 @@ function renderPurchaseTrendReport(view) {
     </table>
   `
   panel.append(vendorTableWrap)
+  vendorTableWrap.querySelectorAll('[data-purchase-trend-vendor-id]').forEach((rowElement) => {
+    const row = vendorRows.find((item) => String(item.key) === String(rowElement.dataset.purchaseTrendVendorId))
+    if (!row) return
+    rowElement.setAttribute('aria-label', `Open Purchases filtered to ${row.label}`)
+    const open = () => setPurchaseRecordsFilter('vendor', row.key, row.label)
+    rowElement.addEventListener('click', open)
+    rowElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        open()
+      }
+    })
+  })
 
   const manufacturerHeading = document.createElement('h4')
   manufacturerHeading.className = 'report-values-title'
@@ -4633,7 +4746,7 @@ function renderPurchaseTrendReport(view) {
       </thead>
       <tbody>
         ${manufacturerRows.map((row) => `
-          <tr>
+          <tr class="clickable-record-row" tabindex="0" data-purchase-trend-manufacturer="${escapeHtml(row.label)}">
             <td>${escapeHtml(row.label)}</td>
             <td>${formatCount(row.purchaseCount)}</td>
             <td>${formatCount(row.cigarCount)}</td>
@@ -4645,6 +4758,19 @@ function renderPurchaseTrendReport(view) {
     </table>
   `
   panel.append(manufacturerTableWrap)
+  manufacturerTableWrap.querySelectorAll('[data-purchase-trend-manufacturer]').forEach((rowElement) => {
+    const row = manufacturerRows.find((item) => item.label === rowElement.dataset.purchaseTrendManufacturer)
+    if (!row) return
+    rowElement.setAttribute('aria-label', `Open Purchases filtered to ${row.label}`)
+    const open = () => setPurchaseRecordsFilter('manufacturer', row.key, row.label)
+    rowElement.addEventListener('click', open)
+    rowElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        open()
+      }
+    })
+  })
 
   view.append(panel)
 }
