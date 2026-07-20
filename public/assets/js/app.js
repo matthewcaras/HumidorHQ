@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.20.4
+ * Revision: 1.21.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 07:20 ET
+ * Modified Date: 2026-07-20 08:30 ET
  */
 
 const API_BASE_URL = 'api'
@@ -29,6 +29,7 @@ const state = {
   collectionBuyAgainFilter: '',
   collectionSearch: '',
   catalogSearch: '',
+  selectedCatalogHistoryCigarId: null,
   selectedCollectionCigarId: null,
   collectionScrollTargetCigarId: null,
   selectedPurchaseId: null,
@@ -150,7 +151,7 @@ const managedPages = {
     title: 'Catalog Cigar',
     intro: 'Add and maintain master cigar records. Quantity totals are calculated from linked purchase and inventory records.',
     inlineEdit: true,
-    dependencies: ['purchase-lines', 'lots', 'lot-location-balances'],
+    dependencies: ['purchase-lines', 'lots', 'lot-location-balances', 'inventory-events', 'smoking-journal-entries', 'storage-locations', 'storage-sub-locations'],
     fields: [
       { name: 'manufacturer', label: 'Manufacturer', required: true },
       { name: 'series', label: 'Series', required: true },
@@ -1414,6 +1415,45 @@ function smokingJournalEntryForEvent(eventId) {
     .find((entry) => Number(entry.inventoryEventId) === Number(eventId)) || null
 }
 
+function catalogCigarIdForInventoryEvent(event) {
+  const lot = recordById('lots', event?.lotId)
+  return Number(event?.catalogCigarId || lot?.catalogCigarId || 0)
+}
+
+function smokingJournalHistoryRows(catalogCigarId = null) {
+  const eventById = new Map(records('inventory-events').map((event) => [Number(event.id), event]))
+  return records('smoking-journal-entries')
+    .map((journal) => {
+      const event = eventById.get(Number(journal.inventoryEventId))
+      if (!event || normalizeEventType(event.eventType) !== 'SMOKED') return null
+      const eventCatalogCigarId = catalogCigarIdForInventoryEvent(event)
+      if (catalogCigarId && eventCatalogCigarId !== Number(catalogCigarId)) return null
+      const details = removalEventDetails(event)
+      return {
+        journal,
+        event,
+        catalogCigarId: eventCatalogCigarId,
+        cigar: recordById('catalog-cigars', eventCatalogCigarId),
+        date: removalEventDate(event),
+        locationLabel: details.locationLabel,
+        reversed: inventoryEventIsReversed(event),
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.date.localeCompare(left.date) || Number(right.event.id || 0) - Number(left.event.id || 0))
+}
+
+function smokingJournalHistoryMetrics(rows) {
+  const effectiveRows = rows.filter((row) => !row.reversed)
+  const ratings = effectiveRows.map((row) => Number(row.journal.rating)).filter((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 10)
+  return {
+    totalEntries: rows.length,
+    effectiveQuantity: effectiveRows.reduce((sum, row) => sum + Number(row.event.quantity || 0), 0),
+    averageRating: ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null,
+    lastSmokedDate: effectiveRows[0]?.date || '',
+  }
+}
+
 function savingsPercent(cost, msrp) {
   if (!hasKnownMoney(cost) || !hasKnownMoney(msrp)) {
     return null
@@ -2341,6 +2381,67 @@ function renderManagedForm(view, pageConfig) {
   return form
 }
 
+function renderCatalogSmokingHistory(container, cigar) {
+  const rows = smokingJournalHistoryRows(cigar.id)
+  const metrics = smokingJournalHistoryMetrics(rows)
+  const heading = document.createElement('div')
+  heading.className = 'section-heading compact-heading'
+  heading.innerHTML = `
+    <div>
+      <h3>Smoking Journal</h3>
+      <p class="muted">${escapeHtml(cigarName(cigar))} &bull; Buy Again: ${escapeHtml(buyAgainLabel(cigar.buyAgainStatus))}</p>
+    </div>
+  `
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = 'secondary-button compact-button'
+  close.textContent = 'Close Journal'
+  close.addEventListener('click', () => {
+    state.selectedCatalogHistoryCigarId = null
+    render()
+  })
+  heading.append(close)
+  container.append(heading)
+
+  const summary = document.createElement('div')
+  summary.className = 'metric-grid compact journal-summary-grid'
+  summary.append(
+    metricCard('Journal Entries', metrics.totalEntries, 'Includes preserved reversed history'),
+    metricCard('Effective Smoked', metrics.effectiveQuantity, 'Quantity after reversals'),
+    metricCard('Average Rating', metrics.averageRating === null ? null : metrics.averageRating.toFixed(1), 'Effective rated entries'),
+    metricCard('Last Smoked', metrics.lastSmokedDate || '—', 'Latest effective journal date'),
+  )
+  container.append(summary)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No Smoking Journal entries have been recorded for this cigar.</p>'
+    container.append(empty)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll'
+  tableWrap.innerHTML = `
+    <table class="data-table smoking-journal-table">
+      <thead><tr><th>Date</th><th>Rating</th><th>Qty</th><th>Lot</th><th>Location</th><th>Journal Notes</th><th>Status</th></tr></thead>
+      <tbody>${rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.date || '—')}</td>
+          <td>${escapeHtml(String(row.journal.rating || '—'))}</td>
+          <td>${formatCount(row.event.quantity)}</td>
+          <td>${row.event.lotId ? `Lot ${escapeHtml(String(row.event.lotId))}` : '—'}</td>
+          <td>${escapeHtml(row.locationLabel || 'Unassigned')}</td>
+          <td>${escapeHtml(row.journal.notes || '')}</td>
+          <td>${row.reversed ? 'Reversed — history retained' : 'Effective'}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `
+  container.append(tableWrap)
+}
+
 function renderManagedTable(view, pageConfig) {
   const collection = pageConfig.collection
   const supportsArchive = collectionSupportsArchive(collection)
@@ -2370,6 +2471,7 @@ function renderManagedTable(view, pageConfig) {
     toggleArchived.addEventListener('click', () => {
       state.showArchivedRecords[collection] = !showArchived
       state.editing[collection] = null
+      if (collection === 'catalog-cigars') state.selectedCatalogHistoryCigarId = null
       render()
     })
     heading.append(toggleArchived)
@@ -2388,11 +2490,13 @@ function renderManagedTable(view, pageConfig) {
       event.preventDefault()
       state.catalogSearch = String(new FormData(catalogSearchForm).get('catalogSearch') || '').trim()
       state.editing[collection] = null
+      state.selectedCatalogHistoryCigarId = null
       render()
     })
     catalogSearchForm.querySelector('[data-clear-catalog-search]').addEventListener('click', () => {
       state.catalogSearch = ''
       state.editing[collection] = null
+      state.selectedCatalogHistoryCigarId = null
       render()
     })
   }
@@ -2413,6 +2517,7 @@ function renderManagedTable(view, pageConfig) {
   tableWrap.className = 'table-scroll'
   const table = document.createElement('table')
   table.className = 'data-table managed-table'
+  if (collection === 'catalog-cigars') table.classList.add('catalog-records-table')
   table.innerHTML = `
     <thead>
       <tr>
@@ -2427,6 +2532,9 @@ function renderManagedTable(view, pageConfig) {
   rows.forEach((record) => {
     const row = document.createElement('tr')
     const isEditing = inlineEdit && Number(state.editing[collection]?.id || 0) === Number(record.id)
+    const isCatalogJournalSelected = collection === 'catalog-cigars'
+      && Number(state.selectedCatalogHistoryCigarId || 0) === Number(record.id)
+    if (isEditing || isCatalogJournalSelected) row.classList.add('selected-row')
     pageConfig.columns.forEach((column, columnIndex) => {
       const cell = document.createElement('td')
       if (collection === 'storage-locations' && columnIndex === 0 && recordIsActive(record)) {
@@ -2456,12 +2564,27 @@ function renderManagedTable(view, pageConfig) {
       edit.addEventListener('click', () => {
         state.editing[collection] = record
         state.formError = null
+        if (collection === 'catalog-cigars') state.selectedCatalogHistoryCigarId = null
         if (collection === 'purchases') {
           state.selectedPurchaseId = Number(record.id)
         }
         render()
       })
       actions.append(edit)
+    }
+
+    if (collection === 'catalog-cigars') {
+      const journal = document.createElement('button')
+      journal.type = 'button'
+      journal.className = 'secondary-button compact-button'
+      journal.textContent = isCatalogJournalSelected ? 'Close Journal' : 'Journal'
+      journal.addEventListener('click', () => {
+        state.selectedCatalogHistoryCigarId = isCatalogJournalSelected ? null : Number(record.id)
+        state.editing[collection] = null
+        state.formError = null
+        render()
+      })
+      actions.append(journal)
     }
 
     if (supportsArchive) {
@@ -2534,14 +2657,16 @@ function renderManagedTable(view, pageConfig) {
     row.append(actions)
     tbody.append(row)
 
-    if (isEditing) {
+    if (isEditing || isCatalogJournalSelected) {
       const editRow = document.createElement('tr')
       editRow.className = 'collection-expanded-row'
       const editCell = document.createElement('td')
       editCell.colSpan = pageConfig.columns.length + 1
       const editCard = document.createElement('div')
       editCard.className = 'collection-expanded-card'
-      if (collection === 'purchases') {
+      if (isCatalogJournalSelected) {
+        renderCatalogSmokingHistory(editCard, record)
+      } else if (collection === 'purchases') {
         renderPurchaseRecordInlineEdit(editCard, record)
       } else {
         const form = renderManagedForm(editCard, pageConfig)
@@ -3831,7 +3956,8 @@ function filteredRemovalEvents() {
         return true
       }
       const details = removalEventDetails(event)
-      return [details.cigarLabel, details.locationLabel, details.lotLabel, event.notes]
+      const journal = smokingJournalEntryForEvent(event.id)
+      return [details.cigarLabel, details.locationLabel, details.lotLabel, event.notes, journal?.notes, journal?.rating]
         .some((value) => String(value || '').toLowerCase().includes(search))
     })
     .sort((left, right) => removalEventDate(right).localeCompare(removalEventDate(left)) || Number(right.id || 0) - Number(left.id || 0))
@@ -3944,7 +4070,7 @@ function renderRemovalHistory(view) {
   const searchForm = document.createElement('form')
   searchForm.className = 'report-search-form'
   searchForm.innerHTML = `
-    <label class="form-field"><span>Search</span><input name="reportSearch" value="${escapeHtml(state.reportSearch)}" placeholder="Search cigar, location, notes, or lot number"></label>
+    <label class="form-field"><span>Search</span><input name="reportSearch" value="${escapeHtml(state.reportSearch)}" placeholder="Search cigar, location, lot, rating, or notes"></label>
     <button class="primary-button" type="submit">Search</button>
     <button class="secondary-button" type="button" data-clear-search>Clear</button>
   `
@@ -4012,7 +4138,9 @@ function renderRemovalHistory(view) {
       row.innerHTML = `
         <td>${escapeHtml(removalEventDate(event))}</td>
         <td>${escapeHtml(removalEventLabel(event.eventType))}</td>
-        <td>${escapeHtml(details.cigarLabel)}</td>
+        <td>${details.cigar
+          ? `<button type="button" class="linkish-button" data-journal-catalog-id="${Number(details.cigar.id)}">${escapeHtml(details.cigarLabel)}</button>`
+          : escapeHtml(details.cigarLabel)}</td>
         <td>${escapeHtml(details.locationLabel || 'Unassigned')}</td>
         <td>${formatCount(event.quantity)}</td>
         <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
@@ -4021,6 +4149,14 @@ function renderRemovalHistory(view) {
         <td>${escapeHtml(journal?.notes || '')}</td>
       `
       tbody.append(row)
+    })
+    table.querySelectorAll('[data-journal-catalog-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.selectedCatalogHistoryCigarId = Number(button.dataset.journalCatalogId)
+        state.catalogSearch = ''
+        state.editing['catalog-cigars'] = null
+        navigateToPage('Catalog')
+      })
     })
     tableWrap.append(table)
     panel.append(tableWrap)

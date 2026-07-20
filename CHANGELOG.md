@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.26.4
+Revision: 1.27.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 07:20 ET
+Modified Date: 2026-07-20 08:30 ET
 -->
 
 # Changelog
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.27.0 - 2026-07-20
+
+Changed by: Matt
+
+- Added a read-only Catalog Smoking Journal panel with prior ratings, notes, quantity, Lot, source location, effective status, average rating, and last effective smoke date.
+- Preserved reversed smoke Journal entries in the Catalog history while clearly marking them and excluding them from effective quantity, rating, and latest-date summaries.
+- Made Removal History cigar names open the corresponding Catalog Journal and expanded report search to include Journal ratings and notes.
+- Corrected the mobile Catalog Journal expansion to fill the available view width and added a stronger border around individual mobile cigar records.
+- Added isolated regression coverage for Journal ordering, summaries, source context, report-note search, and reversal handling.
 
 ## 1.26.4 - 2026-07-20
 
