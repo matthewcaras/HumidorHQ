@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.8.0
- * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, Smoking Journal, and Activity report behavior.
- * Modified Date: 2026-07-20 09:00 ET
+ * Revision: 1.9.0
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
+ * Modified Date: 2026-07-20 09:30 ET
  */
 
 const fs = require('node:fs')
@@ -32,8 +32,8 @@ state.records = {
     { id: 3, purchaseId: 1, catalogCigarId: 2, quantity: 1, purchasePrice: '10.00', trueCostBasis: '11.00' },
   ],
   lots: [
-    { id: 1, purchaseLineId: 1, purchaseId: 1, catalogCigarId: 1, currentQuantity: 2, costPerCigarSnapshot: '11.00' },
-    { id: 2, purchaseLineId: 2, purchaseId: 2, catalogCigarId: 2, currentQuantity: 3, costPerCigarSnapshot: '11.00' },
+    { id: 1, purchaseLineId: 1, purchaseId: 1, catalogCigarId: 1, currentQuantity: 2, receivedDateSnapshot: '2025-01-01', costPerCigarSnapshot: '11.00', msrpPerCigarSnapshot: '15.00' },
+    { id: 2, purchaseLineId: 2, purchaseId: 2, catalogCigarId: 2, currentQuantity: 3, receivedDateSnapshot: '2025-04-01', costPerCigarSnapshot: '11.00', msrpPerCigarSnapshot: '16.00' },
   ],
   'lot-location-balances': [
     { id: 1, lotId: 1, purchaseLineId: 1, purchaseId: 1, storageLocationId: 1, storageSubLocationId: null, quantity: 2 },
@@ -134,6 +134,36 @@ state.collectionDirection = 'asc'
 testAssert(sortCollectionItems(buildCollectionItems())[0].cigar.strength === 'Mild', 'Ascending strength sort is incorrect.')
 state.collectionDirection = 'desc'
 testAssert(sortCollectionItems(buildCollectionItems())[0].cigar.strength === 'Full', 'Descending strength sort is incorrect.')
+
+let agingRows = inventoryAgingRows('2025-05-01')
+let agingSummary = summarizeInventoryAging(agingRows)
+testAssert(inventoryAgeDays('2025-02-30', '2025-05-01') === null, 'Inventory Aging accepted an invalid calendar date.')
+testAssert(inventoryAgingBucket(inventoryAgeDays('2025-05-02', '2025-05-01')).key === 'future', 'Inventory Aging did not flag a future receipt date.')
+testAssert(agingRows.length === 3 && agingSummary.quantity === 5 && agingSummary.lotCount === 2, 'Inventory Aging must reconcile split balances without double-counting Lots.')
+testAssert(agingSummary.weightedAverageAge === 66 && agingSummary.knownAgeQuantity === 5, 'Inventory Aging weighted average is incorrect.')
+testAssert(agingSummary.totalCostBasis === 55 && agingSummary.totalMsrp === 78, 'Inventory Aging cost basis or MSRP does not reconcile.')
+const agingBuckets = inventoryAgingBucketSummaries(agingRows)
+testAssert(agingBuckets.find((item) => item.bucket.key === '0-30').quantity === 3, 'Inventory Aging 0-30 day bucket is incorrect.')
+testAssert(agingBuckets.find((item) => item.bucket.key === '91-180').quantity === 2, 'Inventory Aging 91-180 day bucket is incorrect.')
+state.agingManufacturer = 'Bravo'
+agingRows = inventoryAgingRows('2025-05-01')
+testAssert(summarizeInventoryAging(agingRows).quantity === 3 && agingRows.every((row) => row.cigar.id === 2), 'Inventory Aging manufacturer filter is incorrect.')
+state.agingManufacturer = ''
+state.agingHumidorId = '1'
+agingRows = inventoryAgingRows('2025-05-01')
+testAssert(summarizeInventoryAging(agingRows).quantity === 3 && summarizeInventoryAging(agingRows).lotCount === 2, 'Inventory Aging Humidor filter is incorrect.')
+state.agingHumidorId = ''
+const lotTwo = state.records.lots.find((lot) => lot.id === 2)
+const lotTwoCost = lotTwo.costPerCigarSnapshot
+const lotTwoDate = lotTwo.receivedDateSnapshot
+lotTwo.costPerCigarSnapshot = null
+lotTwo.receivedDateSnapshot = null
+agingRows = inventoryAgingRows('2025-05-01')
+agingSummary = summarizeInventoryAging(agingRows)
+testAssert(agingSummary.totalCostBasis === null && agingSummary.knownCostQuantity === 2, 'Inventory Aging must preserve unknown cost instead of reporting a complete total.')
+testAssert(inventoryAgingBucketSummaries(agingRows).find((item) => item.bucket.key === 'unknown').quantity === 3, 'Inventory Aging must retain unknown receipt dates in an explicit bucket.')
+lotTwo.costPerCigarSnapshot = lotTwoCost
+lotTwo.receivedDateSnapshot = lotTwoDate
 
 state.purchaseHistoryGroup = 'vendor'
 state.purchaseHistoryVendorId = '1'

@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.22.0
+ * Revision: 1.23.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 09:00 ET
+ * Modified Date: 2026-07-20 09:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -66,6 +66,9 @@ const state = {
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
   purchaseHistoryBuyAgainFilter: '',
+  agingManufacturer: '',
+  agingHumidorId: '',
+  selectedAgingBucketKey: null,
   backupData: null,
   backupPreview: null,
   backupMessage: '',
@@ -4449,6 +4452,244 @@ function renderPurchaseHistoryReport(view) {
   view.append(panel)
 }
 
+const inventoryAgingBuckets = [
+  { key: '0-30', label: '0–30 Days', minimum: 0, maximum: 30 },
+  { key: '31-90', label: '31–90 Days', minimum: 31, maximum: 90 },
+  { key: '91-180', label: '91–180 Days', minimum: 91, maximum: 180 },
+  { key: '181-365', label: '181–365 Days', minimum: 181, maximum: 365 },
+  { key: '366+', label: 'Over 1 Year', minimum: 366, maximum: Number.POSITIVE_INFINITY },
+  { key: 'future', label: 'Future Receipt Date' },
+  { key: 'unknown', label: 'Unknown Receipt Date' },
+]
+
+function isoDateDayNumber(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''))
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const timestamp = Date.UTC(year, month - 1, day)
+  const date = new Date(timestamp)
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return Math.floor(timestamp / 86400000)
+}
+
+function inventoryAgeDays(receivedDate, asOfDate = todayIsoDate()) {
+  const receivedDay = isoDateDayNumber(receivedDate)
+  const asOfDay = isoDateDayNumber(asOfDate)
+  return receivedDay === null || asOfDay === null ? null : asOfDay - receivedDay
+}
+
+function inventoryAgingBucket(ageDays) {
+  if (ageDays === null) return inventoryAgingBuckets.find((bucket) => bucket.key === 'unknown')
+  if (ageDays < 0) return inventoryAgingBuckets.find((bucket) => bucket.key === 'future')
+  return inventoryAgingBuckets.find((bucket) => bucket.minimum <= ageDays && ageDays <= bucket.maximum)
+}
+
+function inventoryAgingRows(asOfDate = todayIsoDate()) {
+  const manufacturer = String(state.agingManufacturer || '').trim().toLowerCase()
+  const humidorId = Number(state.agingHumidorId || 0)
+  return positiveBalances()
+    .filter((entry) => !manufacturer || String(entry.cigar?.manufacturer || '').trim().toLowerCase() === manufacturer)
+    .filter((entry) => !humidorId || Number(entry.humidor?.id || 0) === humidorId)
+    .map((entry) => {
+      const receivedDate = displayDate(
+        entry.lot?.receivedDateSnapshot
+        || entry.line?.completionReceivedDate
+        || entry.line?.latestReceivedDate
+        || entry.line?.firstReceivedDate
+        || entry.line?.receivedDate
+        || entry.purchase?.receivedDate,
+      )
+      const ageDays = inventoryAgeDays(receivedDate, asOfDate)
+      return {
+        ...entry,
+        receivedDate,
+        ageDays,
+        agingBucket: inventoryAgingBucket(ageDays),
+        costValueCents: hasKnownMoney(entry.costPerCigar) ? entry.quantity * Math.round(Number(entry.costPerCigar) * 100) : null,
+        msrpValueCents: hasKnownMoney(entry.msrpPerCigar) ? entry.quantity * Math.round(Number(entry.msrpPerCigar) * 100) : null,
+      }
+    })
+    .sort((left, right) => {
+      const leftBucket = inventoryAgingBuckets.findIndex((bucket) => bucket.key === left.agingBucket.key)
+      const rightBucket = inventoryAgingBuckets.findIndex((bucket) => bucket.key === right.agingBucket.key)
+      return leftBucket - rightBucket
+        || Number(right.ageDays ?? -1) - Number(left.ageDays ?? -1)
+        || cigarName(left.cigar).localeCompare(cigarName(right.cigar), undefined, { sensitivity: 'base' })
+        || Number(left.lot?.id || 0) - Number(right.lot?.id || 0)
+    })
+}
+
+function summarizeInventoryAging(rows) {
+  const quantity = rows.reduce((sum, row) => sum + row.quantity, 0)
+  const knownAgeRows = rows.filter((row) => row.ageDays !== null && row.ageDays >= 0)
+  const knownAgeQuantity = knownAgeRows.reduce((sum, row) => sum + row.quantity, 0)
+  const knownCostRows = rows.filter((row) => row.costValueCents !== null)
+  const knownMsrpRows = rows.filter((row) => row.msrpValueCents !== null)
+  const knownCostQuantity = knownCostRows.reduce((sum, row) => sum + row.quantity, 0)
+  const knownMsrpQuantity = knownMsrpRows.reduce((sum, row) => sum + row.quantity, 0)
+  return {
+    quantity,
+    lotCount: new Set(rows.map((row) => Number(row.lot?.id || 0)).filter(Boolean)).size,
+    knownAgeQuantity,
+    weightedAverageAge: knownAgeQuantity > 0
+      ? knownAgeRows.reduce((sum, row) => sum + row.quantity * row.ageDays, 0) / knownAgeQuantity
+      : null,
+    totalCostBasis: knownCostQuantity === quantity ? knownCostRows.reduce((sum, row) => sum + row.costValueCents, 0) / 100 : null,
+    totalMsrp: knownMsrpQuantity === quantity ? knownMsrpRows.reduce((sum, row) => sum + row.msrpValueCents, 0) / 100 : null,
+    knownCostQuantity,
+    knownMsrpQuantity,
+  }
+}
+
+function inventoryAgingBucketSummaries(rows) {
+  return inventoryAgingBuckets.map((bucket) => {
+    const bucketRows = rows.filter((row) => row.agingBucket.key === bucket.key)
+    return { bucket, rows: bucketRows, ...summarizeInventoryAging(bucketRows) }
+  })
+}
+
+function openCollectionForAgingCigar(cigarId) {
+  state.collectionHumidorFilterId = Number(state.agingHumidorId || 0) || null
+  state.collectionSectionFilterId = null
+  state.collectionStrengthFilter = ''
+  state.collectionBuyAgainFilter = ''
+  state.collectionSearch = ''
+  state.selectedCollectionCigarId = Number(cigarId)
+  state.collectionScrollTargetCigarId = state.selectedCollectionCigarId
+  navigateToPage('Collection')
+}
+
+function renderInventoryAgingReport(view) {
+  const rows = inventoryAgingRows()
+  const summary = summarizeInventoryAging(rows)
+  const bucketSummaries = inventoryAgingBucketSummaries(rows)
+  const manufacturers = [...new Set(records('catalog-cigars')
+    .map((cigar) => String(cigar.manufacturer || '').trim())
+    .filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+  const humidors = [...records('storage-locations')]
+    .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }))
+
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel report-activity-panel inventory-aging-panel'
+  panel.innerHTML = `
+    <div class="section-heading report-title">
+      <div>
+        <h3>Inventory Aging</h3>
+        <p class="muted">On-hand inventory aged from its received date through ${escapeHtml(todayIsoDate())}. Unknown dates and incomplete values remain explicit.</p>
+      </div>
+    </div>
+  `
+
+  const filters = document.createElement('form')
+  filters.className = 'aging-filter-form'
+  filters.innerHTML = `
+    <label class="form-field"><span>Manufacturer</span><select class="report-select" name="agingManufacturer">
+      <option value="">All Manufacturers</option>
+      ${manufacturers.map((manufacturer) => `<option value="${escapeHtml(manufacturer)}">${escapeHtml(manufacturer)}</option>`).join('')}
+    </select></label>
+    <label class="form-field"><span>Humidor</span><select class="report-select" name="agingHumidorId">
+      <option value="">All Humidors</option>
+      ${humidors.map((humidor) => `<option value="${Number(humidor.id)}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}${recordIsActive(humidor) ? '' : ' — Archived'}</option>`).join('')}
+    </select></label>
+    <button type="button" class="secondary-button" data-clear-aging>Clear Filters</button>
+  `
+  const manufacturerSelect = filters.querySelector('[name="agingManufacturer"]')
+  const humidorSelect = filters.querySelector('[name="agingHumidorId"]')
+  manufacturerSelect.value = state.agingManufacturer
+  humidorSelect.value = String(state.agingHumidorId || '')
+  manufacturerSelect.addEventListener('change', () => {
+    state.agingManufacturer = manufacturerSelect.value
+    state.selectedAgingBucketKey = null
+    render()
+  })
+  humidorSelect.addEventListener('change', () => {
+    state.agingHumidorId = humidorSelect.value
+    state.selectedAgingBucketKey = null
+    render()
+  })
+  filters.querySelector('[data-clear-aging]').addEventListener('click', () => {
+    state.agingManufacturer = ''
+    state.agingHumidorId = ''
+    state.selectedAgingBucketKey = null
+    render()
+  })
+  panel.append(filters)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact inventory-aging-metrics'
+  metrics.append(
+    metricCard('On Hand', summary.quantity, 'Positive location balances'),
+    metricCard('Distinct Lots', summary.lotCount, 'Split Lots counted once'),
+    metricCard('Weighted Avg Age', summary.weightedAverageAge === null ? null : `${Math.round(summary.weightedAverageAge)} days`, `${formatCount(summary.knownAgeQuantity)} of ${formatCount(summary.quantity)} cigars dated`),
+  )
+  panel.append(metrics)
+
+  const bucketHeading = document.createElement('div')
+  bucketHeading.className = 'section-heading report-events-heading'
+  bucketHeading.innerHTML = '<div><h3>Age Buckets</h3><p class="muted">Totals reconcile to the filtered on-hand inventory above. Select a nonempty bucket to view its cigars.</p></div>'
+  const bucketWrap = document.createElement('div')
+  bucketWrap.className = 'table-scroll'
+  bucketWrap.innerHTML = `
+    <table class="data-table aging-bucket-table">
+      <thead><tr><th>Age Bucket</th><th>Quantity</th><th>Lots</th><th>Cost Basis</th><th>MSRP</th></tr></thead>
+      <tbody>${bucketSummaries.map((item) => {
+        const isSelected = state.selectedAgingBucketKey === item.bucket.key
+        return `
+        <tr${isSelected ? ' class="selected-row"' : ''}>
+          <td>${item.quantity > 0
+            ? `<button type="button" class="linkish-button aging-bucket-toggle" data-aging-bucket-key="${escapeHtml(item.bucket.key)}" aria-expanded="${isSelected}">${escapeHtml(item.bucket.label)}</button>`
+            : escapeHtml(item.bucket.label)}</td>
+          <td>${formatCount(item.quantity)}</td>
+          <td>${formatCount(item.lotCount)}</td>
+          <td>${escapeHtml(money(item.totalCostBasis))}</td>
+          <td>${escapeHtml(money(item.totalMsrp))}</td>
+        </tr>
+        ${isSelected ? `
+          <tr class="collection-expanded-row">
+            <td colspan="5">
+              <div class="collection-expanded-card aging-bucket-detail">
+                <div class="table-scroll">
+                  <table class="data-table aging-detail-table">
+                    <thead><tr><th>Age</th><th>Received</th><th>Cigar</th><th>Lot</th><th>Location</th><th>Qty</th><th>Cost Basis</th><th>MSRP</th></tr></thead>
+                    <tbody>${item.rows.map((row) => `
+                      <tr>
+                        <td>${row.ageDays === null ? 'Unknown' : row.ageDays < 0 ? `${formatCount(Math.abs(row.ageDays))} days future` : `${formatCount(row.ageDays)} days`}</td>
+                        <td>${escapeHtml(row.receivedDate || 'Unknown')}</td>
+                        <td><button type="button" class="linkish-button" data-aging-cigar-id="${Number(row.cigar?.id || 0)}">${escapeHtml(row.cigar ? cigarName(row.cigar) : 'Missing Catalog relationship')}</button></td>
+                        <td>${row.lot?.id ? `Lot ${escapeHtml(String(row.lot.id))}` : 'Unknown'}</td>
+                        <td>${escapeHtml(row.locationLabel || 'Unassigned')}</td>
+                        <td>${formatCount(row.quantity)}</td>
+                        <td>${escapeHtml(money(row.costValueCents === null ? null : row.costValueCents / 100))}</td>
+                        <td>${escapeHtml(money(row.msrpValueCents === null ? null : row.msrpValueCents / 100))}</td>
+                      </tr>
+                    `).join('')}</tbody>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>
+        ` : ''}
+      `}).join('')}</tbody>
+    </table>
+  `
+  bucketWrap.querySelectorAll('[data-aging-bucket-key]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const bucketKey = button.dataset.agingBucketKey
+      state.selectedAgingBucketKey = state.selectedAgingBucketKey === bucketKey ? null : bucketKey
+      render()
+    })
+  })
+  bucketWrap.querySelectorAll('[data-aging-cigar-id]').forEach((button) => {
+    button.disabled = Number(button.dataset.agingCigarId || 0) <= 0
+    button.addEventListener('click', () => openCollectionForAgingCigar(button.dataset.agingCigarId))
+  })
+  panel.append(bucketHeading, bucketWrap)
+  view.append(panel)
+}
+
 function buyAgainInsights() {
   const journalByEventId = new Map(records('smoking-journal-entries').map((entry) => [Number(entry.inventoryEventId), entry]))
   const ratingsByCatalogId = new Map()
@@ -4547,6 +4788,7 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderPurchaseHistoryReport(view)
   renderBuyAgainReport(view)
+  renderInventoryAgingReport(view)
   renderRemovalHistory(view)
 
   const activity = document.createElement('section')

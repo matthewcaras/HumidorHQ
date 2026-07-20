@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.4.1
+Revision: 1.4.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 08:00 ET
+Modified Date: 2026-07-20 09:30 ET
 -->
 
 # HumidorHQ Data Model
@@ -98,6 +98,8 @@ Lots preserve:
 - Current quantity, calculated from events
 
 Lots can be split across humidors while retaining a link to the original purchase line.
+
+Inventory Aging is a read-only projection of positive Lot/location balances. It ages each balance from the Lot received-date snapshot, counts a split Lot once in distinct-Lot totals, weights average age by current quantity, and calculates value from immutable per-cigar snapshots in integer cents. Missing dates remain in an Unknown bucket, future dates are flagged separately, and a monetary total remains unknown unless every included cigar has a known value.
 
 ## Events
 
