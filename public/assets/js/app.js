@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.2
+ * Revision: 1.24.5
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 11:00 ET
+ * Modified Date: 2026-07-20 11:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -279,15 +279,17 @@ function setActivePage(pageId, options = {}) {
   state.activePage = nextPage
   state.formError = null
   state.error = null
-  if (options.updateHash !== false && window.location.hash !== `#${encodeURIComponent(nextPage)}`) {
+  if (options.updateHash !== false && typeof window !== 'undefined' && window.location.hash !== `#${encodeURIComponent(nextPage)}`) {
     window.location.hash = encodeURIComponent(nextPage)
   }
 }
 
 function navigateToPage(pageId) {
   setActivePage(pageId)
-  render()
-  recordPageView(state.activePage)
+  if (typeof window !== 'undefined') {
+    render()
+    recordPageView(state.activePage)
+  }
 }
 
 function escapeHtml(value) {
@@ -4968,6 +4970,13 @@ function openCollectionForAgingCigar(cigarId) {
   navigateToPage('Collection')
 }
 
+function openCatalogForBuyAgainCigar(cigarId) {
+  state.selectedCatalogHistoryCigarId = Number(cigarId)
+  state.catalogSearch = ''
+  state.editing['catalog-cigars'] = null
+  navigateToPage('Catalog')
+}
+
 function renderInventoryAgingReport(view) {
   const rows = inventoryAgingRows()
   const summary = summarizeInventoryAging(rows)
@@ -5062,7 +5071,7 @@ function renderInventoryAgingReport(view) {
                   <table class="data-table aging-detail-table">
                     <thead><tr><th>Age</th><th>Received</th><th>Cigar</th><th>Lot</th><th>Location</th><th>Qty</th><th>Cost Basis</th><th>MSRP</th></tr></thead>
                     <tbody>${item.rows.map((row) => `
-                      <tr>
+                      <tr class="clickable-record-row" tabindex="0" data-aging-cigar-id="${Number(row.cigar?.id || 0)}">
                         <td>${row.ageDays === null ? 'Unknown' : row.ageDays < 0 ? `${formatCount(Math.abs(row.ageDays))} days future` : `${formatCount(row.ageDays)} days`}</td>
                         <td>${escapeHtml(row.receivedDate || 'Unknown')}</td>
                         <td><button type="button" class="linkish-button" data-aging-cigar-id="${Number(row.cigar?.id || 0)}">${escapeHtml(row.cigar ? cigarName(row.cigar) : 'Missing Catalog relationship')}</button></td>
@@ -5092,6 +5101,20 @@ function renderInventoryAgingReport(view) {
   bucketWrap.querySelectorAll('[data-aging-cigar-id]').forEach((button) => {
     button.disabled = Number(button.dataset.agingCigarId || 0) <= 0
     button.addEventListener('click', () => openCollectionForAgingCigar(button.dataset.agingCigarId))
+  })
+  bucketWrap.querySelectorAll('tr[data-aging-cigar-id]').forEach((rowElement) => {
+    const cigarId = Number(rowElement.dataset.agingCigarId || 0)
+    if (cigarId <= 0) return
+    rowElement.addEventListener('click', (event) => {
+      if (event.target.closest('button')) return
+      openCollectionForAgingCigar(cigarId)
+    })
+    rowElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        openCollectionForAgingCigar(cigarId)
+      }
+    })
   })
   panel.append(bucketHeading, bucketWrap)
   view.append(panel)
@@ -5143,8 +5166,19 @@ function renderBuyAgainReport(view) {
   if (insights.highlyRatedNotEvaluated.length) {
     const tableWrap = document.createElement('div')
     tableWrap.className = 'table-scroll compact-top-gap'
-    tableWrap.innerHTML = `<table class="data-table"><thead><tr><th>Highly Rated, Not Evaluated</th><th>Average Rating</th><th>Ratings</th><th>On Hand</th></tr></thead><tbody>${insights.highlyRatedNotEvaluated.map((item) => `<tr><td>${escapeHtml(cigarName(item.cigar))}</td><td>${item.averageRating.toFixed(1)}</td><td>${formatCount(item.ratingCount)}</td><td>${formatCount(onHandQuantityForCatalog(item.cigar.id))}</td></tr>`).join('')}</tbody></table>`
+    tableWrap.innerHTML = `<table class="data-table"><thead><tr><th>Highly Rated, Not Evaluated</th><th>Average Rating</th><th>Ratings</th><th>On Hand</th></tr></thead><tbody>${insights.highlyRatedNotEvaluated.map((item) => `<tr class="clickable-record-row" tabindex="0" data-buy-again-cigar-id="${Number(item.cigar.id)}"><td>${escapeHtml(cigarName(item.cigar))}</td><td>${item.averageRating.toFixed(1)}</td><td>${formatCount(item.ratingCount)}</td><td>${formatCount(onHandQuantityForCatalog(item.cigar.id))}</td></tr>`).join('')}</tbody></table>`
     panel.append(tableWrap)
+    tableWrap.querySelectorAll('tr[data-buy-again-cigar-id]').forEach((rowElement) => {
+      const cigarId = Number(rowElement.dataset.buyAgainCigarId || 0)
+      if (cigarId <= 0) return
+      rowElement.addEventListener('click', () => openCatalogForBuyAgainCigar(cigarId))
+      rowElement.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          openCatalogForBuyAgainCigar(cigarId)
+        }
+      })
+    })
   }
   view.append(panel)
 }

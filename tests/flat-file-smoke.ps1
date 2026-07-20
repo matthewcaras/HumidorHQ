@@ -1,10 +1,12 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.1
+# Revision : 1.32.3
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-20 11:00 ET
+# Modified Date : 2026-07-20 11:45 ET
 # Changelog :
+# 1.32.3 verify headless-safe buy-again and aging drill-through helpers
+# 1.32.2 verify Buy Again and Inventory Aging drill-through navigation
 # 1.32.1 verify clickable Purchase Trend drill-through into filtered Purchases
 # 1.32.0 verify read-only Purchase Trend analytics and trend/vendor/manufacturer reconciliation
 # 1.31.1 verify concise Aging summaries and expandable bucket-level cigar detail
@@ -239,7 +241,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.2') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.5') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.12\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
@@ -296,9 +298,15 @@ foreach ($agingExpansionHook in @('selectedAgingBucketKey', 'data-aging-bucket-k
     if ($appJs -notmatch [regex]::Escape($agingExpansionHook) -and $appCss -notmatch [regex]::Escape($agingExpansionHook)) { throw "Expandable Aging buckets are missing hook: $agingExpansionHook" }
 }
 if ($appJs -match '<h3>Aging Detail</h3>') { throw 'Inventory Aging must not render a separate always-visible detail section.' }
+foreach ($agingDrillHook in @('function openCollectionForAgingCigar', 'data-aging-cigar-id', 'clickable-record-row', 'data-aging-bucket-key')) {
+    if ($appJs -notmatch [regex]::Escape($agingDrillHook)) { throw "Inventory Aging drill-through is missing hook: $agingDrillHook" }
+}
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
 foreach ($trendReportHook in @('function renderPurchaseTrendReport', 'function purchaseTrendRows', 'function purchaseTrendVendorRows', 'function purchaseTrendManufacturerRows', 'function purchaseRecordsForDisplay', 'function setPurchaseRecordsFilter', 'function clearPurchaseRecordsFilter', 'purchaseTrendPeriod', 'purchaseRecordsFilterType', 'Purchase Trend Analytics', 'By Year', 'By Month', 'Vendor Breakdown', 'Manufacturer Breakdown', 'data-purchase-trend-key', 'data-purchase-trend-vendor-id', 'data-purchase-trend-manufacturer')) {
     if ($appJs -notmatch [regex]::Escape($trendReportHook)) { throw "Purchase trend analytics is missing hook: $trendReportHook" }
+}
+foreach ($buyAgainDrillHook in @('function openCatalogForBuyAgainCigar', 'data-buy-again-cigar-id')) {
+    if ($appJs -notmatch [regex]::Escape($buyAgainDrillHook)) { throw "Buy Again drill-through is missing hook: $buyAgainDrillHook" }
 }
 foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function renderBuyAgainReport', 'highlyRatedNotEvaluated', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
