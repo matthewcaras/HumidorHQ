@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.5
+ * Revision: 1.24.9
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 11:45 ET
+ * Modified Date: 2026-07-20 13:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -4152,16 +4152,10 @@ function reportFilterButton(label, value, stateKey) {
 function renderRemovalHistory(view) {
   const events = filteredRemovalEvents()
   const metrics = removalReportMetrics(events)
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel removal-report-panel'
-  panel.innerHTML = `
-    <div class="section-heading report-title">
-      <div>
-        <h3>Removal History</h3>
-        <p class="muted">Choose a date range and removal type to recalculate the counts and values below.</p>
-      </div>
-    </div>
-  `
+  const { panel, body } = createCollapsibleReportSection({
+    title: 'Removal History',
+    description: 'Choose a date range and removal type to recalculate the counts and values below.',
+  })
 
   const filters = document.createElement('div')
   filters.className = 'report-filter-grid'
@@ -4191,7 +4185,7 @@ function renderRemovalHistory(view) {
   )
   removalType.append(typeButtons)
   filters.append(period, removalType)
-  panel.append(filters)
+  body.append(filters)
 
   if (state.reportPeriod === 'custom') {
     const customDates = document.createElement('div')
@@ -4208,7 +4202,7 @@ function renderRemovalHistory(view) {
       state.reportCustomEnd = event.target.value
       render()
     })
-    panel.append(customDates)
+    body.append(customDates)
   }
 
   const searchForm = document.createElement('form')
@@ -4227,7 +4221,7 @@ function renderRemovalHistory(view) {
     state.reportSearch = ''
     render()
   })
-  panel.append(searchForm)
+  body.append(searchForm)
 
   const counts = document.createElement('div')
   counts.className = 'metric-grid compact report-count-grid'
@@ -4237,7 +4231,7 @@ function renderRemovalHistory(view) {
     metricCard('Gifted', metrics.gifted, ''),
     metricCard('Discarded', metrics.discarded, ''),
   )
-  panel.append(counts)
+  body.append(counts)
 
   const valuesTitle = document.createElement('h3')
   valuesTitle.className = 'report-values-title'
@@ -4254,17 +4248,17 @@ function renderRemovalHistory(view) {
     metricCard('Average MSRP Per Cigar', metrics.averageMsrp, '', true),
     metricCard('Quantity Included', metrics.quantity, ''),
   )
-  panel.append(valuesTitle, values)
+  body.append(valuesTitle, values)
 
   const historyTitle = document.createElement('div')
   historyTitle.className = 'section-heading report-events-heading'
   historyTitle.innerHTML = `<div><h3>Removal Events</h3><p class="muted">${formatCount(events.length)} matching event records.</p></div>`
-  panel.append(historyTitle)
+  body.append(historyTitle)
   if (events.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No smoked, gifted, or discarded events match the selected filters.</p>'
-    panel.append(empty)
+    body.append(empty)
   } else {
     const tableWrap = document.createElement('div')
     tableWrap.className = 'table-scroll'
@@ -4303,7 +4297,7 @@ function renderRemovalHistory(view) {
       })
     })
     tableWrap.append(table)
-    panel.append(tableWrap)
+    body.append(tableWrap)
   }
   view.append(panel)
 }
@@ -4591,16 +4585,11 @@ function renderPurchaseTrendReport(view) {
   const trendRows = purchaseTrendRows()
   const vendorRows = purchaseTrendVendorRows()
   const manufacturerRows = purchaseTrendManufacturerRows()
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel removal-report-panel purchase-trend-panel'
-  panel.innerHTML = `
-    <div class="section-heading report-title">
-      <div>
-        <h3>Purchase Trend Analytics</h3>
-        <p class="muted">Review stored purchase totals by year or month. Vendor and manufacturer breakdowns stay read-only, and manufacturer shares use the same weighted line allocations as Purchase History.</p>
-      </div>
-    </div>
-  `
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'purchase-trend-panel',
+    title: 'Purchase Trend Analytics',
+    description: 'Yearly or monthly purchase totals by vendor and manufacturer.',
+  })
 
   const filters = document.createElement('div')
   filters.className = 'report-filter-grid'
@@ -4615,7 +4604,7 @@ function renderPurchaseTrendReport(view) {
   )
   period.append(periodButtons)
   filters.append(period)
-  panel.append(filters)
+  body.append(filters)
 
   const metrics = document.createElement('div')
   metrics.className = 'metric-grid report-count-grid'
@@ -4625,13 +4614,13 @@ function renderPurchaseTrendReport(view) {
     metricCard('Total Paid', summary.totalPaid, '', true),
     metricCard('Avg Paid / Cigar', summary.averagePaidPerCigar, '', true),
   )
-  panel.append(metrics)
+  body.append(metrics)
 
   if (trendRows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No purchases are available for trend analytics.</p>'
-    panel.append(empty)
+    body.append(empty)
     view.append(panel)
     return
   }
@@ -4639,7 +4628,7 @@ function renderPurchaseTrendReport(view) {
   const trendHeading = document.createElement('h4')
   trendHeading.className = 'report-values-title'
   trendHeading.textContent = state.purchaseTrendPeriod === 'month' ? 'Monthly Trend' : 'Yearly Trend'
-  panel.append(trendHeading)
+  body.append(trendHeading)
 
   const trendTableWrap = document.createElement('div')
   trendTableWrap.className = 'table-scroll compact-top-gap'
@@ -4667,7 +4656,7 @@ function renderPurchaseTrendReport(view) {
       </tbody>
     </table>
   `
-  panel.append(trendTableWrap)
+  body.append(trendTableWrap)
   trendTableWrap.querySelectorAll('[data-purchase-trend-key]').forEach((rowElement) => {
     const row = trendRows.find((item) => item.key === rowElement.dataset.purchaseTrendKey)
     if (!row) return
@@ -4685,7 +4674,7 @@ function renderPurchaseTrendReport(view) {
   const vendorHeading = document.createElement('h4')
   vendorHeading.className = 'report-values-title'
   vendorHeading.textContent = 'Vendor Breakdown'
-  panel.append(vendorHeading)
+  body.append(vendorHeading)
 
   const vendorTableWrap = document.createElement('div')
   vendorTableWrap.className = 'table-scroll compact-top-gap'
@@ -4713,7 +4702,7 @@ function renderPurchaseTrendReport(view) {
       </tbody>
     </table>
   `
-  panel.append(vendorTableWrap)
+  body.append(vendorTableWrap)
   vendorTableWrap.querySelectorAll('[data-purchase-trend-vendor-id]').forEach((rowElement) => {
     const row = vendorRows.find((item) => String(item.key) === String(rowElement.dataset.purchaseTrendVendorId))
     if (!row) return
@@ -4731,7 +4720,7 @@ function renderPurchaseTrendReport(view) {
   const manufacturerHeading = document.createElement('h4')
   manufacturerHeading.className = 'report-values-title'
   manufacturerHeading.textContent = 'Manufacturer Breakdown'
-  panel.append(manufacturerHeading)
+  body.append(manufacturerHeading)
 
   const manufacturerTableWrap = document.createElement('div')
   manufacturerTableWrap.className = 'table-scroll compact-top-gap'
@@ -4759,7 +4748,7 @@ function renderPurchaseTrendReport(view) {
       </tbody>
     </table>
   `
-  panel.append(manufacturerTableWrap)
+  body.append(manufacturerTableWrap)
   manufacturerTableWrap.querySelectorAll('[data-purchase-trend-manufacturer]').forEach((rowElement) => {
     const row = manufacturerRows.find((item) => item.label === rowElement.dataset.purchaseTrendManufacturer)
     if (!row) return
@@ -4782,11 +4771,11 @@ function renderPurchaseHistoryReport(view) {
   const purchases = uniquePurchaseHistoryPurchases(rows)
   const totalQuantity = rows.reduce((sum, row) => sum + numericValue(row.line.quantity), 0)
   const totalPaid = purchaseHistoryTotalPaid(rows)
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel removal-report-panel purchase-history-panel'
-  panel.innerHTML = `
-    <div class="section-heading report-title"><div><h3>Purchase History</h3><p class="muted">Review purchased cigars by Vendor or Catalog manufacturer using stored purchase and allocated line values.</p></div></div>
-  `
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'purchase-history-panel',
+    title: 'Purchase History',
+    description: 'Purchased cigars grouped by vendor or manufacturer.',
+  })
 
   const filters = document.createElement('div')
   filters.className = 'report-filter-grid'
@@ -4841,7 +4830,7 @@ function renderPurchaseHistoryReport(view) {
   })
   buyAgain.append(buyAgainSelect)
   filters.append(group, selection, buyAgain)
-  panel.append(filters)
+  body.append(filters)
 
   const metrics = document.createElement('div')
   metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
@@ -4850,13 +4839,13 @@ function renderPurchaseHistoryReport(view) {
     metricCard('Cigars Purchased', totalQuantity, ''),
     metricCard('Total Paid', totalPaid, '', true),
   )
-  panel.append(metrics)
+  body.append(metrics)
 
   if (rows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No purchases match the selected report.</p>'
-    panel.append(empty)
+    body.append(empty)
   }
   view.append(panel)
 }
@@ -4977,6 +4966,77 @@ function openCatalogForBuyAgainCigar(cigarId) {
   navigateToPage('Catalog')
 }
 
+function activityEventContextTarget(event) {
+  const targetEvent = normalizeEventType(event?.eventType) === 'REVERSAL'
+    ? activityRelationshipEvent(event) || event
+    : event
+  const eventType = normalizeEventType(targetEvent?.eventType)
+  if (eventType === 'PURCHASE_RECEIPT' || Number(targetEvent?.purchaseId || 0) > 0) {
+    return { type: 'purchase', label: 'Open Purchase' }
+  }
+  if (activityEventCigar(targetEvent)) {
+    return { type: 'collection', label: 'Open Collection' }
+  }
+  return null
+}
+
+function openActivityEventContext(event) {
+  const targetEvent = normalizeEventType(event?.eventType) === 'REVERSAL'
+    ? activityRelationshipEvent(event) || event
+    : event
+  const context = activityEventContextTarget(targetEvent)
+  if (!context) return
+  if (context.type === 'purchase') {
+    const purchaseId = Number(targetEvent?.purchaseId || recordById('lots', targetEvent?.lotId)?.purchaseId || 0)
+    if (!purchaseId) return
+    state.purchaseRecordsFilterType = ''
+    state.purchaseRecordsFilterValue = ''
+    state.purchaseRecordsFilterLabel = ''
+    state.selectedPurchaseId = purchaseId
+    state.editingPurchaseLineId = null
+    state.showPurchaseCatalogCreate = false
+    navigateToPage('Purchases')
+    return
+  }
+  const cigar = activityEventCigar(targetEvent)
+  if (!cigar) return
+  state.collectionHumidorFilterId = Number(
+    targetEvent?.storageLocationId
+    || targetEvent?.toStorageLocationId
+    || targetEvent?.destinationLocation?.storageLocationId
+    || targetEvent?.fromStorageLocationId
+    || targetEvent?.sourceLocation?.storageLocationId
+    || 0,
+  ) || null
+  state.collectionSectionFilterId = null
+  state.collectionStrengthFilter = ''
+  state.collectionBuyAgainFilter = ''
+  state.collectionSearch = ''
+  state.selectedCollectionCigarId = Number(cigar.id)
+  state.collectionScrollTargetCigarId = state.selectedCollectionCigarId
+  navigateToPage('Collection')
+}
+
+function createCollapsibleReportSection({ className = '', title, description }) {
+  const panel = document.createElement('section')
+  panel.className = `dashboard-panel removal-report-panel ${className}`.trim()
+  const details = document.createElement('details')
+  details.className = 'report-collapsible'
+  const summary = document.createElement('summary')
+  summary.className = 'section-heading report-title report-collapsible-summary'
+  summary.innerHTML = `
+    <div>
+      <h3>${escapeHtml(title)}</h3>
+      <p class="muted">${escapeHtml(description)}</p>
+    </div>
+  `
+  const body = document.createElement('div')
+  body.className = 'report-collapsible-body'
+  details.append(summary, body)
+  panel.append(details)
+  return { panel, body }
+}
+
 function renderInventoryAgingReport(view) {
   const rows = inventoryAgingRows()
   const summary = summarizeInventoryAging(rows)
@@ -4988,16 +5048,11 @@ function renderInventoryAgingReport(view) {
   const humidors = [...records('storage-locations')]
     .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }))
 
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel report-activity-panel inventory-aging-panel'
-  panel.innerHTML = `
-    <div class="section-heading report-title">
-      <div>
-        <h3>Inventory Aging</h3>
-        <p class="muted">On-hand inventory aged from its received date through ${escapeHtml(todayIsoDate())}. Unknown dates and incomplete values remain explicit.</p>
-      </div>
-    </div>
-  `
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'inventory-aging-panel',
+    title: 'Inventory Aging',
+    description: `Current on-hand inventory grouped by receipt age through ${escapeHtml(todayIsoDate())}.`,
+  })
 
   const filters = document.createElement('form')
   filters.className = 'aging-filter-form'
@@ -5032,7 +5087,7 @@ function renderInventoryAgingReport(view) {
     state.selectedAgingBucketKey = null
     render()
   })
-  panel.append(filters)
+  body.append(filters)
 
   const metrics = document.createElement('div')
   metrics.className = 'metric-grid compact inventory-aging-metrics'
@@ -5041,7 +5096,7 @@ function renderInventoryAgingReport(view) {
     metricCard('Distinct Lots', summary.lotCount, 'Split Lots counted once'),
     metricCard('Weighted Avg Age', summary.weightedAverageAge === null ? null : `${Math.round(summary.weightedAverageAge)} days`, `${formatCount(summary.knownAgeQuantity)} of ${formatCount(summary.quantity)} cigars dated`),
   )
-  panel.append(metrics)
+  body.append(metrics)
 
   const bucketHeading = document.createElement('div')
   bucketHeading.className = 'section-heading report-events-heading'
@@ -5116,7 +5171,7 @@ function renderInventoryAgingReport(view) {
       }
     })
   })
-  panel.append(bucketHeading, bucketWrap)
+  body.append(bucketHeading, bucketWrap)
   view.append(panel)
 }
 
@@ -5229,22 +5284,16 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)
-  renderBuyAgainReport(view)
   renderInventoryAgingReport(view)
   renderRemovalHistory(view)
 
-  const activity = document.createElement('section')
-  activity.className = 'dashboard-panel report-activity-panel'
   const matchingActivity = filteredActivityEvents()
   const displayedActivity = activityEventsForDisplay(matchingActivity)
-  activity.innerHTML = `
-    <div class="section-heading">
-      <div>
-        <h3>Activity</h3>
-        <p class="muted">${formatCount(matchingActivity.length)} matching events. Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.</p>
-      </div>
-    </div>
-  `
+  const { panel: activity, body: activityBody } = createCollapsibleReportSection({
+    className: 'report-activity-panel',
+    title: 'Activity',
+    description: `${formatCount(matchingActivity.length)} matching purchase, movement, removal, and reversal events.`,
+  })
   if (!activityFiltersActive() && matchingActivity.length > 12) {
     const activityToggle = document.createElement('button')
     activityToggle.type = 'button'
@@ -5255,7 +5304,7 @@ function renderReportsPage(view) {
       state.reversingEventId = null
       render()
     })
-    activity.querySelector('.section-heading').append(activityToggle)
+    activityBody.append(activityToggle)
   }
 
   const activityFilters = document.createElement('div')
@@ -5310,7 +5359,7 @@ function renderReportsPage(view) {
     render()
   })
   activityFilters.append(activityPeriod, activitySelectors)
-  activity.append(activityFilters)
+  activityBody.append(activityFilters)
 
   if (state.activityPeriod === 'custom') {
     const customDates = document.createElement('div')
@@ -5327,7 +5376,7 @@ function renderReportsPage(view) {
       state.activityCustomEnd = event.target.value
       render()
     })
-    activity.append(customDates)
+    activityBody.append(customDates)
   }
 
   const activitySearch = document.createElement('form')
@@ -5358,13 +5407,13 @@ function renderReportsPage(view) {
     state.reversingEventId = null
     render()
   })
-  activity.append(activitySearch)
+  activityBody.append(activitySearch)
 
   if (displayedActivity.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No inventory events match the selected Activity filters.</p>'
-    activity.append(empty)
+    activityBody.append(empty)
     view.append(activity)
     return
   }
@@ -5420,6 +5469,15 @@ function renderReportsPage(view) {
     }
     renderActivityReference(row.querySelector('.activity-reference-cell'), event)
     const actions = row.querySelector('.row-actions')
+    const contextTarget = activityEventContextTarget(event)
+    if (contextTarget) {
+      const openContext = document.createElement('button')
+      openContext.type = 'button'
+      openContext.className = 'secondary-button compact-button'
+      openContext.textContent = contextTarget.label
+      openContext.addEventListener('click', () => openActivityEventContext(event))
+      actions.append(openContext)
+    }
     if (inventoryEventCanBeReversed(event)) {
       const reverse = document.createElement('button')
       reverse.type = 'button'
@@ -5472,7 +5530,7 @@ function renderReportsPage(view) {
     }
   })
   tableWrap.append(table)
-  activity.append(tableWrap)
+    activityBody.append(tableWrap)
 
   view.append(activity)
 }
