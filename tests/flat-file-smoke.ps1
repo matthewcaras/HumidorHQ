@@ -245,7 +245,7 @@ if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still re
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
 if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.9') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.12\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.12\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {

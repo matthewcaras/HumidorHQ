@@ -423,6 +423,7 @@ h3 {
 .report-collapsible-summary.report-title {
   justify-content: flex-start;
   text-align: left;
+  width: 100%;
 }
 
 .report-collapsible-summary > div {
@@ -990,6 +991,9 @@ h3 {
 .report-collapsible > summary {
   cursor: pointer;
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .report-collapsible > summary::-webkit-details-marker {

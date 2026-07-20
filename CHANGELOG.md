@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.8
+Revision: 1.30.9
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 13:00 ET
+Modified Date: 2026-07-20 13:20 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.9 - 2026-07-20
+
+Changed by: Matt
+
+- Tightened the report header layout and bumped the stylesheet cache version so the live site picks up the left-aligned collapsible report summaries.
 
 ## 1.30.8 - 2026-07-20
 
