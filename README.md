@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.27.0
+Revision: 1.28.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 08:30 ET
+Modified Date: 2026-07-20 09:00 ET
 -->
 
 # HumidorHQ
@@ -18,7 +18,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Purchases` summarizes total orders, cigars purchased, lifetime paid, and en route quantity; its on-demand order builder creates pending purchases with weighted cost allocation, and purchase records expand to show cigar lines and receiving controls.
 - `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory, and Humidor record counts omit internal runtime filenames.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
-- `Reports` provides purchase-history summaries by Vendor or cigar manufacturer with an optional Buy Again filter, a Buy Again decision summary and highly rated (8.0+) unevaluated follow-up list, plus filterable smoked, gifted, and discarded removal history by period, custom date range, type, and search. Removal History search includes Smoking Journal ratings and notes, and cigar-name links open the matching Catalog Journal. Activity includes signed physical-count adjustments and their append-only reversals. Both purchase-summary views foot to stored purchase `totalPaid`; filtered shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
+- `Reports` provides purchase-history summaries by Vendor or cigar manufacturer with an optional Buy Again filter, a Buy Again decision summary and highly rated (8.0+) unevaluated follow-up list, plus filterable smoked, gifted, and discarded removal history by period, custom date range, type, and search. Removal History search includes Smoking Journal ratings and notes, and cigar-name links open the matching Catalog Journal. Activity can be filtered by period, custom dates, event type, cigar or reference text, Lot, and Humidor; it shows source/destination location context and links original events to append-only reversals while retaining signed physical-count adjustments. Both purchase-summary views foot to stored purchase `totalPaid`; filtered shares use deterministic cent allocations from line weights without duplicating Purchases-page detail.
 - `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.

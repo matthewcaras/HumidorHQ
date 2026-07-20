@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.21.1
+ * Revision: 1.22.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 08:30 ET
+ * Modified Date: 2026-07-20 09:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -46,6 +46,13 @@ const state = {
   reversalKeys: {},
   reversingEventId: null,
   showAllActivity: false,
+  activityPeriod: 'lifetime',
+  activityType: 'all',
+  activitySearch: '',
+  activityLotId: '',
+  activityHumidorId: '',
+  activityCustomStart: '',
+  activityCustomEnd: '',
   showPurchaseCatalogCreate: false,
   showPurchaseOrderForm: false,
   selectedHumidorId: null,
@@ -928,14 +935,123 @@ function humidorOldestDate(humidorId) {
   return buildHumidorSummaries().find((item) => Number(item.humidor.id) === Number(humidorId))?.oldestDate || null
 }
 
-function recentEvents() {
-  const sorted = [...records('inventory-events')]
-    .sort((left, right) => {
-      const leftDate = left.eventDate || left.occurredAt || left.updatedAt || ''
-      const rightDate = right.eventDate || right.occurredAt || right.updatedAt || ''
-      return rightDate.localeCompare(leftDate) || Number(right.id || 0) - Number(left.id || 0)
+function activityEventDate(event) {
+  return displayDate(event?.eventDate || event?.occurredAt || event?.updatedAt)
+}
+
+function activityEventCigar(event) {
+  const lot = recordById('lots', event?.lotId)
+  const catalogCigarId = Number(event?.catalogCigarId || lot?.catalogCigarId || 0)
+  return catalogCigarId ? recordById('catalog-cigars', catalogCigarId) : null
+}
+
+function activityEventHumidorIds(event) {
+  return [
+    event?.storageLocationId,
+    event?.fromStorageLocationId,
+    event?.toStorageLocationId,
+    event?.sourceLocation?.storageLocationId,
+    event?.destinationLocation?.storageLocationId,
+  ].map(Number).filter((id, index, ids) => id > 0 && ids.indexOf(id) === index)
+}
+
+function activityLocationName(locationId, sectionId, fallbackLocation = '', fallbackSection = '') {
+  const normalizedLocationId = Number(locationId || 0)
+  if (!normalizedLocationId && !fallbackLocation) return ''
+  const location = humidorName(normalizedLocationId) || fallbackLocation || `Humidor ${normalizedLocationId}`
+  const section = sectionId
+    ? sectionName(recordById('storage-sub-locations', sectionId))
+    : fallbackSection
+  return [location, section].filter(Boolean).join(' / ')
+}
+
+function activityEventLocationLabel(event) {
+  const source = activityLocationName(
+    event?.fromStorageLocationId ?? event?.sourceLocation?.storageLocationId,
+    event?.fromStorageSubLocationId ?? event?.sourceLocation?.storageSubLocationId,
+    event?.fromStorageLocationName ?? event?.sourceLocation?.storageLocationName,
+    event?.fromStorageSubLocationName ?? event?.sourceLocation?.storageSubLocationName,
+  )
+  const destination = activityLocationName(
+    event?.toStorageLocationId ?? event?.destinationLocation?.storageLocationId,
+    event?.toStorageSubLocationId ?? event?.destinationLocation?.storageSubLocationId,
+    event?.toStorageLocationName ?? event?.destinationLocation?.storageLocationName,
+    event?.toStorageSubLocationName ?? event?.destinationLocation?.storageSubLocationName,
+  )
+  if (source && destination) return `${source} → ${destination}`
+  return source || destination || activityLocationName(
+    event?.storageLocationId,
+    event?.storageSubLocationId,
+    event?.storageLocationName,
+    event?.storageSubLocationName,
+  ) || 'Unassigned'
+}
+
+function activityRelationshipEvent(event) {
+  if (normalizeEventType(event?.eventType) === 'REVERSAL') {
+    return recordById('inventory-events', event.reversesInventoryEventId)
+  }
+  return records('inventory-events').find((candidate) => (
+    normalizeEventType(candidate.eventType) === 'REVERSAL'
+    && Number(candidate.reversesInventoryEventId) === Number(event?.id)
+  )) || null
+}
+
+function activityEventReferenceSearchValues(event) {
+  const relationship = activityRelationshipEvent(event)
+  return [
+    `Event ${event?.id || ''}`,
+    event?.lotId ? `Lot ${event.lotId}` : '',
+    event?.purchaseId ? `Purchase ${event.purchaseId}` : '',
+    normalizeEventType(event?.eventType) === 'REVERSAL' && event?.reversesInventoryEventId ? `Reverses Event ${event.reversesInventoryEventId}` : '',
+    normalizeEventType(event?.eventType) !== 'REVERSAL' && relationship ? `Reversed by Event ${relationship.id}` : '',
+  ]
+}
+
+function activityFiltersActive() {
+  return state.activityPeriod !== 'lifetime'
+    || state.activityType !== 'all'
+    || Boolean(String(state.activitySearch || '').trim())
+    || Boolean(String(state.activityLotId || '').trim())
+    || Boolean(String(state.activityHumidorId || '').trim())
+}
+
+function filteredActivityEvents() {
+  const currentYear = new Date().getFullYear()
+  const search = String(state.activitySearch || '').trim().toLowerCase()
+  const lotId = Number(state.activityLotId || 0)
+  const humidorId = Number(state.activityHumidorId || 0)
+  return [...records('inventory-events')]
+    .filter((event) => state.activityType === 'all' || normalizeEventType(event.eventType) === state.activityType)
+    .filter((event) => !lotId || Number(event.lotId) === lotId)
+    .filter((event) => !humidorId || activityEventHumidorIds(event).includes(humidorId))
+    .filter((event) => {
+      const date = activityEventDate(event)
+      const year = Number(date.slice(0, 4) || 0)
+      if (state.activityPeriod === 'current') return year === currentYear
+      if (state.activityPeriod === 'prior') return year === currentYear - 1
+      if (state.activityPeriod === 'custom') {
+        return (!state.activityCustomStart || date >= state.activityCustomStart)
+          && (!state.activityCustomEnd || date <= state.activityCustomEnd)
+      }
+      return true
     })
-  return state.showAllActivity ? sorted : sorted.slice(0, 12)
+    .filter((event) => {
+      if (!search) return true
+      const cigar = activityEventCigar(event)
+      return [
+        cigar ? cigarName(cigar) : '',
+        inventoryEventDisplayType(event),
+        activityEventLocationLabel(event),
+        event.notes,
+        ...activityEventReferenceSearchValues(event),
+      ].some((value) => String(value || '').toLowerCase().includes(search))
+    })
+    .sort((left, right) => activityEventDate(right).localeCompare(activityEventDate(left)) || Number(right.id || 0) - Number(left.id || 0))
+}
+
+function activityEventsForDisplay(filtered = filteredActivityEvents()) {
+  return state.showAllActivity || activityFiltersActive() ? filtered : filtered.slice(0, 12)
 }
 
 function customPageReady(pageId) {
@@ -3995,10 +4111,12 @@ function reportFilterButton(label, value, stateKey) {
   button.textContent = label
   button.addEventListener('click', () => {
     state[stateKey] = value
-    if (stateKey === 'reportPeriod' && value === 'custom') {
+    if (['reportPeriod', 'activityPeriod'].includes(stateKey) && value === 'custom') {
       const year = new Date().getFullYear()
-      state.reportCustomStart ||= `${year}-01-01`
-      state.reportCustomEnd ||= todayIsoDate()
+      const startKey = stateKey === 'activityPeriod' ? 'activityCustomStart' : 'reportCustomStart'
+      const endKey = stateKey === 'activityPeriod' ? 'activityCustomEnd' : 'reportCustomEnd'
+      state[startKey] ||= `${year}-01-01`
+      state[endKey] ||= todayIsoDate()
     }
     render()
   })
@@ -4383,6 +4501,49 @@ function renderBuyAgainReport(view) {
   view.append(panel)
 }
 
+function focusActivityEventReference(eventId) {
+  state.activityPeriod = 'lifetime'
+  state.activityType = 'all'
+  state.activitySearch = `event ${Number(eventId)}`
+  state.activityLotId = ''
+  state.activityHumidorId = ''
+  state.showAllActivity = true
+  state.reversingEventId = null
+  render()
+}
+
+function renderActivityReference(cell, event) {
+  const reference = document.createElement('div')
+  reference.className = 'activity-reference'
+  const eventLink = document.createElement('button')
+  eventLink.type = 'button'
+  eventLink.className = 'linkish-button'
+  eventLink.textContent = `Event #${event.id}`
+  eventLink.addEventListener('click', () => focusActivityEventReference(event.id))
+  reference.append(eventLink)
+  if (event.lotId) {
+    const lot = document.createElement('span')
+    lot.textContent = `Lot ${event.lotId}`
+    reference.append(lot)
+  }
+  const relationship = activityRelationshipEvent(event)
+  if (relationship) {
+    const relationshipLink = document.createElement('button')
+    relationshipLink.type = 'button'
+    relationshipLink.className = 'linkish-button'
+    relationshipLink.textContent = normalizeEventType(event.eventType) === 'REVERSAL'
+      ? `Reverses Event #${relationship.id}`
+      : `Reversed by Event #${relationship.id}`
+    relationshipLink.addEventListener('click', () => focusActivityEventReference(relationship.id))
+    reference.append(relationshipLink)
+  } else if (normalizeEventType(event.eventType) === 'REVERSAL' && event.reversesInventoryEventId) {
+    const missing = document.createElement('span')
+    missing.textContent = `Reverses missing Event #${event.reversesInventoryEventId}`
+    reference.append(missing)
+  }
+  cell.append(reference)
+}
+
 function renderReportsPage(view) {
   renderPurchaseHistoryReport(view)
   renderBuyAgainReport(view)
@@ -4390,56 +4551,190 @@ function renderReportsPage(view) {
 
   const activity = document.createElement('section')
   activity.className = 'dashboard-panel report-activity-panel'
+  const matchingActivity = filteredActivityEvents()
+  const displayedActivity = activityEventsForDisplay(matchingActivity)
   activity.innerHTML = `
     <div class="section-heading">
       <div>
         <h3>Activity</h3>
-        <p class="muted">Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.</p>
+        <p class="muted">${formatCount(matchingActivity.length)} matching events. Purchase receipts, moves, removals, physical-count adjustments, and their append-only reversals.</p>
       </div>
     </div>
   `
-  const activityToggle = document.createElement('button')
-  activityToggle.type = 'button'
-  activityToggle.className = 'secondary-button'
-  activityToggle.textContent = state.showAllActivity ? 'Show Recent 12' : 'Show All Activity'
-  activityToggle.addEventListener('click', () => {
-    state.showAllActivity = !state.showAllActivity
+  if (!activityFiltersActive() && matchingActivity.length > 12) {
+    const activityToggle = document.createElement('button')
+    activityToggle.type = 'button'
+    activityToggle.className = 'secondary-button'
+    activityToggle.textContent = state.showAllActivity ? 'Show Recent 12' : 'Show All Activity'
+    activityToggle.addEventListener('click', () => {
+      state.showAllActivity = !state.showAllActivity
+      state.reversingEventId = null
+      render()
+    })
+    activity.querySelector('.section-heading').append(activityToggle)
+  }
+
+  const activityFilters = document.createElement('div')
+  activityFilters.className = 'report-filter-grid activity-filter-groups'
+  const activityPeriod = document.createElement('fieldset')
+  activityPeriod.className = 'report-filter-group'
+  activityPeriod.innerHTML = '<legend>Period</legend>'
+  const activityPeriodButtons = document.createElement('div')
+  activityPeriodButtons.className = 'report-filter-buttons'
+  activityPeriodButtons.append(
+    reportFilterButton('Lifetime', 'lifetime', 'activityPeriod'),
+    reportFilterButton('Current Year', 'current', 'activityPeriod'),
+    reportFilterButton('Prior Year', 'prior', 'activityPeriod'),
+    reportFilterButton('Custom', 'custom', 'activityPeriod'),
+  )
+  activityPeriod.append(activityPeriodButtons)
+
+  const activitySelectors = document.createElement('fieldset')
+  activitySelectors.className = 'report-filter-group activity-selectors'
+  activitySelectors.innerHTML = `
+    <legend>Event Filters</legend>
+    <label class="form-field"><span>Event Type</span><select class="report-select" name="activityType">
+      <option value="all">All Event Types</option>
+      <option value="PURCHASE_RECEIPT">Purchase Receipt</option>
+      <option value="MOVE">Move</option>
+      <option value="SMOKED">Smoked</option>
+      <option value="GIFTED">Gifted</option>
+      <option value="DISCARDED">Discarded</option>
+      <option value="INVENTORY_ADJUSTMENT">Inventory Adjustment</option>
+      <option value="REVERSAL">Reversal</option>
+    </select></label>
+    <label class="form-field"><span>Humidor</span><select class="report-select" name="activityHumidorId">
+      <option value="">All Humidors</option>
+      ${[...records('storage-locations')]
+        .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }))
+        .map((humidor) => `<option value="${Number(humidor.id)}">${escapeHtml(humidor.name || `Humidor ${humidor.id}`)}${recordIsActive(humidor) ? '' : ' — Archived'}</option>`)
+        .join('')}
+    </select></label>
+  `
+  const activityTypeSelect = activitySelectors.querySelector('[name="activityType"]')
+  const activityHumidorSelect = activitySelectors.querySelector('[name="activityHumidorId"]')
+  activityTypeSelect.value = state.activityType
+  activityHumidorSelect.value = String(state.activityHumidorId || '')
+  activityTypeSelect.addEventListener('change', () => {
+    state.activityType = activityTypeSelect.value
     state.reversingEventId = null
     render()
   })
-  activity.querySelector('.section-heading').append(activityToggle)
+  activityHumidorSelect.addEventListener('change', () => {
+    state.activityHumidorId = activityHumidorSelect.value
+    state.reversingEventId = null
+    render()
+  })
+  activityFilters.append(activityPeriod, activitySelectors)
+  activity.append(activityFilters)
+
+  if (state.activityPeriod === 'custom') {
+    const customDates = document.createElement('div')
+    customDates.className = 'report-custom-dates'
+    customDates.innerHTML = `
+      <label class="form-field"><span>Start Date</span><input type="date" name="activityStart" value="${escapeHtml(state.activityCustomStart)}"></label>
+      <label class="form-field"><span>End Date</span><input type="date" name="activityEnd" value="${escapeHtml(state.activityCustomEnd)}"></label>
+    `
+    customDates.querySelector('[name="activityStart"]').addEventListener('change', (event) => {
+      state.activityCustomStart = event.target.value
+      render()
+    })
+    customDates.querySelector('[name="activityEnd"]').addEventListener('change', (event) => {
+      state.activityCustomEnd = event.target.value
+      render()
+    })
+    activity.append(customDates)
+  }
+
+  const activitySearch = document.createElement('form')
+  activitySearch.className = 'activity-search-form'
+  activitySearch.innerHTML = `
+    <label class="form-field"><span>Search Activity</span><input name="activitySearch" value="${escapeHtml(state.activitySearch)}" placeholder="Cigar, event, purchase, location, or notes"></label>
+    <label class="form-field"><span>Lot ID</span><input name="activityLotId" type="number" min="1" step="1" value="${escapeHtml(state.activityLotId)}" placeholder="All Lots"></label>
+    <button class="primary-button" type="submit">Apply</button>
+    <button class="secondary-button" type="button" data-clear-activity>Clear Filters</button>
+  `
+  activitySearch.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const data = new FormData(activitySearch)
+    state.activitySearch = String(data.get('activitySearch') || '').trim()
+    state.activityLotId = String(data.get('activityLotId') || '').trim()
+    state.reversingEventId = null
+    render()
+  })
+  activitySearch.querySelector('[data-clear-activity]').addEventListener('click', () => {
+    state.activityPeriod = 'lifetime'
+    state.activityType = 'all'
+    state.activitySearch = ''
+    state.activityLotId = ''
+    state.activityHumidorId = ''
+    state.activityCustomStart = ''
+    state.activityCustomEnd = ''
+    state.showAllActivity = false
+    state.reversingEventId = null
+    render()
+  })
+  activity.append(activitySearch)
+
+  if (displayedActivity.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No inventory events match the selected Activity filters.</p>'
+    activity.append(empty)
+    view.append(activity)
+    return
+  }
+
   const tableWrap = document.createElement('div')
   tableWrap.className = 'table-scroll'
   const table = document.createElement('table')
-  table.className = 'data-table'
+  table.className = 'data-table activity-table'
   table.innerHTML = `
     <thead>
       <tr>
         <th>Date</th>
         <th>Type</th>
         <th>Cigar</th>
+        <th>Location</th>
         <th>Qty</th>
         <th>Cost / Cigar</th>
         <th>MSRP / Cigar</th>
+        <th>Reference</th>
         <th>Actions</th>
       </tr>
     </thead>
     <tbody></tbody>
   `
   const tbody = table.querySelector('tbody')
-  recentEvents().forEach((event) => {
-    const lot = recordById('lots', event.lotId)
-    const cigar = lot?.catalogCigarId ? recordById('catalog-cigars', lot.catalogCigarId) : recordById('catalog-cigars', event.catalogCigarId)
+  displayedActivity.forEach((event) => {
+    const cigar = activityEventCigar(event)
     const row = document.createElement('tr')
     row.innerHTML = `
-      <td>${escapeHtml(displayDate(event.eventDate || event.occurredAt || event.updatedAt))}</td>
+      <td>${escapeHtml(activityEventDate(event))}</td>
       <td>${escapeHtml(inventoryEventDisplayType(event))}</td>
-      <td>${escapeHtml(cigar ? cigarName(cigar) : '')}</td>
+      <td class="activity-cigar-cell"></td>
+      <td>${escapeHtml(activityEventLocationLabel(event))}</td>
       <td>${formatCount(inventoryEventDisplayQuantity(event))}</td>
       <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
       <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
+      <td class="activity-reference-cell"></td>
       <td class="row-actions"></td>
     `
+    const cigarCell = row.querySelector('.activity-cigar-cell')
+    if (cigar) {
+      const cigarLink = document.createElement('button')
+      cigarLink.type = 'button'
+      cigarLink.className = 'linkish-button'
+      cigarLink.textContent = cigarName(cigar)
+      cigarLink.addEventListener('click', () => {
+        state.selectedCatalogHistoryCigarId = Number(cigar.id)
+        state.catalogSearch = ''
+        state.editing['catalog-cigars'] = null
+        navigateToPage('Catalog')
+      })
+      cigarCell.append(cigarLink)
+    }
+    renderActivityReference(row.querySelector('.activity-reference-cell'), event)
     const actions = row.querySelector('.row-actions')
     if (inventoryEventCanBeReversed(event)) {
       const reverse = document.createElement('button')
@@ -4457,7 +4752,7 @@ function renderReportsPage(view) {
       const formRow = document.createElement('tr')
       formRow.className = 'collection-expanded-row'
       formRow.innerHTML = `
-        <td colspan="7">
+        <td colspan="9">
           <form class="inline-move-form is-open" data-reversal-form>
             <label class="form-field"><span>Reversal Date</span><input name="eventDate" type="date" min="${escapeHtml(displayDate(event.eventDate))}" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
             <label class="form-field wide"><span>Correction Reason</span><textarea name="notes" rows="2" required></textarea></label>

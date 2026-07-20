@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.6.5
+ * Revision: 1.7.0
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-20 08:30 ET
+ * Modified Date: 2026-07-20 09:00 ET
  */
 
 :root {
@@ -533,6 +533,42 @@ h3 {
 
 .report-activity-panel {
   margin-top: 18px;
+}
+
+.activity-filter-groups {
+  margin-top: 16px;
+}
+
+.activity-selectors {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.activity-selectors legend {
+  grid-column: 1 / -1;
+}
+
+.activity-search-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) minmax(110px, 0.3fr) auto auto;
+  margin: 14px 0 18px;
+}
+
+.activity-reference {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.activity-reference span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .dashboard-record-list,
@@ -1466,11 +1502,14 @@ code {
 
   .report-custom-dates,
   .report-value-grid,
-  .report-search-form {
+  .report-search-form,
+  .activity-search-form,
+  .activity-selectors {
     grid-template-columns: 1fr;
   }
 
-  .report-search-form button {
+  .report-search-form button,
+  .activity-search-form button {
     width: 100%;
   }
 }
