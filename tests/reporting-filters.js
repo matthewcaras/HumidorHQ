@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.9.0
- * Description: Isolated assertions for Collection, Catalog, purchase-history, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-20 09:30 ET
+ * Revision: 1.10.1
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
+ * Modified Date: 2026-07-20 10:45 ET
  */
 
 const fs = require('node:fs')
@@ -196,6 +196,20 @@ state.purchaseHistoryBuyAgainFilter = ''
 const insights = buyAgainInsights()
 testAssert(insights.counts.NOT_EVALUATED === 1 && insights.counts.YES === 1, 'Buy Again decision counts are incorrect.')
 testAssert(insights.highlyRatedNotEvaluated.length === 1 && insights.highlyRatedNotEvaluated[0].cigar.id === 1 && insights.highlyRatedNotEvaluated[0].averageRating === 8.5, 'Highly rated unevaluated summary is incorrect.')
+state.purchaseTrendPeriod = 'year'
+let trendRows = purchaseTrendRows()
+testAssert(trendRows.length === 1 && trendRows[0].purchaseCount === 2 && trendRows[0].cigarCount === 6, 'Purchase trend yearly summary is incorrect.')
+testAssert(trendRows[0].totalPaid === 65 && trendRows[0].averagePaidPerCigar === 10.83, 'Purchase trend yearly total paid or average per cigar is incorrect.')
+state.purchaseTrendPeriod = 'month'
+trendRows = purchaseTrendRows()
+testAssert(trendRows.length === 2 && trendRows[0].label === 'Feb 2026' && trendRows[0].totalPaid === 35 && trendRows[1].label === 'Jan 2026' && trendRows[1].totalPaid === 30, 'Purchase trend monthly grouping is incorrect.')
+const vendorTrendRows = purchaseTrendVendorRows()
+testAssert(vendorTrendRows.length === 2 && vendorTrendRows[0].label === 'Vendor Two' && vendorTrendRows[0].totalPaid === 35 && vendorTrendRows[1].label === 'Vendor One' && vendorTrendRows[1].totalPaid === 30, 'Purchase trend vendor breakdown is incorrect.')
+const manufacturerTrendRows = purchaseTrendManufacturerRows()
+testAssert(manufacturerTrendRows.length === 2 && manufacturerTrendRows.find((row) => row.label === 'Alpha')?.totalPaid === 20 && manufacturerTrendRows.find((row) => row.label === 'Bravo')?.totalPaid === 45, 'Purchase trend manufacturer breakdown is incorrect.')
+testAssert(manufacturerTrendRows.find((row) => row.label === 'Bravo')?.averagePaidPerCigar === 11.25, 'Purchase trend manufacturer average paid per cigar is incorrect.')
+testAssert(manufacturerTrendRows.map((row) => row.label).join(',') === 'Alpha,Bravo', 'Purchase trend manufacturer breakdown is not alphabetical.')
+state.purchaseTrendPeriod = 'year'
 const pennyAllocation = allocatePurchasePaidCents(
   { totalPaid: '0.01' },
   [{ id: 5, trueCostBasis: '1.00' }, { id: 4, trueCostBasis: '1.00' }],

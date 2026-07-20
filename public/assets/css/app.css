@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.8.1
+ * Revision: 1.8.2
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-20 09:45 ET
+ * Modified Date: 2026-07-20 10:30 ET
  */
 
 :root {
@@ -452,6 +452,10 @@ h3 {
 }
 
 .purchase-history-panel + .removal-report-panel {
+  margin-top: 18px;
+}
+
+.purchase-trend-panel + .purchase-history-panel {
   margin-top: 18px;
 }
 
