@@ -1,9 +1,10 @@
 # Filename: start-local-server.ps1
-# Revision : 1.3.1
+# Revision : 1.4.0
 # Description : Validates runtime data, starts the local PHP server, and opens HumidorHQ in Chrome.
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-19
 # Changelog :
+# 1.4.0 default local runtime to a disposable temp directory so repo data is never used
 # 1.3.1 allow startup without auth-users.json so PHP can return AUTH_USERS_SETUP_REQUIRED
 # 1.3.0 default runtime data to the repository data directory while retaining an optional override
 # 1.2.0 require and validate an external HUMIDORHQ_DATA_ROOT before starting PHP
@@ -99,31 +100,21 @@ function Resolve-HumidorRuntimeDataRoot {
         throw "Runtime data directory does not exist: $configuredRoot"
     }
     $resolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $configuredRoot).Path)
-    $requiredFiles = @(
-        'catalog-cigars.json', 'counters.json', 'inventory-events.json',
-        'lot-location-balances.json', 'lots.json', 'purchase-lines.json', 'purchases.json',
-        'smoking-journal-entries.json', 'storage-locations.json', 'storage-sub-locations.json', 'vendors.json'
-    )
-    foreach ($filename in $requiredFiles) {
-        $path = Join-Path $resolvedRoot $filename
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            throw "Required runtime data file is missing: $filename"
-        }
-        try {
-            $null = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-        } catch {
-            throw "Required runtime data file is malformed: $filename"
-        }
-    }
     return $resolvedRoot
 }
 
-function Test-AuthUsersFile {
+function Initialize-LocalRuntimeDataRoot {
     param([string]$RuntimeDataRoot)
+
+    if (-not (Test-Path -LiteralPath $RuntimeDataRoot -PathType Container)) {
+        New-Item -ItemType Directory -Path $RuntimeDataRoot -Force | Out-Null
+    }
 
     $authPath = Join-Path $RuntimeDataRoot 'auth-users.json'
     if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) {
-        Write-Host 'auth-users.json is missing. PHP startup will return AUTH_USERS_SETUP_REQUIRED until credentials are created.' -ForegroundColor Yellow
+        Set-Content -LiteralPath $authPath -Value '[]' -Encoding utf8
+        Write-Host "Created a disposable runtime auth file at $authPath." -ForegroundColor Yellow
+        Write-Host 'Create a local user with tools/create-auth-user.php when you want to log in.' -ForegroundColor Yellow
         return
     }
 
@@ -136,7 +127,7 @@ function Test-AuthUsersFile {
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runtimeDataRoot = Resolve-HumidorRuntimeDataRoot -RequestedRoot $DataRoot -RepositoryRoot $repoRoot
-Test-AuthUsersFile -RuntimeDataRoot $runtimeDataRoot
+Initialize-LocalRuntimeDataRoot -RuntimeDataRoot $runtimeDataRoot
 $php = Get-PhpCommand
 $url = "http://${HostName}:$Port/"
 $existingPid = Get-LocalListenerPid -Port $Port -HostName $HostName
