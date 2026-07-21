@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.9
+ * Revision: 1.24.10
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-20 13:00 ET
+ * Modified Date: 2026-07-21 09:30 ET
  */
 
 const API_BASE_URL = 'api'
@@ -70,6 +70,13 @@ const state = {
   purchaseRecordsFilterType: '',
   purchaseRecordsFilterValue: '',
   purchaseRecordsFilterLabel: '',
+  reportSectionState: {
+    purchaseTrend: false,
+    purchaseHistory: false,
+    inventoryAging: false,
+    removalHistory: false,
+    activity: false,
+  },
   agingManufacturer: '',
   agingHumidorId: '',
   selectedAgingBucketKey: null,
@@ -4155,6 +4162,7 @@ function renderRemovalHistory(view) {
   const { panel, body } = createCollapsibleReportSection({
     title: 'Removal History',
     description: 'Choose a date range and removal type to recalculate the counts and values below.',
+    stateKey: 'removalHistory',
   })
 
   const filters = document.createElement('div')
@@ -4589,6 +4597,7 @@ function renderPurchaseTrendReport(view) {
     className: 'purchase-trend-panel',
     title: 'Purchase Trend Analytics',
     description: 'Yearly or monthly purchase totals by vendor and manufacturer.',
+    stateKey: 'purchaseTrend',
   })
 
   const filters = document.createElement('div')
@@ -4775,6 +4784,7 @@ function renderPurchaseHistoryReport(view) {
     className: 'purchase-history-panel',
     title: 'Purchase History',
     description: 'Purchased cigars grouped by vendor or manufacturer.',
+    stateKey: 'purchaseHistory',
   })
 
   const filters = document.createElement('div')
@@ -5017,11 +5027,17 @@ function openActivityEventContext(event) {
   navigateToPage('Collection')
 }
 
-function createCollapsibleReportSection({ className = '', title, description }) {
+function createCollapsibleReportSection({ className = '', title, description, stateKey }) {
   const panel = document.createElement('section')
   panel.className = `dashboard-panel removal-report-panel ${className}`.trim()
   const details = document.createElement('details')
   details.className = 'report-collapsible'
+  if (stateKey) {
+    details.open = Boolean(state.reportSectionState?.[stateKey])
+    details.addEventListener('toggle', () => {
+      state.reportSectionState[stateKey] = details.open
+    })
+  }
   const summary = document.createElement('summary')
   summary.className = 'section-heading report-title report-collapsible-summary'
   summary.innerHTML = `
@@ -5052,6 +5068,7 @@ function renderInventoryAgingReport(view) {
     className: 'inventory-aging-panel',
     title: 'Inventory Aging',
     description: `Current on-hand inventory grouped by receipt age through ${escapeHtml(todayIsoDate())}.`,
+    stateKey: 'inventoryAging',
   })
 
   const filters = document.createElement('form')
@@ -5293,6 +5310,7 @@ function renderReportsPage(view) {
     className: 'report-activity-panel',
     title: 'Activity',
     description: `${formatCount(matchingActivity.length)} matching purchase, movement, removal, and reversal events.`,
+    stateKey: 'activity',
   })
   if (!activityFiltersActive() && matchingActivity.length > 12) {
     const activityToggle = document.createElement('button')
