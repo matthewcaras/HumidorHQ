@@ -29,6 +29,7 @@ logs/
 /data/*.lock
 /data/*.tmp
 /data/*.tmp.*
+/local-data/
 /runtime-data/
 /.runtime-data/
 /backups/*

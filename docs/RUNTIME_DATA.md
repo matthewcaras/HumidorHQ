@@ -1,13 +1,13 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.5.0
+Revision: 1.6.0
 Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
-Modified Date: 2026-07-19 15:00 ET
+Modified Date: 2026-07-21 00:00 ET
 -->
 
 # Runtime Data Setup
 
-HumidorHQ defaults runtime storage to `APP_ROOT/data`. `HUMIDORHQ_DATA_ROOT` is optional and may select another existing runtime directory. The selected directory may be inside the application tree.
+HumidorHQ defaults runtime storage to `APP_ROOT/data` for deployed usage. `HUMIDORHQ_DATA_ROOT` is optional and may select another existing runtime directory. The selected directory may be inside the application tree.
 
 Startup creates the selected directory when it is missing, then runs transaction journal recovery. Missing non-auth runtime collections are initialized from validated, tracked templates in `seed-data/`, and a missing audit log is created as an empty file. Initialization holds an exclusive lock, uses create-only atomic writes, is idempotent, and never overwrites an existing file. Every runtime JSON file must then be readable and writable and have the expected root structure. Existing malformed JSON is never rewritten or repaired.
 
@@ -21,7 +21,9 @@ All listed bundles pass format, SHA-256, and JSON-shape checks. Backup creation 
 
 ## Windows
 
-With runtime files already under the repository `data/` directory, start normally:
+For local development, `start-local-server.ps1` now creates or reuses a disposable `local-data/` runtime directory in the repository root when no `HUMIDORHQ_DATA_ROOT` is supplied. That keeps runtime JSON out of version control while still allowing PHP to initialize the missing non-auth collections.
+
+To use that default disposable runtime, start normally:
 
 ```powershell
 .\tools\check-data-integrity.ps1
@@ -35,7 +37,7 @@ $env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
 .\start-local-server.ps1
 ```
 
-Create or update a user in the selected runtime directory:
+The launcher seeds a throwaway local login in `auth-users.json` when the chosen runtime directory does not already contain one. It prints the generated local username and password to the console. Create or update a user in the selected runtime directory:
 
 ```powershell
 php .\tools\create-auth-user.php 'username' 'strong password' 'Display Name'
