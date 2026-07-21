@@ -63,6 +63,21 @@ function Get-LocalListenerPid {
     return $null
 }
 
+function Resolve-AvailablePort {
+    param(
+        [int]$StartingPort,
+        [string]$HostName
+    )
+
+    for ($candidate = $StartingPort; $candidate -le 65535; $candidate++) {
+        if (-not (Get-LocalListenerPid -Port $candidate -HostName $HostName)) {
+            return $candidate
+        }
+    }
+
+    throw "No available port was found starting at $StartingPort."
+}
+
 function Open-LocalSiteInChrome {
     param(
         [string]$Url
@@ -156,16 +171,14 @@ $php = Get-PhpCommand
 $script:repoRoot = $repoRoot
 $script:phpPath = if ($php.PSObject.Properties.Name -contains 'Source') { $php.Source } else { $php.FullName }
 Ensure-LocalAuthUser -RuntimeDataRoot $runtimeDataRoot
-$url = "http://${HostName}:$Port/"
-$existingPid = Get-LocalListenerPid -Port $Port -HostName $HostName
 
-if ($existingPid) {
-    Write-Host "HumidorHQ is already listening at $url on process $existingPid." -ForegroundColor Green
-    Open-LocalSiteInChrome -Url $url
-    return
+$resolvedPort = Resolve-AvailablePort -StartingPort $Port -HostName $HostName
+$url = "http://${HostName}:$resolvedPort/"
+if ($resolvedPort -ne $Port) {
+    Write-Host "Port $Port is already in use. Using $resolvedPort instead." -ForegroundColor Yellow
 }
 
-$args = @('-S', "${HostName}:$Port", '-t', $repoRoot)
+$args = @('-S', "${HostName}:$resolvedPort", '-t', $repoRoot)
 $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
 try {
     $env:HUMIDORHQ_DATA_ROOT = $runtimeDataRoot
@@ -175,7 +188,7 @@ try {
 }
 Start-Sleep -Milliseconds 500
 
-$listenerPid = Get-LocalListenerPid -Port $Port -HostName $HostName
+$listenerPid = Get-LocalListenerPid -Port $resolvedPort -HostName $HostName
 if (-not $listenerPid) {
     throw "PHP server did not start on $url. Check PHP output or port availability."
 }
