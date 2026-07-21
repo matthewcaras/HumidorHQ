@@ -76,26 +76,25 @@ function Get-ListenerProcessCommandLine {
 
 function Get-RunningHumidorServer {
     param(
+        [int]$Port,
         [string]$HostName,
         [string]$RepositoryRoot
     )
 
-    for ($candidate = 8000; $candidate -le 65535; $candidate++) {
-        $listenerPid = Get-LocalListenerPid -Port $candidate -HostName $HostName
-        if (-not $listenerPid) {
-            continue
-        }
+    $listenerPid = Get-LocalListenerPid -Port $Port -HostName $HostName
+    if (-not $listenerPid) {
+        return $null
+    }
 
-        $commandLine = Get-ListenerProcessCommandLine -ProcessId $listenerPid
-        if ([string]::IsNullOrWhiteSpace($commandLine)) {
-            continue
-        }
+    $commandLine = Get-ListenerProcessCommandLine -ProcessId $listenerPid
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        return $null
+    }
 
-        if ($commandLine -like "*-S*" -and $commandLine -like "*$RepositoryRoot*") {
-            return [pscustomobject]@{
-                Port = $candidate
-                ProcessId = $listenerPid
-            }
+    if ($commandLine -like "*-S*" -and $commandLine -like "*$RepositoryRoot*") {
+        return [pscustomobject]@{
+            Port = $Port
+            ProcessId = $listenerPid
         }
     }
 
@@ -211,7 +210,7 @@ $script:repoRoot = $repoRoot
 $script:phpPath = if ($php.PSObject.Properties.Name -contains 'Source') { $php.Source } else { $php.FullName }
 Ensure-LocalAuthUser -RuntimeDataRoot $runtimeDataRoot
 
-$runningServer = Get-RunningHumidorServer -HostName $HostName -RepositoryRoot $repoRoot
+$runningServer = Get-RunningHumidorServer -Port $Port -HostName $HostName -RepositoryRoot $repoRoot
 if ($runningServer) {
     $url = "http://${HostName}:$($runningServer.Port)/"
     Write-Host "HumidorHQ is already running at $url on process $($runningServer.ProcessId)." -ForegroundColor Green
