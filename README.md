@@ -171,7 +171,7 @@ The script prompts for the existing HumidorHQ project folder, validates that it 
 
 ## Local Development
 
-No package install or build command is required. The local server defaults to a disposable runtime directory under the current user's temp folder, so fresh clone data stays out of the repository tree. If you intentionally point at another runtime directory, missing non-auth runtime files are created from validated `seed-data/` templates and a missing audit log is created empty.
+No package install or build command is required. The local server defaults to a disposable `local-data/` runtime directory in the repository root, so fresh clone data stays out of version control. If you intentionally point at another runtime directory, missing non-auth runtime files are created from validated `seed-data/` templates and a missing audit log is created empty.
 
 Recommended:
 

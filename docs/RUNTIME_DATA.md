@@ -21,7 +21,7 @@ All listed bundles pass format, SHA-256, and JSON-shape checks. Backup creation 
 
 ## Windows
 
-For local development, `start-local-server.ps1` now creates or reuses a disposable runtime directory under the current user's temp folder when no `HUMIDORHQ_DATA_ROOT` is supplied. That keeps runtime JSON out of the repository tree while still allowing PHP to initialize the missing non-auth collections.
+For local development, `start-local-server.ps1` now creates or reuses a disposable `local-data/` runtime directory in the repository root when no `HUMIDORHQ_DATA_ROOT` is supplied. That keeps runtime JSON out of version control while still allowing PHP to initialize the missing non-auth collections.
 
 To use that default disposable runtime, start normally:
 
@@ -37,7 +37,7 @@ $env:HUMIDORHQ_DATA_ROOT = 'C:\HumidorHQ\runtime-data'
 .\start-local-server.ps1
 ```
 
-The launcher seeds `auth-users.json` as an empty array when the chosen runtime directory does not already contain one. Create or update a user in the selected runtime directory:
+The launcher seeds a throwaway local login in `auth-users.json` when the chosen runtime directory does not already contain one. It prints the generated local username and password to the console. Create or update a user in the selected runtime directory:
 
 ```powershell
 php .\tools\create-auth-user.php 'username' 'strong password' 'Display Name'

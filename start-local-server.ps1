@@ -1,9 +1,10 @@
 # Filename: start-local-server.ps1
-# Revision : 1.4.0
+# Revision : 1.5.0
 # Description : Validates runtime data, starts the local PHP server, and opens HumidorHQ in Chrome.
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-19
 # Changelog :
+# 1.5.0 default local runtime to local-data and seed a throwaway local auth user
 # 1.4.0 default local runtime to a disposable temp directory so repo data is never used
 # 1.3.1 allow startup without auth-users.json so PHP can return AUTH_USERS_SETUP_REQUIRED
 # 1.3.0 default runtime data to the repository data directory while retaining an optional override
@@ -94,41 +95,66 @@ function Resolve-HumidorRuntimeDataRoot {
     } elseif (-not [string]::IsNullOrWhiteSpace($env:HUMIDORHQ_DATA_ROOT)) {
         $env:HUMIDORHQ_DATA_ROOT
     } else {
-        Join-Path $RepositoryRoot 'data'
+        Join-Path $RepositoryRoot 'local-data'
     }
     if (-not (Test-Path -LiteralPath $configuredRoot -PathType Container)) {
-        throw "Runtime data directory does not exist: $configuredRoot"
+        New-Item -ItemType Directory -Path $configuredRoot -Force | Out-Null
     }
     $resolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $configuredRoot).Path)
     return $resolvedRoot
 }
 
-function Initialize-LocalRuntimeDataRoot {
+function Get-LocalAuthSeed {
+    $bytes = New-Object byte[] 12
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $token = [System.BitConverter]::ToString($bytes) -replace '-', ''
+    return [pscustomobject]@{
+        Username = "local-$($token.Substring(0, 8).ToLowerInvariant())"
+        Password = "local-$($token.Substring(8, 16).ToLowerInvariant())"
+    }
+}
+
+function Ensure-LocalAuthUser {
     param([string]$RuntimeDataRoot)
 
-    if (-not (Test-Path -LiteralPath $RuntimeDataRoot -PathType Container)) {
-        New-Item -ItemType Directory -Path $RuntimeDataRoot -Force | Out-Null
+    $authPath = Join-Path $RuntimeDataRoot 'auth-users.json'
+    $needsSeed = $true
+    if (Test-Path -LiteralPath $authPath -PathType Leaf) {
+        try {
+            $existingUsers = Get-Content -LiteralPath $authPath -Raw | ConvertFrom-Json
+            $needsSeed = -not ($existingUsers -is [System.Array]) -or $existingUsers.Count -eq 0
+        } catch {
+            throw 'auth-users.json exists but is not valid JSON.'
+        }
     }
 
-    $authPath = Join-Path $RuntimeDataRoot 'auth-users.json'
-    if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) {
-        Set-Content -LiteralPath $authPath -Value '[]' -Encoding utf8
-        Write-Host "Created a disposable runtime auth file at $authPath." -ForegroundColor Yellow
-        Write-Host 'Create a local user with tools/create-auth-user.php when you want to log in.' -ForegroundColor Yellow
+    if (-not $needsSeed) {
         return
     }
 
+    $seed = Get-LocalAuthSeed
+    $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
     try {
-        $null = Get-Content -LiteralPath $authPath -Raw | ConvertFrom-Json
-    } catch {
-        throw 'auth-users.json exists but is not valid JSON.'
+        $env:HUMIDORHQ_DATA_ROOT = $RuntimeDataRoot
+        $createAuth = Start-Process -FilePath $script:phpPath -ArgumentList @('tools/create-auth-user.php', $seed.Username, $seed.Password, 'Local Test User') -WorkingDirectory $script:repoRoot -NoNewWindow -Wait -PassThru
+    } finally {
+        $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
     }
+
+    if ($createAuth.ExitCode -ne 0) {
+        throw 'Could not create the disposable local auth user.'
+    }
+
+    Write-Host "Created disposable local auth credentials in $authPath." -ForegroundColor Yellow
+    Write-Host "Local login: $($seed.Username) / $($seed.Password)" -ForegroundColor Yellow
 }
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runtimeDataRoot = Resolve-HumidorRuntimeDataRoot -RequestedRoot $DataRoot -RepositoryRoot $repoRoot
-Initialize-LocalRuntimeDataRoot -RuntimeDataRoot $runtimeDataRoot
 $php = Get-PhpCommand
+$script:repoRoot = $repoRoot
+$script:phpPath = if ($php.PSObject.Properties.Name -contains 'Source') { $php.Source } else { $php.FullName }
+Ensure-LocalAuthUser -RuntimeDataRoot $runtimeDataRoot
 $url = "http://${HostName}:$Port/"
 $existingPid = Get-LocalListenerPid -Port $Port -HostName $HostName
 
@@ -139,11 +165,10 @@ if ($existingPid) {
 }
 
 $args = @('-S', "${HostName}:$Port", '-t', $repoRoot)
-$phpPath = if ($php.PSObject.Properties.Name -contains 'Source') { $php.Source } else { $php.FullName }
 $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
 try {
     $env:HUMIDORHQ_DATA_ROOT = $runtimeDataRoot
-    $process = Start-Process -FilePath $phpPath -ArgumentList $args -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru
+    $process = Start-Process -FilePath $script:phpPath -ArgumentList $args -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru
 } finally {
     $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
 }
