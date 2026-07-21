@@ -1,9 +1,10 @@
 # Filename: start-local-server.ps1
-# Revision : 1.3.0
+# Revision : 1.3.1
 # Description : Validates runtime data, starts the local PHP server, and opens HumidorHQ in Chrome.
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-19
 # Changelog :
+# 1.3.1 allow startup without auth-users.json so PHP can return AUTH_USERS_SETUP_REQUIRED
 # 1.3.0 default runtime data to the repository data directory while retaining an optional override
 # 1.2.0 require and validate an external HUMIDORHQ_DATA_ROOT before starting PHP
 # 1.1.1 look for PHP in standard winget install folders when PATH has not refreshed yet
@@ -99,7 +100,7 @@ function Resolve-HumidorRuntimeDataRoot {
     }
     $resolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $configuredRoot).Path)
     $requiredFiles = @(
-        'auth-users.json', 'catalog-cigars.json', 'counters.json', 'inventory-events.json',
+        'catalog-cigars.json', 'counters.json', 'inventory-events.json',
         'lot-location-balances.json', 'lots.json', 'purchase-lines.json', 'purchases.json',
         'smoking-journal-entries.json', 'storage-locations.json', 'storage-sub-locations.json', 'vendors.json'
     )
@@ -117,8 +118,25 @@ function Resolve-HumidorRuntimeDataRoot {
     return $resolvedRoot
 }
 
+function Test-AuthUsersFile {
+    param([string]$RuntimeDataRoot)
+
+    $authPath = Join-Path $RuntimeDataRoot 'auth-users.json'
+    if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) {
+        Write-Host 'auth-users.json is missing. PHP startup will return AUTH_USERS_SETUP_REQUIRED until credentials are created.' -ForegroundColor Yellow
+        return
+    }
+
+    try {
+        $null = Get-Content -LiteralPath $authPath -Raw | ConvertFrom-Json
+    } catch {
+        throw 'auth-users.json exists but is not valid JSON.'
+    }
+}
+
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runtimeDataRoot = Resolve-HumidorRuntimeDataRoot -RequestedRoot $DataRoot -RepositoryRoot $repoRoot
+Test-AuthUsersFile -RuntimeDataRoot $runtimeDataRoot
 $php = Get-PhpCommand
 $url = "http://${HostName}:$Port/"
 $existingPid = Get-LocalListenerPid -Port $Port -HostName $HostName
