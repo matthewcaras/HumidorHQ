@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.7
+ * Revision: 1.10.8
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-21 12:30 ET
+ * Modified Date: 2026-07-21 13:00 ET
  */
 
 const fs = require('node:fs')
@@ -185,6 +185,100 @@ testAssert(applyPurchaseHistoryView('Report Snapshot'), 'Purchase History saved 
 testAssert(state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryVendorId === '1' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES', 'Purchase History saved view did not restore the expected filters.')
 testAssert(deletePurchaseHistoryView('Report Snapshot'), 'Purchase History saved view should delete by name.')
 testAssert(purchaseHistorySavedViews().length === 0, 'Purchase History saved view delete did not clear storage.')
+state.purchaseTrendPeriod = 'month'
+state.purchaseRecordsFilterType = 'manufacturer'
+state.purchaseRecordsFilterValue = 'bravo'
+state.purchaseRecordsFilterLabel = 'Bravo'
+state.purchaseHistoryGroup = 'manufacturer'
+state.purchaseHistoryVendorId = ''
+state.purchaseHistoryManufacturer = 'alpha'
+state.purchaseHistoryBuyAgainFilter = 'YES'
+state.reportPeriod = 'custom'
+state.reportRemovalType = 'SMOKED'
+state.reportSearch = 'pepper'
+state.agingManufacturer = 'Bravo'
+state.agingHumidorId = '2'
+state.selectedAgingBucketKey = '91-180'
+state.activityPeriod = 'custom'
+state.activityType = 'MOVE'
+state.activitySearch = 'event 20'
+state.activityLotId = '2'
+state.activityHumidorId = '2'
+state.activityCustomStart = '2026-01-01'
+state.activityCustomEnd = '2026-12-31'
+state.showAllActivity = true
+state.reportSectionState = {
+  purchaseTrend: true,
+  purchaseHistory: false,
+  inventoryAging: true,
+  removalHistory: false,
+  activity: true,
+}
+testAssert(saveReportsView('  Reports Snapshot  '), 'Reports saved view should accept a trimmed name.')
+testAssert(reportsSavedViews().length === 1 && reportsSavedViews()[0].name === 'Reports Snapshot', 'Reports saved view was not stored correctly.')
+state.purchaseTrendPeriod = 'year'
+state.purchaseRecordsFilterType = ''
+state.purchaseRecordsFilterValue = ''
+state.purchaseRecordsFilterLabel = ''
+state.purchaseHistoryGroup = 'vendor'
+state.purchaseHistoryVendorId = ''
+state.purchaseHistoryManufacturer = ''
+state.purchaseHistoryBuyAgainFilter = ''
+state.reportPeriod = 'lifetime'
+state.reportRemovalType = 'all'
+state.reportSearch = ''
+state.agingManufacturer = ''
+state.agingHumidorId = ''
+state.selectedAgingBucketKey = null
+state.activityPeriod = 'lifetime'
+state.activityType = 'all'
+state.activitySearch = ''
+state.activityLotId = ''
+state.activityHumidorId = ''
+state.activityCustomStart = ''
+state.activityCustomEnd = ''
+state.showAllActivity = false
+state.reportSectionState = {
+  purchaseTrend: false,
+  purchaseHistory: false,
+  inventoryAging: false,
+  removalHistory: false,
+  activity: false,
+}
+testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
+testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
+testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
+testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
+testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
+state.purchaseTrendPeriod = 'year'
+state.purchaseRecordsFilterType = ''
+state.purchaseRecordsFilterValue = ''
+state.purchaseRecordsFilterLabel = ''
+state.purchaseHistoryGroup = 'vendor'
+state.purchaseHistoryVendorId = ''
+state.purchaseHistoryManufacturer = ''
+state.purchaseHistoryBuyAgainFilter = ''
+state.reportPeriod = 'lifetime'
+state.reportRemovalType = 'all'
+state.reportSearch = ''
+state.agingManufacturer = ''
+state.agingHumidorId = ''
+state.selectedAgingBucketKey = null
+state.activityPeriod = 'lifetime'
+state.activityType = 'all'
+state.activitySearch = ''
+state.activityLotId = ''
+state.activityHumidorId = ''
+state.activityCustomStart = ''
+state.activityCustomEnd = ''
+state.showAllActivity = false
+state.reportSectionState = {
+  purchaseTrend: false,
+  purchaseHistory: false,
+  inventoryAging: false,
+  removalHistory: false,
+  activity: false,
+}
 
 let agingRows = inventoryAgingRows('2025-05-01')
 let agingSummary = summarizeInventoryAging(agingRows)

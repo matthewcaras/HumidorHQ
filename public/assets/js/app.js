@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.12
+ * Revision: 1.24.13
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-21 12:30 ET
+ * Modified Date: 2026-07-21 13:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -321,6 +321,170 @@ function deletePurchaseHistoryView(name) {
   if (!trimmedName) return false
   const next = purchaseHistorySavedViews().filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
   storePurchaseHistorySavedViews(next)
+  return true
+}
+
+const reportsViewStorageKey = 'humidorhq.reports.views.v1'
+
+function reportsViewStorage() {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+function reportsViewSnapshot() {
+  return {
+    purchaseTrendPeriod: state.purchaseTrendPeriod,
+    purchaseRecordsFilterType: String(state.purchaseRecordsFilterType || ''),
+    purchaseRecordsFilterValue: String(state.purchaseRecordsFilterValue || ''),
+    purchaseRecordsFilterLabel: String(state.purchaseRecordsFilterLabel || ''),
+    purchaseHistoryGroup: state.purchaseHistoryGroup,
+    purchaseHistoryVendorId: String(state.purchaseHistoryVendorId || ''),
+    purchaseHistoryManufacturer: String(state.purchaseHistoryManufacturer || ''),
+    purchaseHistoryBuyAgainFilter: String(state.purchaseHistoryBuyAgainFilter || ''),
+    reportPeriod: state.reportPeriod,
+    reportRemovalType: state.reportRemovalType,
+    reportSearch: String(state.reportSearch || ''),
+    agingManufacturer: String(state.agingManufacturer || ''),
+    agingHumidorId: String(state.agingHumidorId || ''),
+    selectedAgingBucketKey: state.selectedAgingBucketKey || null,
+    activityPeriod: state.activityPeriod,
+    activityType: state.activityType,
+    activitySearch: String(state.activitySearch || ''),
+    activityLotId: String(state.activityLotId || ''),
+    activityHumidorId: String(state.activityHumidorId || ''),
+    activityCustomStart: String(state.activityCustomStart || ''),
+    activityCustomEnd: String(state.activityCustomEnd || ''),
+    showAllActivity: Boolean(state.showAllActivity),
+    reportSectionState: {
+      purchaseTrend: Boolean(state.reportSectionState?.purchaseTrend),
+      purchaseHistory: Boolean(state.reportSectionState?.purchaseHistory),
+      inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
+      removalHistory: Boolean(state.reportSectionState?.removalHistory),
+      activity: Boolean(state.reportSectionState?.activity),
+    },
+  }
+}
+
+function normalizeReportsViewRecord(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const name = String(entry.name || '').trim()
+  const snapshot = entry.snapshot && typeof entry.snapshot === 'object' ? entry.snapshot : null
+  if (!name || !snapshot) return null
+  return {
+    name,
+    snapshot: {
+      purchaseTrendPeriod: snapshot.purchaseTrendPeriod === 'month' ? 'month' : 'year',
+      purchaseRecordsFilterType: String(snapshot.purchaseRecordsFilterType || ''),
+      purchaseRecordsFilterValue: String(snapshot.purchaseRecordsFilterValue || ''),
+      purchaseRecordsFilterLabel: String(snapshot.purchaseRecordsFilterLabel || ''),
+      purchaseHistoryGroup: snapshot.purchaseHistoryGroup === 'manufacturer' ? 'manufacturer' : 'vendor',
+      purchaseHistoryVendorId: String(snapshot.purchaseHistoryVendorId || ''),
+      purchaseHistoryManufacturer: String(snapshot.purchaseHistoryManufacturer || ''),
+      purchaseHistoryBuyAgainFilter: String(snapshot.purchaseHistoryBuyAgainFilter || ''),
+      reportPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.reportPeriod) ? snapshot.reportPeriod : 'lifetime',
+      reportRemovalType: ['all', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(snapshot.reportRemovalType) ? snapshot.reportRemovalType : 'all',
+      reportSearch: String(snapshot.reportSearch || ''),
+      agingManufacturer: String(snapshot.agingManufacturer || ''),
+      agingHumidorId: String(snapshot.agingHumidorId || ''),
+      selectedAgingBucketKey: String(snapshot.selectedAgingBucketKey || '') || null,
+      activityPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.activityPeriod) ? snapshot.activityPeriod : 'lifetime',
+      activityType: ['all', 'PURCHASE_RECEIPT', 'MOVE', 'SMOKED', 'GIFTED', 'DISCARDED', 'INVENTORY_ADJUSTMENT', 'REVERSAL'].includes(snapshot.activityType) ? snapshot.activityType : 'all',
+      activitySearch: String(snapshot.activitySearch || ''),
+      activityLotId: String(snapshot.activityLotId || ''),
+      activityHumidorId: String(snapshot.activityHumidorId || ''),
+      activityCustomStart: String(snapshot.activityCustomStart || ''),
+      activityCustomEnd: String(snapshot.activityCustomEnd || ''),
+      showAllActivity: Boolean(snapshot.showAllActivity),
+      reportSectionState: {
+        purchaseTrend: Boolean(snapshot.reportSectionState?.purchaseTrend),
+        purchaseHistory: Boolean(snapshot.reportSectionState?.purchaseHistory),
+        inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
+        removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
+        activity: Boolean(snapshot.reportSectionState?.activity),
+      },
+    },
+  }
+}
+
+function reportsSavedViews() {
+  const storage = reportsViewStorage()
+  if (!storage) return []
+  try {
+    const raw = storage.getItem(reportsViewStorageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeReportsViewRecord).filter(Boolean).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
+  } catch {
+    return []
+  }
+}
+
+function storeReportsSavedViews(views) {
+  const storage = reportsViewStorage()
+  if (!storage) return
+  try {
+    storage.setItem(reportsViewStorageKey, JSON.stringify(views))
+  } catch {
+    // Ignore storage failures; saved views are a convenience layer only.
+  }
+}
+
+function reportsViewMatchesCurrent(snapshot) {
+  return JSON.stringify(reportsViewSnapshot()) === JSON.stringify(snapshot)
+}
+
+function applyReportsView(name) {
+  const view = reportsSavedViews().find((item) => item.name === name)
+  if (!view) return false
+  state.purchaseTrendPeriod = view.snapshot.purchaseTrendPeriod
+  state.purchaseRecordsFilterType = view.snapshot.purchaseRecordsFilterType
+  state.purchaseRecordsFilterValue = view.snapshot.purchaseRecordsFilterValue
+  state.purchaseRecordsFilterLabel = view.snapshot.purchaseRecordsFilterLabel
+  state.purchaseHistoryGroup = view.snapshot.purchaseHistoryGroup
+  state.purchaseHistoryVendorId = view.snapshot.purchaseHistoryVendorId
+  state.purchaseHistoryManufacturer = view.snapshot.purchaseHistoryManufacturer
+  state.purchaseHistoryBuyAgainFilter = view.snapshot.purchaseHistoryBuyAgainFilter
+  state.reportPeriod = view.snapshot.reportPeriod
+  state.reportRemovalType = view.snapshot.reportRemovalType
+  state.reportSearch = view.snapshot.reportSearch
+  state.agingManufacturer = view.snapshot.agingManufacturer
+  state.agingHumidorId = view.snapshot.agingHumidorId
+  state.selectedAgingBucketKey = view.snapshot.selectedAgingBucketKey
+  state.activityPeriod = view.snapshot.activityPeriod
+  state.activityType = view.snapshot.activityType
+  state.activitySearch = view.snapshot.activitySearch
+  state.activityLotId = view.snapshot.activityLotId
+  state.activityHumidorId = view.snapshot.activityHumidorId
+  state.activityCustomStart = view.snapshot.activityCustomStart
+  state.activityCustomEnd = view.snapshot.activityCustomEnd
+  state.showAllActivity = view.snapshot.showAllActivity
+  state.reportSectionState = { ...view.snapshot.reportSectionState }
+  state.reversingEventId = null
+  if (typeof document !== 'undefined' && typeof render === 'function') {
+    render()
+  }
+  return true
+}
+
+function saveReportsView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const views = reportsSavedViews()
+  const next = views.filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  next.push({ name: trimmedName, snapshot: reportsViewSnapshot() })
+  storeReportsSavedViews(next)
+  return true
+}
+
+function deleteReportsView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const next = reportsSavedViews().filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  storeReportsSavedViews(next)
   return true
 }
 
@@ -5721,12 +5885,58 @@ function renderReportsPage(view) {
   })
   activityBody.append(activitySearch)
 
+  const savedViews = reportsSavedViews()
+  const savedViewBar = document.createElement('div')
+  savedViewBar.className = 'collection-saved-view-bar report-saved-view-bar'
+  savedViewBar.innerHTML = `
+    <label class="form-field collection-saved-view-select-field">
+      <span>Saved Views</span>
+      <select data-reports-view-select>
+        <option value="">Load a saved view...</option>
+        ${savedViews.map((view) => `<option value="${escapeHtml(view.name)}">${escapeHtml(view.name)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="form-field collection-saved-view-name-field">
+      <span>View Name</span>
+      <input type="text" data-reports-view-name placeholder="Current report filters">
+    </label>
+    <button type="button" class="primary-button" data-save-reports-view>Save View</button>
+    <button type="button" class="secondary-button" data-delete-reports-view ${savedViews.length === 0 ? 'disabled' : ''}>Delete View</button>
+  `
+  const savedViewSelect = savedViewBar.querySelector('[data-reports-view-select]')
+  const savedViewNameInput = savedViewBar.querySelector('[data-reports-view-name]')
+  const saveReportsViewButton = savedViewBar.querySelector('[data-save-reports-view]')
+  const deleteReportsViewButton = savedViewBar.querySelector('[data-delete-reports-view]')
+  const matchingView = savedViews.find((view) => reportsViewMatchesCurrent(view.snapshot))
+  if (matchingView) {
+    savedViewSelect.value = matchingView.name
+  }
+  const syncSavedViewButtons = () => {
+    const canSave = String(savedViewNameInput.value || '').trim().length > 0
+    saveReportsViewButton.disabled = !canSave
+    deleteReportsViewButton.disabled = savedViews.length === 0 || !savedViewSelect.value
+  }
+  savedViewNameInput.addEventListener('input', syncSavedViewButtons)
+  savedViewSelect.addEventListener('change', () => {
+    if (applyReportsView(savedViewSelect.value)) return
+    savedViewSelect.value = ''
+  })
+  saveReportsViewButton.addEventListener('click', () => {
+    if (!saveReportsView(savedViewNameInput.value)) return
+    render()
+  })
+  deleteReportsViewButton.addEventListener('click', () => {
+    if (!deleteReportsView(savedViewSelect.value)) return
+    render()
+  })
+  syncSavedViewButtons()
+
   if (displayedActivity.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No inventory events match the selected Activity filters.</p>'
     activityBody.append(empty)
-    view.append(activity)
+    view.append(activity, savedViewBar)
     return
   }
 
@@ -5844,7 +6054,7 @@ function renderReportsPage(view) {
   tableWrap.append(table)
     activityBody.append(tableWrap)
 
-  view.append(activity)
+  view.append(activity, savedViewBar)
 }
 
 async function ensureAuditData() {
