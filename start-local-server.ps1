@@ -81,12 +81,12 @@ function Get-RunningHumidorServer {
     )
 
     for ($candidate = 8000; $candidate -le 65535; $candidate++) {
-        $pid = Get-LocalListenerPid -Port $candidate -HostName $HostName
-        if (-not $pid) {
+        $listenerPid = Get-LocalListenerPid -Port $candidate -HostName $HostName
+        if (-not $listenerPid) {
             continue
         }
 
-        $commandLine = Get-ListenerProcessCommandLine -ProcessId $pid
+        $commandLine = Get-ListenerProcessCommandLine -ProcessId $listenerPid
         if ([string]::IsNullOrWhiteSpace($commandLine)) {
             continue
         }
@@ -94,7 +94,7 @@ function Get-RunningHumidorServer {
         if ($commandLine -like "*-S*" -and $commandLine -like "*$RepositoryRoot*") {
             return [pscustomobject]@{
                 Port = $candidate
-                ProcessId = $pid
+                ProcessId = $listenerPid
             }
         }
     }
