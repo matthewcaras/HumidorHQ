@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.10
+ * Revision: 1.24.12
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-21 09:30 ET
+ * Modified Date: 2026-07-21 12:30 ET
  */
 
 const API_BASE_URL = 'api'
@@ -121,6 +121,207 @@ function normalizeBuyAgainStatus(value) {
 
 function buyAgainLabel(value) {
   return buyAgainStatusOptions.find((option) => option.value === normalizeBuyAgainStatus(value))?.label || 'Not Evaluated'
+}
+
+const collectionViewStorageKey = 'humidorhq.collection.views.v1'
+
+function collectionViewStorage() {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+function collectionViewSnapshot() {
+  return {
+    sort: state.collectionSort,
+    direction: state.collectionDirection,
+    humidorId: state.collectionHumidorFilterId ? Number(state.collectionHumidorFilterId) : null,
+    sectionId: state.collectionSectionFilterId ? Number(state.collectionSectionFilterId) : null,
+    strength: String(state.collectionStrengthFilter || ''),
+    buyAgain: String(state.collectionBuyAgainFilter || ''),
+    search: String(state.collectionSearch || ''),
+  }
+}
+
+function normalizeCollectionViewRecord(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const name = String(entry.name || '').trim()
+  const snapshot = entry.snapshot && typeof entry.snapshot === 'object' ? entry.snapshot : null
+  if (!name || !snapshot) return null
+  return {
+    name,
+    snapshot: {
+      sort: ['alpha', 'location', 'strength'].includes(snapshot.sort) ? snapshot.sort : 'alpha',
+      direction: snapshot.direction === 'desc' ? 'desc' : 'asc',
+      humidorId: Number(snapshot.humidorId || 0) || null,
+      sectionId: Number(snapshot.sectionId || 0) || null,
+      strength: String(snapshot.strength || ''),
+      buyAgain: String(snapshot.buyAgain || ''),
+      search: String(snapshot.search || ''),
+    },
+  }
+}
+
+function collectionSavedViews() {
+  const storage = collectionViewStorage()
+  if (!storage) return []
+  try {
+    const raw = storage.getItem(collectionViewStorageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeCollectionViewRecord).filter(Boolean).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
+  } catch {
+    return []
+  }
+}
+
+function storeCollectionSavedViews(views) {
+  const storage = collectionViewStorage()
+  if (!storage) return
+  try {
+    storage.setItem(collectionViewStorageKey, JSON.stringify(views))
+  } catch {
+    // Ignore storage failures; saved views are a convenience layer only.
+  }
+}
+
+function collectionViewMatchesCurrent(snapshot) {
+  const current = collectionViewSnapshot()
+  return JSON.stringify(current) === JSON.stringify(snapshot)
+}
+
+function applyCollectionView(name) {
+  const view = collectionSavedViews().find((item) => item.name === name)
+  if (!view) return false
+  state.collectionSort = view.snapshot.sort
+  state.collectionDirection = view.snapshot.direction
+  state.collectionHumidorFilterId = view.snapshot.humidorId
+  state.collectionSectionFilterId = view.snapshot.sectionId
+  state.collectionStrengthFilter = view.snapshot.strength
+  state.collectionBuyAgainFilter = view.snapshot.buyAgain
+  state.collectionSearch = view.snapshot.search
+  state.selectedCollectionCigarId = null
+  state.collectionScrollTargetCigarId = null
+  if (typeof document !== 'undefined' && typeof render === 'function') {
+    render()
+  }
+  return true
+}
+
+function saveCollectionView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const views = collectionSavedViews()
+  const next = views.filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  next.push({ name: trimmedName, snapshot: collectionViewSnapshot() })
+  storeCollectionSavedViews(next)
+  return true
+}
+
+function deleteCollectionView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const next = collectionSavedViews().filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  storeCollectionSavedViews(next)
+  return true
+}
+
+const purchaseHistoryViewStorageKey = 'humidorhq.purchaseHistory.views.v1'
+
+function purchaseHistoryViewStorage() {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+function purchaseHistoryViewSnapshot() {
+  return {
+    group: state.purchaseHistoryGroup,
+    vendorId: String(state.purchaseHistoryVendorId || ''),
+    manufacturer: String(state.purchaseHistoryManufacturer || ''),
+    buyAgain: String(state.purchaseHistoryBuyAgainFilter || ''),
+  }
+}
+
+function normalizePurchaseHistoryViewRecord(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const name = String(entry.name || '').trim()
+  const snapshot = entry.snapshot && typeof entry.snapshot === 'object' ? entry.snapshot : null
+  if (!name || !snapshot) return null
+  return {
+    name,
+    snapshot: {
+      group: ['vendor', 'manufacturer'].includes(snapshot.group) ? snapshot.group : 'vendor',
+      vendorId: String(snapshot.vendorId || ''),
+      manufacturer: String(snapshot.manufacturer || ''),
+      buyAgain: String(snapshot.buyAgain || ''),
+    },
+  }
+}
+
+function purchaseHistorySavedViews() {
+  const storage = purchaseHistoryViewStorage()
+  if (!storage) return []
+  try {
+    const raw = storage.getItem(purchaseHistoryViewStorageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizePurchaseHistoryViewRecord).filter(Boolean).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
+  } catch {
+    return []
+  }
+}
+
+function storePurchaseHistorySavedViews(views) {
+  const storage = purchaseHistoryViewStorage()
+  if (!storage) return
+  try {
+    storage.setItem(purchaseHistoryViewStorageKey, JSON.stringify(views))
+  } catch {
+    // Ignore storage failures; saved views are a convenience layer only.
+  }
+}
+
+function purchaseHistoryViewMatchesCurrent(snapshot) {
+  const current = purchaseHistoryViewSnapshot()
+  return JSON.stringify(current) === JSON.stringify(snapshot)
+}
+
+function applyPurchaseHistoryView(name) {
+  const view = purchaseHistorySavedViews().find((item) => item.name === name)
+  if (!view) return false
+  state.purchaseHistoryGroup = view.snapshot.group
+  state.purchaseHistoryVendorId = view.snapshot.vendorId
+  state.purchaseHistoryManufacturer = view.snapshot.manufacturer
+  state.purchaseHistoryBuyAgainFilter = view.snapshot.buyAgain
+  if (typeof document !== 'undefined' && typeof render === 'function') {
+    render()
+  }
+  return true
+}
+
+function savePurchaseHistoryView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const views = purchaseHistorySavedViews()
+  const next = views.filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  next.push({ name: trimmedName, snapshot: purchaseHistoryViewSnapshot() })
+  storePurchaseHistorySavedViews(next)
+  return true
+}
+
+function deletePurchaseHistoryView(name) {
+  const trimmedName = String(name || '').trim()
+  if (!trimmedName) return false
+  const next = purchaseHistorySavedViews().filter((item) => item.name.toLowerCase() !== trimmedName.toLowerCase())
+  storePurchaseHistorySavedViews(next)
+  return true
 }
 
 function catalogCigarForInventoryEvent(event) {
@@ -2024,6 +2225,51 @@ function renderCollectionPage(view) {
   })
   controls.append(searchForm)
 
+  const savedViews = collectionSavedViews()
+  const savedViewBar = document.createElement('div')
+  savedViewBar.className = 'collection-saved-view-bar'
+  savedViewBar.innerHTML = `
+    <label class="form-field collection-saved-view-select-field">
+      <span>Saved Views</span>
+      <select data-collection-view-select>
+        <option value="">Load a saved view...</option>
+        ${savedViews.map((view) => `<option value="${escapeHtml(view.name)}">${escapeHtml(view.name)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="form-field collection-saved-view-name-field">
+      <span>View Name</span>
+      <input type="text" data-collection-view-name placeholder="Current filters">
+    </label>
+    <button type="button" class="primary-button" data-save-collection-view>Save View</button>
+    <button type="button" class="secondary-button" data-delete-collection-view ${savedViews.length === 0 ? 'disabled' : ''}>Delete View</button>
+  `
+  const savedViewSelect = savedViewBar.querySelector('[data-collection-view-select]')
+  const savedViewNameInput = savedViewBar.querySelector('[data-collection-view-name]')
+  const saveCollectionViewButton = savedViewBar.querySelector('[data-save-collection-view]')
+  const deleteCollectionViewButton = savedViewBar.querySelector('[data-delete-collection-view]')
+  const matchingView = savedViews.find((view) => collectionViewMatchesCurrent(view.snapshot))
+  if (matchingView) {
+    savedViewSelect.value = matchingView.name
+  }
+  const syncSavedViewButtons = () => {
+    const canSave = String(savedViewNameInput.value || '').trim().length > 0
+    saveCollectionViewButton.disabled = !canSave
+    deleteCollectionViewButton.disabled = savedViews.length === 0 || !savedViewSelect.value
+  }
+  savedViewNameInput.addEventListener('input', syncSavedViewButtons)
+  savedViewSelect.addEventListener('change', () => {
+    if (applyCollectionView(savedViewSelect.value)) return
+    savedViewSelect.value = ''
+  })
+  saveCollectionViewButton.addEventListener('click', () => {
+    if (!saveCollectionView(savedViewNameInput.value)) return
+    render()
+  })
+  deleteCollectionViewButton.addEventListener('click', () => {
+    if (!deleteCollectionView(savedViewSelect.value)) return
+    render()
+  })
+  syncSavedViewButtons()
   const summary = document.createElement('div')
   summary.className = 'metric-grid compact collection-summary-grid'
   summary.append(
@@ -2039,7 +2285,7 @@ function renderCollectionPage(view) {
     empty.innerHTML = hasOnHandInventory
       ? '<h3>No Matching Cigars</h3><p>No on-hand cigars match the current search and filters.</p>'
       : '<h3>No On-Hand Collection Yet</h3><p>Create a purchase and at least one purchase line to begin tracking on-hand inventory.</p>'
-    view.append(controls, summary, empty)
+    view.append(controls, summary, empty, savedViewBar)
     return
   }
 
@@ -2354,6 +2600,7 @@ function renderCollectionPage(view) {
   view.append(controls, summary)
   renderPendingSmokingJournal(view)
   view.append(tableWrap)
+  view.append(savedViewBar)
   const scrollTargetCigarId = Number(state.collectionScrollTargetCigarId || 0)
   state.collectionScrollTargetCigarId = null
   if (scrollTargetCigarId) {
@@ -4851,12 +5098,59 @@ function renderPurchaseHistoryReport(view) {
   )
   body.append(metrics)
 
+  const savedViews = purchaseHistorySavedViews()
+  const savedViewBar = document.createElement('div')
+  savedViewBar.className = 'collection-saved-view-bar purchase-history-saved-view-bar'
+  savedViewBar.innerHTML = `
+    <label class="form-field collection-saved-view-select-field">
+      <span>Saved Views</span>
+      <select data-purchase-history-view-select>
+        <option value="">Load a saved view...</option>
+        ${savedViews.map((view) => `<option value="${escapeHtml(view.name)}">${escapeHtml(view.name)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="form-field collection-saved-view-name-field">
+      <span>View Name</span>
+      <input type="text" data-purchase-history-view-name placeholder="Current filters">
+    </label>
+    <button type="button" class="primary-button" data-save-purchase-history-view>Save View</button>
+    <button type="button" class="secondary-button" data-delete-purchase-history-view ${savedViews.length === 0 ? 'disabled' : ''}>Delete View</button>
+  `
+  const savedViewSelect = savedViewBar.querySelector('[data-purchase-history-view-select]')
+  const savedViewNameInput = savedViewBar.querySelector('[data-purchase-history-view-name]')
+  const savePurchaseHistoryViewButton = savedViewBar.querySelector('[data-save-purchase-history-view]')
+  const deletePurchaseHistoryViewButton = savedViewBar.querySelector('[data-delete-purchase-history-view]')
+  const matchingView = savedViews.find((view) => purchaseHistoryViewMatchesCurrent(view.snapshot))
+  if (matchingView) {
+    savedViewSelect.value = matchingView.name
+  }
+  const syncSavedViewButtons = () => {
+    const canSave = String(savedViewNameInput.value || '').trim().length > 0
+    savePurchaseHistoryViewButton.disabled = !canSave
+    deletePurchaseHistoryViewButton.disabled = savedViews.length === 0 || !savedViewSelect.value
+  }
+  savedViewNameInput.addEventListener('input', syncSavedViewButtons)
+  savedViewSelect.addEventListener('change', () => {
+    if (applyPurchaseHistoryView(savedViewSelect.value)) return
+    savedViewSelect.value = ''
+  })
+  savePurchaseHistoryViewButton.addEventListener('click', () => {
+    if (!savePurchaseHistoryView(savedViewNameInput.value)) return
+    render()
+  })
+  deletePurchaseHistoryViewButton.addEventListener('click', () => {
+    if (!deletePurchaseHistoryView(savedViewSelect.value)) return
+    render()
+  })
+  syncSavedViewButtons()
+
   if (rows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No purchases match the selected report.</p>'
     body.append(empty)
   }
+  body.append(savedViewBar)
   view.append(panel)
 }
 

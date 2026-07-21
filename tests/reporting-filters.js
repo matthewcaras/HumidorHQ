@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.4
+ * Revision: 1.10.7
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-20 11:45 ET
+ * Modified Date: 2026-07-21 12:30 ET
  */
 
 const fs = require('node:fs')
@@ -14,6 +14,19 @@ const appSource = fs.readFileSync(appPath, 'utf8').split("window.addEventListene
 const assertions = String.raw`
 function testAssert(condition, message) {
   if (!condition) throw new Error(message)
+}
+
+const savedLocalStorage = new Map()
+globalThis.localStorage = {
+  getItem(key) {
+    return savedLocalStorage.has(String(key)) ? savedLocalStorage.get(String(key)) : null
+  },
+  setItem(key, value) {
+    savedLocalStorage.set(String(key), String(value))
+  },
+  removeItem(key) {
+    savedLocalStorage.delete(String(key))
+  },
 }
 
 state.records = {
@@ -134,6 +147,44 @@ state.collectionDirection = 'asc'
 testAssert(sortCollectionItems(buildCollectionItems())[0].cigar.strength === 'Mild', 'Ascending strength sort is incorrect.')
 state.collectionDirection = 'desc'
 testAssert(sortCollectionItems(buildCollectionItems())[0].cigar.strength === 'Full', 'Descending strength sort is incorrect.')
+state.collectionSort = 'location'
+state.collectionDirection = 'desc'
+state.collectionHumidorFilterId = 2
+state.collectionSectionFilterId = 5
+state.collectionStrengthFilter = 'full'
+state.collectionBuyAgainFilter = 'YES'
+state.collectionSearch = 'stock'
+state.selectedCollectionCigarId = 1
+state.collectionScrollTargetCigarId = 1
+testAssert(saveCollectionView('  Work In Progress  '), 'Collection saved view should accept a trimmed name.')
+testAssert(collectionSavedViews().length === 1 && collectionSavedViews()[0].name === 'Work In Progress', 'Collection saved view was not stored correctly.')
+state.collectionSort = 'alpha'
+state.collectionDirection = 'asc'
+state.collectionHumidorFilterId = null
+state.collectionSectionFilterId = null
+state.collectionStrengthFilter = ''
+state.collectionBuyAgainFilter = ''
+state.collectionSearch = ''
+state.selectedCollectionCigarId = null
+state.collectionScrollTargetCigarId = null
+testAssert(applyCollectionView('Work In Progress'), 'Collection saved view should apply by name.')
+testAssert(state.collectionSort === 'location' && state.collectionDirection === 'desc' && state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === 5 && state.collectionStrengthFilter === 'full' && state.collectionBuyAgainFilter === 'YES' && state.collectionSearch === 'stock' && state.selectedCollectionCigarId === null && state.collectionScrollTargetCigarId === null, 'Collection saved view did not restore the expected filters.')
+testAssert(deleteCollectionView('Work In Progress'), 'Collection saved view should delete by name.')
+testAssert(collectionSavedViews().length === 0, 'Collection saved view delete did not clear storage.')
+state.purchaseHistoryGroup = 'manufacturer'
+state.purchaseHistoryVendorId = '1'
+state.purchaseHistoryManufacturer = 'alpha'
+state.purchaseHistoryBuyAgainFilter = 'YES'
+testAssert(savePurchaseHistoryView('  Report Snapshot  '), 'Purchase History saved view should accept a trimmed name.')
+testAssert(purchaseHistorySavedViews().length === 1 && purchaseHistorySavedViews()[0].name === 'Report Snapshot', 'Purchase History saved view was not stored correctly.')
+state.purchaseHistoryGroup = 'vendor'
+state.purchaseHistoryVendorId = ''
+state.purchaseHistoryManufacturer = ''
+state.purchaseHistoryBuyAgainFilter = ''
+testAssert(applyPurchaseHistoryView('Report Snapshot'), 'Purchase History saved view should apply by name.')
+testAssert(state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryVendorId === '1' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES', 'Purchase History saved view did not restore the expected filters.')
+testAssert(deletePurchaseHistoryView('Report Snapshot'), 'Purchase History saved view should delete by name.')
+testAssert(purchaseHistorySavedViews().length === 0, 'Purchase History saved view delete did not clear storage.')
 
 let agingRows = inventoryAgingRows('2025-05-01')
 let agingSummary = summarizeInventoryAging(agingRows)
@@ -167,11 +218,15 @@ lotTwo.receivedDateSnapshot = lotTwoDate
 
 state.purchaseHistoryGroup = 'vendor'
 state.purchaseHistoryVendorId = '1'
+state.purchaseHistoryManufacturer = ''
+state.purchaseHistoryBuyAgainFilter = ''
 let history = purchaseHistoryRows()
 testAssert(history.length === 2, 'Vendor purchase-history filter is incorrect.')
 testAssert(purchaseHistoryTotalPaid(history) === 30, 'Vendor totalPaid summary is incorrect.')
 state.purchaseHistoryGroup = 'manufacturer'
 state.purchaseHistoryManufacturer = 'bravo'
+state.purchaseHistoryVendorId = ''
+state.purchaseHistoryBuyAgainFilter = ''
 history = purchaseHistoryRows()
 testAssert(history.length === 2, 'Manufacturer purchase-history filter is incorrect.')
 testAssert(purchaseHistoryTotalPaid(history) === 45, 'Manufacturer totalPaid allocation is incorrect.')
@@ -285,6 +340,33 @@ testAssert(relatedActivity.length === 2 && relatedActivity.some((event) => event
 testAssert(activityRelationshipEvent(state.records['inventory-events'].find((event) => event.id === 11))?.id === 13, 'Activity original event did not resolve its reversal relationship.')
 testAssert(activityRelationshipEvent(state.records['inventory-events'].find((event) => event.id === 13))?.id === 11, 'Activity reversal did not resolve its original event relationship.')
 state.activitySearch = ''
+testAssert(activityEventContextTarget(state.records['inventory-events'].find((event) => event.id === 21))?.label === 'Open Purchase', 'Activity purchase context target is incorrect.')
+testAssert(activityEventContextTarget(state.records['inventory-events'].find((event) => event.id === 20))?.label === 'Open Collection', 'Activity collection context target is incorrect.')
+state.purchaseRecordsFilterType = 'vendor'
+state.purchaseRecordsFilterValue = 'temp'
+state.purchaseRecordsFilterLabel = 'Temp'
+state.selectedPurchaseId = null
+openActivityEventContext(state.records['inventory-events'].find((event) => event.id === 21))
+testAssert(state.activePage === 'Purchases' && state.selectedPurchaseId === 2 && state.purchaseRecordsFilterType === '' && state.purchaseRecordsFilterValue === '' && state.purchaseRecordsFilterLabel === '', 'Activity purchase drill-through did not open the matching Purchases context.')
+state.activePage = 'Dashboard'
+state.selectedPurchaseId = null
+state.collectionHumidorFilterId = null
+state.collectionSectionFilterId = 10
+state.collectionStrengthFilter = 'full'
+state.collectionBuyAgainFilter = 'YES'
+state.collectionSearch = 'search'
+state.selectedCollectionCigarId = 1
+state.collectionScrollTargetCigarId = 1
+openActivityEventContext(state.records['inventory-events'].find((event) => event.id === 20))
+testAssert(state.activePage === 'Collection' && state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === null && state.collectionStrengthFilter === '' && state.collectionBuyAgainFilter === '' && state.collectionSearch === '' && state.selectedCollectionCigarId === 2 && state.collectionScrollTargetCigarId === 2, 'Activity collection drill-through did not open the filtered Collection context.')
+state.activePage = 'Dashboard'
+state.collectionHumidorFilterId = null
+state.collectionSectionFilterId = null
+state.collectionStrengthFilter = ''
+state.collectionBuyAgainFilter = ''
+state.collectionSearch = ''
+state.selectedCollectionCigarId = null
+state.collectionScrollTargetCigarId = null
 state.selectedCollectionCigarId = null
 toggleCollectionCigarSelection('2')
 testAssert(state.selectedCollectionCigarId === 2, 'Whole-card Collection selection did not expand the requested cigar.')

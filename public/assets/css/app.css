@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.8.2
+ * Revision: 1.8.3
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-20 10:30 ET
+ * Modified Date: 2026-07-21 12:00 ET
  */
 
 :root {
@@ -660,6 +660,29 @@ h3 {
   gap: 10px;
   grid-template-columns: minmax(240px, 1fr) auto auto;
   margin-top: 12px;
+}
+
+.collection-saved-view-bar {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto auto;
+  margin-top: 12px;
+}
+
+.collection-saved-view-bar select,
+.collection-saved-view-bar input {
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.collection-saved-view-select-field,
+.collection-saved-view-name-field {
+  margin: 0;
 }
 
 .dashboard-link-row {
@@ -1363,6 +1386,10 @@ code {
 
   .collection-search-form button {
     width: 100%;
+  }
+
+  .collection-saved-view-bar {
+    grid-template-columns: 1fr;
   }
 
   .inline-move-form.is-open {

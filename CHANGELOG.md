@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.11
+Revision: 1.30.13
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-21 09:30 ET
 -->
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.13 - 2026-07-21
+
+Changed by: Matt
+
+- Moved Collection saved views to the bottom of the page and added the same bottom-position saved-view pattern to Purchase History.
+
+## 1.30.12 - 2026-07-21
+
+Changed by: Matt
+
+- Added local saved views for the Collection page so sort, filter, direction, and search combinations can be recalled without touching runtime data.
 
 ## 1.30.11 - 2026-07-21
 
