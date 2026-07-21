@@ -21,6 +21,12 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.30.10 - 2026-07-21
+
+Changed by: Matt
+
+- Added an Apple touch icon so home-screen saves use a cigar mark instead of the fallback site snapshot.
+
 ## 1.30.9 - 2026-07-20
 
 Changed by: Matt
