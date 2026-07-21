@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.7
+# Revision : 1.32.8
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-21 09:00 ET
+# Modified Date : 2026-07-21 09:30 ET
 # Changelog :
+# 1.32.8 verify report sections retain open state across filter interactions
 # 1.32.7 verify cigar home-screen icon wiring
 # 1.32.6 verify concise collapsible report section headers
 # 1.32.5 verify collapsible report sections and removed Buy Again report section
@@ -245,7 +246,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.9') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.10') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.12\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
 if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }

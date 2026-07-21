@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.9
+Revision: 1.30.11
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 13:20 ET
+Modified Date: 2026-07-21 09:30 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.11 - 2026-07-21
+
+Changed by: Matt
+
+- Made report sections remember their open state so filter clicks do not collapse the report you are working in.
 
 ## 1.30.10 - 2026-07-21
 
