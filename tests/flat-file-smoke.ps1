@@ -1,11 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.10
+# Revision : 1.32.11
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-21 12:30 ET
+# Modified Date : 2026-07-21 13:00 ET
 # Changelog :
-# 1.32.10 verify Collection and Purchase History saved views with report-section persistence
+# 1.32.11 verify Collection, Purchase History, and Reports saved views with report-section persistence
 # 1.32.7 verify cigar home-screen icon wiring
 # 1.32.6 verify concise collapsible report section headers
 # 1.32.5 verify collapsible report sections and removed Buy Again report section
@@ -246,7 +246,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.12') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.13') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
 if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }
@@ -286,6 +286,9 @@ foreach ($savedViewHook in @('humidorhq.collection.views.v1', 'function collecti
 }
 foreach ($purchaseHistorySavedViewHook in @('humidorhq.purchaseHistory.views.v1', 'function purchaseHistorySavedViews', 'function savePurchaseHistoryView', 'function applyPurchaseHistoryView', 'function deletePurchaseHistoryView', 'purchase-history-saved-view-bar', 'Saved Views', 'Load a saved view...', 'View Name', 'Save View', 'Delete View')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($purchaseHistorySavedViewHook)) { throw "Purchase History saved views are missing hook: $purchaseHistorySavedViewHook" }
+}
+foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(activity, savedViewBar)')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($reportSavedViewHook)) { throw "Reports saved views are missing hook: $reportSavedViewHook" }
 }
 if ($appJs -match '<h3>\$\{escapeHtml\(cigarName\(item\.cigar\)\)\}</h3>') { throw 'Expanded Collection detail must not repeat the selected cigar heading.' }
 foreach ($humidorNavigationHook in @('function selectCollectionHumidor', 'function openCollectionForHumidor', 'View ${column.value(record)} inventory in Collection')) {
