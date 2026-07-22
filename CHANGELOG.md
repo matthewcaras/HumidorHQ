@@ -39,6 +39,12 @@ Changed by: Matt
 
 - Aligned the collection cost basis display with the authoritative purchase total in the current pre-inventory state so it matches the purchase total when no removals or collection filters are active.
 
+## 1.30.30 - 2026-07-22
+
+Changed by: Matt
+
+- Corrected the Collection summary so the default, unfiltered view also matches the authoritative purchase total while filtered views still use filtered inventory valuation.
+
 ## 1.30.29 - 2026-07-22
 
 Changed by: Matt

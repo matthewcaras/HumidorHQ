@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.24.22
+ * Revision: 1.24.23
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-22 13:45 ET
  */
@@ -1222,13 +1222,20 @@ function currentCollectionMetrics(useCollectionFilters = true) {
     const type = normalizeEventType(event.eventType)
     return type === 'SMOKED' || type === 'GIFTED' || type === 'DISCARDED'
   })
+  const hasActiveCollectionFilters = Boolean(
+    state.collectionHumidorFilterId
+    || state.collectionSectionFilterId
+    || state.collectionStrengthFilter
+    || state.collectionBuyAgainFilter
+    || String(state.collectionSearch || '').trim(),
+  )
   const purchaseTotalPaid = authoritativePurchaseTotalPaid()
-  const currentCostBasis = !useCollectionFilters && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid)
+  const currentCostBasis = (!useCollectionFilters || !hasActiveCollectionFilters) && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid)
     ? purchaseTotalPaid
     : costComplete
       ? knownCostTotal
       : null
-  const averageCostPerCigar = !useCollectionFilters && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid) && totalQuantity > 0
+  const averageCostPerCigar = (!useCollectionFilters || !hasActiveCollectionFilters) && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid) && totalQuantity > 0
     ? roundMoney(Number(purchaseTotalPaid) / totalQuantity)
     : costComplete && totalQuantity > 0
       ? knownCostTotal / totalQuantity
