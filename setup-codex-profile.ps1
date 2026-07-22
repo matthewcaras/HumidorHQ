@@ -1,10 +1,11 @@
 # Filename: setup-codex-profile.ps1
-# Revision : 1.0.0
+# Revision : 1.0.1
 # Description : Prompts for a HumidorHQ project folder, saves it to the current user's PowerShell profile, changes into that folder, and launches Codex.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-16 09:20 ET
+# Modified Date : 2026-07-17 8:45 AM ET
 # Changelog :
+# 1.0.1 use Regex instance replacement count when updating existing HumidorHQ profile shortcut
 # 1.0.0 initial release
 
 $ErrorActionPreference = 'Stop'
@@ -69,8 +70,9 @@ $profileLine = '$HumidorHQ = ' + (ConvertTo-SingleQuotedPowerShellLiteral -Value
 $profileContent = Get-Content -LiteralPath $profilePath -Raw -ErrorAction SilentlyContinue
 if ($null -eq $profileContent) { $profileContent = '' }
 
-if ($profileContent -match '(?m)^\s*\$HumidorHQ\s*=') {
-    $profileContent = [regex]::Replace($profileContent, '(?m)^\s*\$HumidorHQ\s*=.*$', $profileLine, 1)
+$humidorProfileRegex = [regex]'(?m)^\s*\$HumidorHQ\s*=.*$'
+if ($humidorProfileRegex.IsMatch($profileContent)) {
+    $profileContent = $humidorProfileRegex.Replace($profileContent, $profileLine, 1)
 } else {
     if ($profileContent.Length -gt 0) {
         if (-not $profileContent.EndsWith("`r`n") -and -not $profileContent.EndsWith("`n")) {

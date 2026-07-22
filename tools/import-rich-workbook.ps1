@@ -1,14 +1,17 @@
 # Filename: import-rich-workbook.ps1
-# Revision : 1.0.0
+# Revision : 1.1.0
 # Description : Imports the HumidorHQ rich Excel workbook into the local flat-file JSON data model.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-16
+# Modified Date : 2026-07-17
 # Changelog :
+# 1.1.0 require an isolated data root or explicit destructive override
 # 1.0.0 initial release
 
 param(
-    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx'
+    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx',
+    [string]$DataRoot,
+    [switch]$ForceDestructive
 )
 
 $ErrorActionPreference = 'Stop'
@@ -110,6 +113,21 @@ function Save-JsonCollection {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$repositoryDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'data'))
+$resolvedDataRoot = if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+    $repositoryDataRoot
+} else {
+    [System.IO.Path]::GetFullPath($DataRoot)
+}
+if ($resolvedDataRoot -eq $repositoryDataRoot -and -not $ForceDestructive) {
+    throw 'SAFETY STOP: importing into the repository data directory is destructive. Supply -DataRoot with an isolated temporary/test directory, or deliberately pass -ForceDestructive.'
+}
+if (-not (Test-Path -LiteralPath $resolvedDataRoot -PathType Container)) {
+    throw "Data root does not exist: $resolvedDataRoot"
+}
+if ($ForceDestructive) {
+    Write-Warning "DESTRUCTIVE OVERRIDE ENABLED: JSON collections under $resolvedDataRoot will be replaced."
+}
 if (-not (Test-Path -LiteralPath $WorkbookPath)) {
     throw "Workbook not found: $WorkbookPath"
 }
@@ -132,7 +150,7 @@ $dataFiles = @(
 )
 
 foreach ($file in $dataFiles) {
-    $source = Join-Path $repoRoot ('data\' + $file)
+    $source = Join-Path $resolvedDataRoot $file
     if (Test-Path -LiteralPath $source) {
         Copy-Item -LiteralPath $source -Destination (Join-Path $backupRoot $file) -Force
     }
@@ -607,22 +625,23 @@ $counters = @{
     'smoking-journal-entries' = $nextId['smoking-journal-entries']
 }
 
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\catalog-cigars.json') -Data $catalog
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\vendors.json') -Data $vendors
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\storage-locations.json') -Data $storageLocations
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\storage-sub-locations.json') -Data $storageSubLocations
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\purchases.json') -Data $purchases
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\purchase-lines.json') -Data $purchaseLines
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\lots.json') -Data $lots
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\lot-location-balances.json') -Data $balances
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\inventory-events.json') -Data $events
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\smoking-journal-entries.json') -Data $journalEntries
-Save-JsonCollection -Path (Join-Path $repoRoot 'data\counters.json') -Data $counters
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'catalog-cigars.json') -Data $catalog
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'vendors.json') -Data $vendors
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'storage-locations.json') -Data $storageLocations
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'storage-sub-locations.json') -Data $storageSubLocations
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'purchases.json') -Data $purchases
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'purchase-lines.json') -Data $purchaseLines
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'lots.json') -Data $lots
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'lot-location-balances.json') -Data $balances
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'inventory-events.json') -Data $events
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'smoking-journal-entries.json') -Data $journalEntries
+Save-JsonCollection -Path (Join-Path $resolvedDataRoot 'counters.json') -Data $counters
 
 Write-Host "Import complete from $WorkbookPath" -ForegroundColor Green
 Write-Host "Backup of previous local data saved to $backupRoot" -ForegroundColor Yellow
 Write-Host ("Catalog: " + $catalog.Count + ", Vendors: " + $vendors.Count + ", Humidors: " + $storageLocations.Count + ", Sections: " + $storageSubLocations.Count + ", Purchases: " + $purchases.Count + ", Lots: " + $lots.Count + ", Balances: " + $balances.Count + ", Events: " + $events.Count) -ForegroundColor Green
 
 # Example Usage:
-#   .\tools\import-rich-workbook.ps1
-#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx"
+#   .\tools\import-rich-workbook.ps1 -DataRoot "$env:TEMP\humidorhq-import-test"
+#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "C:\Temp\HumidorHQ-TestData"
+#   .\tools\import-rich-workbook.ps1 -ForceDestructive

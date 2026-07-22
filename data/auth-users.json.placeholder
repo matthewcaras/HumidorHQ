@@ -1,16 +1,16 @@
 # Filename: auth-users.json.placeholder
-# Revision: 1.0.0
-# Description: Tracked placeholder documenting an ignored runtime file.
-# Modified Date: 2026-07-15 00:13 ET
+# Revision: 1.2.0
+# Description: Marker documenting the ignored runtime authentication file.
+# Modified Date: 2026-07-19 10:00 ET
 
-This placeholder marks the intentionally ignored runtime credential file:
+This placeholder documents the default runtime credential file:
 
   data/auth-users.json
 
-Create the real file with:
+The application reads this path by default. Create or update credentials with:
 
   php tools/create-auth-user.php "username" "password" "Display Name"
 
-Do not commit real usernames, password hashes, or production credentials.
+Do not commit real usernames, password hashes, or production credentials. `HUMIDORHQ_DATA_ROOT` may optionally select another runtime directory.
 
 

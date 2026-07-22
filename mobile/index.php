@@ -1,10 +1,17 @@
-<!--
-Filename: index.html
-Revision: 1.1.0
-Description: Visible mobile preview utility page with phone and tablet viewport presets.
-Modified Date: 2026-07-17 6:13 AM ET
--->
-
+<?php
+/*
+ * Filename: index.php
+ * Revision: 1.1.0
+ * Description: Visible mobile preview utility page with phone and tablet viewport presets.
+ * Modified Date: 2026-07-17 8:06 AM ET
+ */
+declare(strict_types=1);
+require_once __DIR__ . '/../api/lib/Auth.php';
+if (current_auth_user() === null) {
+    header('Location: ../', true, 302);
+    exit;
+}
+?>
 <!doctype html>
 <html lang="en">
   <head>

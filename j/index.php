@@ -1,10 +1,17 @@
-<!--
-Filename: index.html
-Revision: 1.2.0
-Description: Hidden Jason-only utility page with admin document links and full or mobile viewport preview controls.
-Modified Date: 2026-07-17 6:23 AM ET
--->
-
+<?php
+/*
+ * Filename: index.php
+ * Revision: 1.3.0
+ * Description: Authenticated private utility page with admin document links and full or mobile viewport preview controls.
+ * Modified Date: 2026-07-17 8:06 AM ET
+ */
+declare(strict_types=1);
+require_once __DIR__ . '/../api/lib/Auth.php';
+if (current_auth_user() === null) {
+    header('Location: ../', true, 302);
+    exit;
+}
+?>
 <!doctype html>
 <html lang="en">
   <head>
