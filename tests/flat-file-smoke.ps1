@@ -1,11 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.15
+# Revision : 1.32.16
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-22 09:35 ET
+# Modified Date : 2026-07-22 10:00 ET
 # Changelog :
-# 1.32.15 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown drill-through/sort
+# 1.32.16 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown drill-through/sort
 # 1.32.14 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown reports
 # 1.32.13 verify Collection, Purchase History, Reports saved views, import staging safety, and Pre Inventory reconciliation
 # 1.32.7 verify cigar home-screen icon wiring
@@ -289,7 +289,7 @@ foreach ($savedViewHook in @('humidorhq.collection.views.v1', 'function collecti
 foreach ($purchaseHistorySavedViewHook in @('humidorhq.purchaseHistory.views.v1', 'function purchaseHistorySavedViews', 'function savePurchaseHistoryView', 'function applyPurchaseHistoryView', 'function deletePurchaseHistoryView', 'purchase-history-saved-view-bar', 'Saved Views', 'Load a saved view...', 'View Name', 'Save View', 'Delete View')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($purchaseHistorySavedViewHook)) { throw "Purchase History saved views are missing hook: $purchaseHistorySavedViewHook" }
 }
-foreach ($ratingReportHook in @('function ratingBreakdownRows', 'function ratingBreakdownLabel', 'function ratingBreakdownDimensionLabel', 'function ratingBreakdownSearchTerm', 'function ratingBreakdownSortValue', 'function openCatalogForRatingBreakdown', 'function renderRatingBreakdownReport', 'ratingBreakdownDimension', 'Rating Breakdown', 'Average Rating', 'Total Smokes', 'Rated Entries', 'Distinct Cigars', 'Group By', 'Strength', 'Wrapper', 'Origin', 'Size', 'Manufacturer', 'clickable-record-row', 'data-rating-breakdown-key')) {
+foreach ($ratingReportHook in @('function ratingBreakdownRows', 'function ratingBreakdownLabel', 'function ratingBreakdownDimensionLabel', 'function ratingBreakdownSearchTerm', 'function ratingBreakdownSortValue', 'function openCollectionForRatingBreakdown', 'function renderRatingBreakdownReport', 'ratingBreakdownDimension', 'Rating Breakdown', 'Average Rating', 'Total Smokes', 'Rated Entries', 'Distinct Cigars', 'Group By', 'Strength', 'Wrapper', 'Origin', 'Size', 'Manufacturer', 'clickable-record-row', 'data-rating-breakdown-key')) {
     if ($appJs -notmatch [regex]::Escape($ratingReportHook)) { throw "Rating Breakdown reporting is missing hook: $ratingReportHook" }
 }
 foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(activity, savedViewBar)')) {

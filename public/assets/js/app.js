@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.16
+ * Revision: 1.24.17
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-22 09:35 ET
+ * Modified Date: 2026-07-22 10:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -1191,6 +1191,8 @@ function currentCollectionMetrics(useCollectionFilters = true) {
       item.cigar.series,
       item.cigar.vitola,
       item.cigar.shape,
+      item.cigar.length,
+      item.cigar.ringGauge,
       item.cigar.wrapper,
       item.cigar.binder,
       item.cigar.filler,
@@ -2027,7 +2029,7 @@ function ratingBreakdownLabel(cigar, dimension) {
 
 function ratingBreakdownSearchTerm(cigar, dimension) {
   if (dimension === 'size') {
-    return [cigar?.vitola, cigar?.length, cigar?.ringGauge].filter((value) => String(value || '').trim().length > 0).join(' ').trim()
+    return String(cigar?.vitola || '').trim()
   }
   return ratingBreakdownLabel(cigar, dimension)
 }
@@ -5667,12 +5669,16 @@ function openCatalogForBuyAgainCigar(cigarId) {
   navigateToPage('Catalog')
 }
 
-function openCatalogForRatingBreakdown(row) {
+function openCollectionForRatingBreakdown(row) {
   if (!row) return
-  state.selectedCatalogHistoryCigarId = null
-  state.catalogSearch = String(row.searchTerm || row.label || '').trim()
-  state.editing['catalog-cigars'] = null
-  navigateToPage('Catalog')
+  state.selectedCollectionCigarId = null
+  state.collectionScrollTargetCigarId = null
+  state.collectionHumidorFilterId = null
+  state.collectionSectionFilterId = null
+  state.collectionStrengthFilter = ''
+  state.collectionBuyAgainFilter = ''
+  state.collectionSearch = String(row.searchTerm || row.label || '').trim()
+  navigateToPage('Collection')
 }
 
 function activityEventContextTarget(event) {
@@ -6037,8 +6043,8 @@ function renderRatingBreakdownReport(view) {
   tableWrap.querySelectorAll('[data-rating-breakdown-key]').forEach((rowElement) => {
     const row = rows.find((item) => item.key === rowElement.dataset.ratingBreakdownKey)
     if (!row) return
-    rowElement.setAttribute('aria-label', `Open Catalog filtered to ${row.label}`)
-    const open = () => openCatalogForRatingBreakdown(row)
+    rowElement.setAttribute('aria-label', `Open Collection filtered to ${row.label}`)
+    const open = () => openCollectionForRatingBreakdown(row)
     rowElement.addEventListener('click', open)
     rowElement.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {

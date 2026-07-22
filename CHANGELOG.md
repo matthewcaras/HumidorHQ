@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.21
+Revision: 1.30.22
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 09:50 ET
+Modified Date: 2026-07-22 10:00 ET
 -->
 
 # Changelog
@@ -25,15 +25,21 @@ Author convention:
 
 Changed by: Matt and Jason
 
-- Added Catalog drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
+- Added Collection drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
 - Added local-data/ Git ignore rules that keep the folder path visible through a committed `.placeholder` file while ignoring all machine-local contents.
 - Documented the local-data/.placeholder pattern in the README so empty local working folders can stay present without tracking runtime files.
+
+## 1.30.22 - 2026-07-22
+
+Changed by: Matt
+
+- Switched Rating Breakdown row drill-through to open Collection with a focused search instead of Catalog.
 
 ## 1.30.20 - 2026-07-22
 
 Changed by: Matt
 
-- Added Catalog drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
+- Added Collection drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
 
 ## 1.30.19 - 2026-07-22
 

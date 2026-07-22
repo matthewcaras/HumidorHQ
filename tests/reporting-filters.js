@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.10
+ * Revision: 1.10.11
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, rating breakdown, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-22 09:35 ET
+ * Modified Date: 2026-07-22 10:00 ET
  */
 
 const fs = require('node:fs')
@@ -401,9 +401,14 @@ testAssert(state.selectedCatalogHistoryCigarId === 1 && state.catalogSearch === 
 state.selectedCatalogHistoryCigarId = null
 state.ratingBreakdownDimension = 'strength'
 const ratingDrillRow = ratingBreakdownRows().find((row) => row.label === 'Mild')
-openCatalogForRatingBreakdown(ratingDrillRow)
-testAssert(state.selectedCatalogHistoryCigarId === null && state.catalogSearch === 'Mild' && state.activePage === 'Catalog', 'Rating Breakdown drill-through did not open the matching Catalog subset.')
-state.catalogSearch = ''
+openCollectionForRatingBreakdown(ratingDrillRow)
+testAssert(state.selectedCollectionCigarId === null && state.collectionSearch === 'Mild' && state.activePage === 'Collection', 'Rating Breakdown drill-through did not open the matching Collection subset.')
+state.collectionSearch = ''
+state.ratingBreakdownDimension = 'size'
+const ratingSizeDrillRow = ratingBreakdownRows().find((row) => row.label.startsWith('Robusto'))
+openCollectionForRatingBreakdown(ratingSizeDrillRow)
+testAssert(state.selectedCollectionCigarId === null && state.collectionSearch === 'Robusto' && state.activePage === 'Collection', 'Rating Breakdown size drill-through did not use the vitola search term.')
+state.collectionSearch = ''
 state.agingHumidorId = '2'
 openCollectionForAgingCigar(2)
 testAssert(state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === null && state.selectedCollectionCigarId === 2 && state.collectionScrollTargetCigarId === 2 && state.activePage === 'Collection', 'Inventory Aging drill-through did not open the filtered Collection view.')
