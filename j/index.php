@@ -1,0 +1,251 @@
+<?php
+/*
+ * Filename: index.php
+ * Revision: 1.3.0
+ * Description: Authenticated private utility page with admin document links and full or mobile viewport preview controls.
+ * Modified Date: 2026-07-17 8:06 AM ET
+ */
+declare(strict_types=1);
+require_once __DIR__ . '/../api/lib/Auth.php';
+if (current_auth_user() === null) {
+    header('Location: ../', true, 302);
+    exit;
+}
+?>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow">
+    <title>HumidorHQ Jason</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #17120f;
+        --panel: #241b16;
+        --panel-soft: #30241d;
+        --text: #f4eadc;
+        --muted: #bda996;
+        --line: #4b382b;
+        --accent: #f2b66d;
+        --accent-soft: rgba(242, 182, 109, 0.14);
+        --danger: #f08a7d;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        background: radial-gradient(circle at top left, rgba(242, 182, 109, 0.08), transparent 32rem), var(--bg);
+        color: var(--text);
+        margin: 0;
+        min-height: 100vh;
+      }
+      .shell {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+        transition: grid-template-columns 160ms ease;
+        min-height: 100vh;
+        padding: 22px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+        padding: 18px;
+      }
+      h1, h2, p { margin-top: 0; }
+      h1 { color: var(--accent); font-size: 1.8rem; line-height: 1.1; margin-bottom: 8px; }
+      h2 { font-size: 1rem; margin-bottom: 12px; }
+      .muted { color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+      .link-grid { display: grid; gap: 10px; margin: 18px 0; }
+      a, button, select {
+        border-radius: 6px;
+        font: inherit;
+      }
+      .utility-link, button {
+        background: #17100d;
+        border: 1px solid var(--line);
+        color: var(--text);
+        cursor: pointer;
+        display: block;
+        padding: 11px 12px;
+        text-align: left;
+        text-decoration: none;
+      }
+      .utility-link:hover, button:hover {
+        background: var(--accent-soft);
+        border-color: rgba(242, 182, 109, 0.5);
+        color: var(--accent);
+      }
+      .controls {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      label { color: var(--muted); display: grid; gap: 6px; font-size: 0.84rem; }
+      select {
+        background: #17100d;
+        border: 1px solid var(--line);
+        color: var(--text);
+        min-height: 38px;
+        padding: 8px 10px;
+      }
+      .utility-panel {
+        min-width: 0;
+      }
+      .utility-heading {
+        align-items: start;
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+      }
+      .menu-toggle {
+        flex: 0 0 auto;
+        min-width: 54px;
+        text-align: center;
+      }
+      .utility-content {
+        display: block;
+      }
+      .shell.menu-collapsed {
+        grid-template-columns: 76px minmax(0, 1fr);
+      }
+      .shell.menu-collapsed .utility-panel {
+        padding: 10px;
+      }
+      .shell.menu-collapsed .utility-content,
+      .shell.menu-collapsed .utility-heading h1 {
+        display: none;
+      }
+      .shell.menu-collapsed .utility-heading {
+        justify-content: center;
+      }
+      .shell.menu-collapsed .menu-toggle {
+        padding: 8px 4px;
+      }
+      .preview-wrap {
+        align-items: start;
+        display: grid;
+        justify-content: center;
+        overflow: auto;
+      }
+      .device-frame {
+        background: #060404;
+        border: 1px solid #5c4638;
+        border-radius: 28px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        padding: 14px;
+      }
+      iframe {
+        background: var(--bg);
+        border: 0;
+        border-radius: 18px;
+        display: block;
+        height: 800px;
+        width: min(1200px, calc(100vw - 470px));
+      }
+      .device-frame.full-preview {
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .device-frame.full-preview iframe {
+        border-radius: 4px;
+      }
+      .size-readout { color: var(--muted); font-size: 0.82rem; margin: 10px 0 0; text-align: center; }
+      .note { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
+      @media (max-width: 900px) {
+        .shell, .shell.menu-collapsed { grid-template-columns: 1fr; padding: 14px; }
+        iframe { max-width: calc(100vw - 64px); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel utility-panel">
+        <div class="utility-heading">
+          <h1>HumidorHQ Jason</h1>
+          <button id="jason-menu-toggle" class="menu-toggle" type="button" aria-expanded="true" title="Collapse menu">Menu</button>
+        </div>
+        <div class="utility-content">
+          <p class="muted">Hidden utility page for quick admin links and viewport checks.</p>
+
+          <div class="link-grid" aria-label="Jason utility links">
+            <a class="utility-link" href="../#Dashboard">Dashboard</a>
+            <a class="utility-link" href="../#Changelog">Changelog</a>
+            <a class="utility-link" href="../#Audit">Audit</a>
+            <a class="utility-link" href="../#Todo">TODO</a>
+          </div>
+
+          <h2>Preview</h2>
+          <div class="controls">
+            <label>
+            Preview mode
+            <select id="device-select">
+              <option value="1200x800" data-mode="full">Full Web View - 1200 x 800</option>
+              <option value="402x874">iPhone 16 Pro - 402 x 874</option>
+              <option value="440x956">iPhone 16 Pro Max - 440 x 956</option>
+              <option value="393x852">iPhone 15 Pro - 393 x 852</option>
+              <option value="390x844">iPhone 13/14 - 390 x 844</option>
+              <option value="768x1024">iPad Portrait - 768 x 1024</option>
+            </select>
+          </label>
+            <button id="apply-size" type="button">Apply selected view</button>
+            <button id="reload-preview" type="button">Reload preview</button>
+          </div>
+
+          <p class="muted note">This starts in full web view. Select a phone or tablet preset when you want a quick mobile ratio check.</p>
+        </div>
+      </section>
+
+      <section class="panel preview-wrap" aria-label="Site viewport preview">
+        <div>
+          <div class="device-frame full-preview" id="device-frame">
+            <iframe id="mobile-preview" src="../#Dashboard" title="HumidorHQ site preview"></iframe>
+          </div>
+          <p class="size-readout" id="size-readout">Full Web View - 1200 x 800</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const select = document.querySelector('#device-select')
+      const preview = document.querySelector('#mobile-preview')
+      const frame = document.querySelector('#device-frame')
+      const readout = document.querySelector('#size-readout')
+      const shell = document.querySelector('.shell')
+      const menuToggle = document.querySelector('#jason-menu-toggle')
+      const menuCollapsedKey = 'humidorhq-jason-menu-collapsed'
+
+      function applySelectedSize() {
+        const [width, height] = select.value.split('x').map(Number)
+        preview.style.width = `${width}px`
+        preview.style.height = `${height}px`
+        readout.textContent = select.options[select.selectedIndex].textContent
+        frame.classList.toggle('full-preview', select.options[select.selectedIndex].dataset.mode === 'full')
+      }
+
+      function applyMenuCollapsed() {
+        const isCollapsed = localStorage.getItem(menuCollapsedKey) === 'true'
+        shell.classList.toggle('menu-collapsed', isCollapsed)
+        menuToggle.setAttribute('aria-expanded', String(!isCollapsed))
+        menuToggle.textContent = isCollapsed ? 'Open' : 'Menu'
+        menuToggle.title = isCollapsed ? 'Expand menu' : 'Collapse menu'
+      }
+
+      menuToggle.addEventListener('click', () => {
+        const isCollapsed = !shell.classList.contains('menu-collapsed')
+        localStorage.setItem(menuCollapsedKey, String(isCollapsed))
+        applyMenuCollapsed()
+      })
+      document.querySelector('#apply-size').addEventListener('click', applySelectedSize)
+      document.querySelector('#reload-preview').addEventListener('click', () => {
+        preview.contentWindow.location.reload()
+      })
+      select.addEventListener('change', applySelectedSize)
+      applyMenuCollapsed()
+      applySelectedSize()
+    </script>
+  </body>
+</html>

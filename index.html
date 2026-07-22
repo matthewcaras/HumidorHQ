@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.4.48
+Revision: 1.4.49
 Description: HTML entry point for the HumidorHQ flat-file app.
-Modified Date: 2026-07-21 13:00 ET
+Modified Date: 2026-07-22 00:40 ET
 -->
 
 <!doctype html>
@@ -14,17 +14,17 @@ Modified Date: 2026-07-21 13:00 ET
     <title>HumidorHQ</title>
     <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.1">
     <link rel="apple-touch-icon" sizes="180x180" href="public/apple-touch-icon.png?v=1.0.0">
-    <link rel="stylesheet" href="public/assets/css/app.css?v=1.8.3">
+    <link rel="stylesheet" href="public/assets/css/app.css?v=1.8.4">
   </head>
-  <body>
+  <body class="auth-pending">
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand">
           <div class="brand-row">
             <h1>HumidorHQ</h1>
-            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="app-nav" aria-expanded="true">
+            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="app-nav" aria-expanded="true" title="Close Menu">
               <span aria-hidden="true" data-sidebar-toggle-icon>&lsaquo;</span>
-              <span class="sidebar-toggle-label" data-sidebar-toggle-label>Collapse</span>
+              <span class="sidebar-toggle-label" data-sidebar-toggle-label>Close Menu</span>
             </button>
           </div>
         </div>
@@ -49,7 +49,7 @@ Modified Date: 2026-07-21 13:00 ET
       </main>
     </div>
 
-    <script src="public/assets/js/app.js?v=1.24.13" defer></script>
+    <script src="public/assets/js/app.js?v=1.24.14" defer></script>
   </body>
 </html>
 

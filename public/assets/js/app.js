@@ -1,11 +1,23 @@
 /*
  * Filename: app.js
- * Revision: 1.24.13
+ * Revision: 1.24.14
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-21 13:00 ET
+ * Modified Date: 2026-07-22 00:40 ET
  */
 
 const API_BASE_URL = 'api'
+const SHORTCUT_PREFIX = '!'
+const PRIVATE_PAGE_SHORTCUT = { token: 'jnl', command: '!jnl', path: 'j/' }
+const PAGE_SHORTCUTS = [
+  { token: 'das', page: 'Dashboard' },
+  { token: 'col', page: 'Collection' },
+  { token: 'cat', page: 'Catalog' },
+  { token: 'ven', page: 'Vendors' },
+  { token: 'pur', page: 'Purchases' },
+  { token: 'hum', page: 'Humidors' },
+  { token: 'rep', page: 'Reports' },
+]
+const MAX_SHORTCUT_LENGTH = Math.max(PRIVATE_PAGE_SHORTCUT.token.length, ...PAGE_SHORTCUTS.map((shortcut) => shortcut.token.length))
 
 const state = {
   activePage: 'Dashboard',
@@ -1720,12 +1732,12 @@ function renderSidebarState() {
   if (!shell || !toggle) return
   shell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed)
   toggle.setAttribute('aria-expanded', String(!state.sidebarCollapsed))
-  toggle.setAttribute('aria-label', state.sidebarCollapsed ? 'Open navigation menu' : 'Collapse navigation menu')
-  toggle.title = state.sidebarCollapsed ? 'Open navigation menu' : 'Collapse navigation menu'
+  toggle.setAttribute('aria-label', state.sidebarCollapsed ? 'Open Menu' : 'Close Menu')
+  toggle.title = state.sidebarCollapsed ? 'Open Menu' : 'Close Menu'
   const icon = toggle.querySelector('[data-sidebar-toggle-icon]')
   const label = toggle.querySelector('[data-sidebar-toggle-label]')
   if (icon) icon.textContent = state.sidebarCollapsed ? '☰' : '‹'
-  if (label) label.textContent = state.sidebarCollapsed ? 'Menu' : 'Collapse'
+  if (label) label.textContent = state.sidebarCollapsed ? 'Open Menu' : 'Close Menu'
   document.querySelectorAll('[data-mobile-primary-page]').forEach((button) => {
     button.disabled = !isAuthenticated()
     button.classList.toggle('active', button.dataset.mobilePrimaryPage === state.activePage)
@@ -1744,6 +1756,64 @@ function initializeSidebarToggle() {
       state.sidebarCollapsed = true
       navigateToPage(button.dataset.mobilePrimaryPage)
     })
+  })
+}
+
+function shortcutShouldIgnore(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return true
+  const target = event.target
+  return Boolean(target?.closest?.('input, textarea, select, [contenteditable="true"]'))
+}
+
+function installKeyboardShortcuts() {
+  let commandBuffer = ''
+  window.addEventListener('keydown', (event) => {
+    if (shortcutShouldIgnore(event)) {
+      commandBuffer = ''
+      return
+    }
+    if (event.key === 'Escape') {
+      commandBuffer = ''
+      return
+    }
+    if (!isAuthenticated()) {
+      commandBuffer = ''
+      return
+    }
+    if (event.key.length !== 1) {
+      commandBuffer = ''
+      return
+    }
+
+    const key = event.key.toLowerCase()
+    if (key === SHORTCUT_PREFIX) {
+      commandBuffer = SHORTCUT_PREFIX
+      return
+    }
+    if (!commandBuffer.startsWith(SHORTCUT_PREFIX)) return
+    if (!/^[a-z0-9]$/.test(key)) {
+      commandBuffer = ''
+      return
+    }
+
+    commandBuffer = `${commandBuffer}${key}`.slice(0, MAX_SHORTCUT_LENGTH + 1)
+    const token = commandBuffer.slice(1)
+    const pageShortcut = PAGE_SHORTCUTS.find((shortcut) => shortcut.token === token)
+    if (pageShortcut) {
+      event.preventDefault()
+      commandBuffer = ''
+      navigateToPage(pageShortcut.page)
+      return
+    }
+    if (token === PRIVATE_PAGE_SHORTCUT.token) {
+      event.preventDefault()
+      commandBuffer = ''
+      window.location.href = PRIVATE_PAGE_SHORTCUT.path
+      return
+    }
+    if (token.length >= MAX_SHORTCUT_LENGTH) {
+      commandBuffer = ''
+    }
   })
 }
 
@@ -6183,6 +6253,9 @@ function renderError(view) {
 }
 
 function render() {
+  document.body.classList.toggle('auth-pending', state.isLoading)
+  document.body.classList.toggle('is-authenticated', isAuthenticated())
+  document.body.classList.toggle('is-unauthenticated', !state.isLoading && !isAuthenticated())
   renderProjectMeta()
   renderSidebarAccount()
   renderNav()
@@ -6334,4 +6407,5 @@ window.addEventListener('hashchange', () => {
   })
 })
 
+installKeyboardShortcuts()
 init()

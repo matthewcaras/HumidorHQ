@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.15
+Revision: 1.30.16
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 00:10 ET
+Modified Date: 2026-07-22 00:40 ET
 -->
 
 # Changelog
@@ -20,6 +20,13 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.16 - 2026-07-22
+
+Changed by: Jason
+
+- Added prefixed keyboard shortcuts for Dashboard, Collection, Catalog, Vendors, Purchases, Humidors, and Reports, plus `!jnl` for the private Jason tools page.
+- Kept the app shell hidden until session state is known, required authentication for the preview and Jason utility pages, and denied direct browser access to raw markdown files at the Apache layer.
 
 ## 1.30.15 - 2026-07-22
 

@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.8.3
+ * Revision: 1.8.4
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-21 12:00 ET
+ * Modified Date: 2026-07-22 00:40 ET
  */
 
 :root {
@@ -61,6 +61,25 @@ textarea {
   display: flex;
   flex-direction: column;
   padding: 22px 16px;
+}
+
+body.auth-pending .sidebar,
+body.auth-pending .sidebar-footer,
+body.is-unauthenticated .sidebar,
+body.is-unauthenticated .sidebar-footer {
+  display: none;
+}
+
+body.auth-pending .app-shell,
+body.is-unauthenticated .app-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.auth-pending .main-content,
+body.is-unauthenticated .main-content {
+  margin: 0 auto;
+  max-width: 520px;
+  width: 100%;
 }
 
 .brand {

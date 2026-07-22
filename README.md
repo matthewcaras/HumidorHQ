@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.15
+Revision: 1.30.16
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 00:10 ET
+Modified Date: 2026-07-22 00:40 ET
 -->
 
 # HumidorHQ
@@ -24,11 +24,12 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Expanded records, edit panels, inventory actions, and reversal forms use a consistent bordered treatment so the active detail remains visually distinct from its surrounding table.
 - The primary navigation collapses with an arrow-only desktop control and defaults to a compact closed menu on mobile. Dashboard and Collection remain available as paired mobile shortcuts before opening the full menu. Mobile data tables become labeled stacked records, Collection sort/filter controls use a compact two-column layout, and navigation closes after selecting a page.
+- When signed in and not typing in a form field, prefixed keyboard shortcuts jump directly to core pages: `!das`, `!col`, `!cat`, `!ven`, `!pur`, `!hum`, and `!rep`. The private Jason utility page opens with `!jnl`.
 - Mobile Dashboard and purchase summary cards use denser paired layouts. Collection keeps On Hand, Cost Basis, and MSRP in one compact page-summary row; every cigar card shows its identity, strength, wrapper, binder, filler, and Buy Again decision while aggregate quantity/value/location fields stay hidden on mobile even after selection because the expanded Lot/location card supplies those values once. Humidor names on Dashboard and the Humidors page open Collection with that Humidor filter applied.
 - The browser uses a cigar favicon and an Apple touch icon for home-screen saves.
 - Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.
-- `Mobile` opens `/mobile/`, a visible viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
-- Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
+- `Mobile` opens `/mobile/`, a visible session-protected viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
+- Hidden Jason utility page at `/j/` is also session-protected and provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
 
 ## Current Target
 

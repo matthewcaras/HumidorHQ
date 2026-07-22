@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.11
+# Revision : 1.32.12
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-21 13:00 ET
+# Modified Date : 2026-07-22 00:40 ET
 # Changelog :
+# 1.32.12 verify keyboard shortcuts, auth-pending shell state, and raw markdown denial
 # 1.32.11 verify Collection, Purchase History, and Reports saved views with report-section persistence
 # 1.32.7 verify cigar home-screen icon wiring
 # 1.32.6 verify concise collapsible report section headers
@@ -137,6 +138,7 @@ $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
 $bootstrapPath = Join-Path $repoRoot 'api\bootstrap.php'
+$rootHtaccessPath = Join-Path $repoRoot '.htaccess'
 $authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
 $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
 $authUsersPath = Join-Path $testDataRoot 'auth-users.json'
@@ -223,16 +225,16 @@ function Assert-TestDataHashSnapshot {
 
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
-$jasonPagePath = Join-Path $repoRoot 'j\index.html'
-if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.html.' }
+$jasonPagePath = Join-Path $repoRoot 'j\index.php'
+if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.php.' }
 $jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
-foreach ($jasonPageHook in @('../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view')) {
+foreach ($jasonPageHook in @('current_auth_user', 'Location: ../', '../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view')) {
     if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
 }
-$mobilePagePath = Join-Path $repoRoot 'mobile\index.html'
-if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.html.' }
+$mobilePagePath = Join-Path $repoRoot 'mobile\index.php'
+if (-not (Test-Path -LiteralPath $mobilePagePath)) { throw 'Visible Mobile preview page is missing at mobile/index.php.' }
 $mobilePage = Get-Content -LiteralPath $mobilePagePath -Raw
-foreach ($mobilePageHook in @('Mobile Preview', '../#Dashboard', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
+foreach ($mobilePageHook in @('current_auth_user', 'Location: ../', 'Mobile Preview', '../#Dashboard', 'iPhone 16 Pro', 'site-preview', 'Apply selected view')) {
     if ($mobilePage -notmatch [regex]::Escape($mobilePageHook)) { throw "Visible Mobile preview page is missing hook: $mobilePageHook" }
 }
 foreach ($privateMobileHook in @('../#Changelog', '../#Audit', '../#Todo', 'Jason Tools')) {
@@ -245,14 +247,19 @@ if ($mobilePage -notmatch [regex]::Escape('<p class="size-readout" id="size-read
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
-if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.13') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'auth-pending' -or $index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.14') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.4') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
 if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }
 
-foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath)) {
+foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath, $rootHtaccessPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
+}
+
+$rootHtaccess = Get-Content -LiteralPath $rootHtaccessPath -Raw
+foreach ($htaccessHook in @('<FilesMatch "\.(md|markdown)$">', 'Require all denied')) {
+    if ($rootHtaccess -notmatch [regex]::Escape($htaccessHook)) { throw "Root .htaccess is missing raw markdown denial hook: $htaccessHook" }
 }
 
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
@@ -297,11 +304,20 @@ foreach ($humidorNavigationHook in @('function selectCollectionHumidor', 'functi
 foreach ($expandedStyleHook in @('.collection-expanded-card', 'border: 2px solid rgba(242, 182, 109, 0.48)', '.inline-move-form.is-open', 'border: 1px solid var(--line-strong)')) {
     if ($appCss -notmatch [regex]::Escape($expandedStyleHook)) { throw "Expanded-state styling is missing hook: $expandedStyleHook" }
 }
+foreach ($cssAuthHook in @('body.auth-pending .sidebar', 'body.is-unauthenticated .sidebar', 'max-width: 520px')) {
+    if ($appCss -notmatch [regex]::Escape($cssAuthHook)) { throw "CSS is missing authenticated layout hook: $cssAuthHook" }
+}
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
+foreach ($sidebarHook in @('SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', "command: '!jnl'", 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
+    if ($appJs -notmatch [regex]::Escape($sidebarHook)) { throw "Plain JavaScript app is missing sidebar or shortcut hook: $sidebarHook" }
+}
+foreach ($pageShortcutHook in @("token: 'das', page: 'Dashboard'", "token: 'col', page: 'Collection'", "token: 'cat', page: 'Catalog'", "token: 'ven', page: 'Vendors'", "token: 'pur', page: 'Purchases'", "token: 'hum', page: 'Humidors'", "token: 'rep', page: 'Reports'", "SHORTCUT_PREFIX = '!'")) {
+    if ($appJs -notmatch [regex]::Escape($pageShortcutHook)) { throw "Plain JavaScript app is missing page shortcut hook: $pageShortcutHook" }
+}
 if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch "title: 'Activity'" -or $appJs -notmatch 'matching purchase, movement, removal, and reversal events.') { throw 'Reports page must render the activity history section.' }
 foreach ($activityReportHook in @('function filteredActivityEvents', 'function activityEventLocationLabel', 'function activityRelationshipEvent', 'function activityEventContextTarget', 'function openActivityEventContext', 'function createCollapsibleReportSection', 'report-collapsible', 'report-collapsible-body', 'function renderActivityReference', 'activityPeriod', 'activityType', 'activityLotId', 'activityHumidorId', 'Search Activity', 'Reversed by Event #', 'Open Purchase', 'Open Collection')) {
     if ($appJs -notmatch [regex]::Escape($activityReportHook)) { throw "Filterable Activity reporting is missing hook: $activityReportHook" }

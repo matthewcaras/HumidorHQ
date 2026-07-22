@@ -1,7 +1,7 @@
 # Filename: .htaccess
-# Revision: 1.0.0
-# Description: Apache security headers for the HumidorHQ application tree.
-# Modified Date: 2026-07-17 18:00 ET
+# Revision: 1.0.1
+# Description: Apache security headers and raw-markdown protection for the HumidorHQ application tree.
+# Modified Date: 2026-07-22 00:40 ET
 
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
@@ -10,3 +10,12 @@
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
   Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
 </IfModule>
+
+<FilesMatch "\.(md|markdown)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
