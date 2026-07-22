@@ -21,6 +21,12 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.30.27 - 2026-07-22
+
+Changed by: Matt
+
+- Updated the browser entry point cache key so the production app loads the current JavaScript bundle and exposes the Production Import button from Backup & Restore.
+
 ## 1.30.26 - 2026-07-22
 
 Changed by: Matt
