@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.24.20
+ * Revision: 1.24.21
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-22 13:45 ET
  */
@@ -2263,7 +2263,14 @@ function renderDashboard(view) {
   const smoked = removalMetrics('SMOKED')
   const gifted = removalMetrics('GIFTED')
   const discarded = removalMetrics('DISCARDED')
-  const lifetimeCost = sumMoneyValues([current.currentCostBasis, smoked.totalCost, gifted.totalCost, discarded.totalCost])
+  const purchaseTotalPaid = completeMoneyTotal(records('purchases').map((purchase) => purchase.totalPaid))
+  const dashboardCostBasis = (smoked.quantity + gifted.quantity + discarded.quantity) > 0
+    ? current.currentCostBasis
+    : purchaseTotalPaid
+  const dashboardAverageCostPerCigar = hasKnownMoney(dashboardCostBasis) && current.totalQuantity > 0
+    ? roundMoney(Number(dashboardCostBasis) / current.totalQuantity)
+    : current.averageCostPerCigar
+  const lifetimeCost = sumMoneyValues([dashboardCostBasis, smoked.totalCost, gifted.totalCost, discarded.totalCost])
   const lifetimeMsrp = sumMoneyValues([current.currentMsrpValue, smoked.totalMsrp, gifted.totalMsrp, discarded.totalMsrp])
   const lifetimeSavings = hasKnownMoney(lifetimeCost) && hasKnownMoney(lifetimeMsrp) ? Number(lifetimeMsrp) - Number(lifetimeCost) : null
   const lifetimeSavingsDisplay = hasKnownMoney(lifetimeSavings)
@@ -2279,10 +2286,10 @@ function renderDashboard(view) {
   summary.className = 'dashboard-summary'
   summary.append(
     inventoryStatusCard(current.totalQuantity, enRouteQuantity, current.uniqueCigarCount),
-    metricCard('Cost Basis', current.currentCostBasis, 'Current value paid for inventory', true),
+    metricCard('Cost Basis', dashboardCostBasis, 'Current value paid for inventory', true),
     metricCard('MSRP Value', current.currentMsrpValue, 'Current retail value of inventory', true),
     metricCard('Savings', lifetimeSavingsDisplay, 'Lifetime MSRP minus lifetime cost basis'),
-    metricCard('Avg Cost', current.averageCostPerCigar, 'Average cost per cigar on hand', true),
+    metricCard('Avg Cost', dashboardAverageCostPerCigar, 'Average cost per cigar on hand', true),
     metricCard('Avg MSRP', current.averageMsrpPerCigar, 'Average MSRP per cigar on hand', true),
   )
   if (preInventory) {

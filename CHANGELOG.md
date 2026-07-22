@@ -33,6 +33,12 @@ Changed by: Matt
 
 - Made authenticated login land on the Dashboard first instead of preserving a Collection page hash from a prior session.
 
+## 1.30.29 - 2026-07-22
+
+Changed by: Matt
+
+- Aligned the dashboard cost basis display with the authoritative purchase totals while there are no removals, so the dashboard matches Purchase History for the current pre-inventory state.
+
 ## 1.30.26 - 2026-07-22
 
 Changed by: Matt
