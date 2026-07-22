@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.23
+ * Revision: 1.24.24
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-22 13:45 ET
+ * Modified Date: 2026-07-22 17:46 ET
  */
 
 const API_BASE_URL = 'api'
@@ -2491,6 +2491,7 @@ function renderPendingSmokingJournal(view) {
   const buyAgainDefaults = smokingJournalBuyAgainDefaults(event)
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
+  panel.tabIndex = -1
   panel.innerHTML = `
     <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating, tasting notes, and an optional Buy Again decision for the smoked cigar.</p></div></div>
     <form class="record-form compact-top-gap" data-smoking-journal-form>
@@ -2525,6 +2526,10 @@ function renderPendingSmokingJournal(view) {
     render()
   })
   view.append(panel)
+  window.requestAnimationFrame(() => {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    panel.focus({ preventScroll: true })
+  })
 }
 
 function toggleCollectionCigarSelection(cigarId) {
@@ -6082,7 +6087,7 @@ function renderRatingBreakdownReport(view) {
   const metrics = document.createElement('div')
   metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
   metrics.append(
-    metricCard('Average Rating', averageRating === null ? null : averageRating.toFixed(1), 'Rated smoked cigars', true),
+    metricCard('Average Rating', averageRating === null ? null : averageRating.toFixed(2), 'Rated smoked cigars'),
     metricCard('Total Smokes', totalSmokes, 'Smoked removals included in the breakdown'),
     metricCard('Rated Entries', totalRatings, 'Smoking Journal entries with valid ratings'),
     metricCard('Distinct Cigars', uniqueCigars, 'Cigars represented in the selected breakdown'),

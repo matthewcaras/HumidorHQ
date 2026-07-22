@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.26
+Revision: 1.30.31
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-22 13:45 ET
 -->
@@ -40,6 +40,12 @@ Changed by: Matt
 - Aligned the collection cost basis display with the authoritative purchase total in the current pre-inventory state so it matches the purchase total when no removals or collection filters are active.
 
 ## 1.30.30 - 2026-07-22
+
+Changed by: Matt
+
+- Centered the pending Smoking Journal panel on render and displayed the report average rating as a numeric value with two decimal places.
+
+## 1.30.31 - 2026-07-22
 
 Changed by: Matt
 

@@ -1,10 +1,13 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.17
+# Revision : 1.32.20
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-22 12:00 ET
+# Modified Date : 2026-07-22 17:46 ET
 # Changelog :
+# 1.32.20 align smoke test cache-bust pin with app.js 1.24.24
+# 1.32.19 use direct php invocation for auth hash generation in smoke test
+# 1.32.18 align smoke test cache-bust pin with app.js 1.24.23
 # 1.32.17 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, rating breakdown drill-through/sort, backup auth, and checker severity
 # 1.32.14 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown reports
 # 1.32.13 verify Collection, Purchase History, Reports saved views, import staging safety, and Pre Inventory reconciliation
@@ -259,7 +262,7 @@ $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.13') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.24') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
 if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
 if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }
@@ -462,19 +465,12 @@ foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', 
 }
 
 $php = Get-PhpCommand
-$hashOut = Join-Path $testRoot 'php-hash.out'
-$hashErr = Join-Path $testRoot 'php-hash.err'
-try {
-    $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('testpass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
-    if ($hashProcess.ExitCode -ne 0) {
-        $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
-        throw "Could not generate password hash for auth smoke test. $hashErrorText"
-    }
-    $hash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
-    if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
-} finally {
-    Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+$hashOutput = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not generate password hash for auth smoke test.'
 }
+$hash = (($hashOutput | Out-String).Trim())
+if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 
 @(
     [pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true }
