@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.14
+Revision: 1.30.20
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-21 09:30 ET
+Modified Date: 2026-07-22 09:35 ET
 -->
 
 # Changelog
@@ -20,6 +20,42 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.20 - 2026-07-22
+
+Changed by: Matt
+
+- Added Catalog drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
+
+## 1.30.19 - 2026-07-22
+
+Changed by: Matt
+
+- Added a collapsible Rating Breakdown report that averages smoking journal ratings by strength, wrapper, origin, size, or manufacturer with sample counts and last-smoked dates.
+
+## 1.30.18 - 2026-07-22
+
+Changed by: Matt
+
+- Made the Collection-side Pre Inventory focus action open the first staged cigar's Move form so the next permanent placement step is guided directly from the staging view.
+
+## 1.30.17 - 2026-07-21
+
+Changed by: Matt
+
+- Added a Collection-side Pre Inventory reconciliation summary with focus and clear-filter actions to support the manual move workflow after staging inventory.
+
+## 1.30.16 - 2026-07-21
+
+Changed by: Matt
+
+- Added smoke-test coverage and documentation for the workbook-import staging mode.
+
+## 1.30.15 - 2026-07-21
+
+Changed by: Matt
+
+- Added an explicit workbook-import staging mode that forces current inventory into `Pre Inventory / General` for manual reconciliation after import.
 
 ## 1.30.14 - 2026-07-21
 

@@ -1,17 +1,19 @@
 # Filename: import-rich-workbook.ps1
-# Revision : 1.1.0
+# Revision : 1.2.0
 # Description : Imports the HumidorHQ rich Excel workbook into the local flat-file JSON data model.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-21
 # Changelog :
+# 1.2.0 add explicit Pre Inventory staging mode for current inventory
 # 1.1.0 require an isolated data root or explicit destructive override
 # 1.0.0 initial release
 
 param(
     [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx',
     [string]$DataRoot,
-    [switch]$ForceDestructive
+    [switch]$ForceDestructive,
+    [switch]$StageCurrentInventoryToPreInventory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -128,6 +130,9 @@ if (-not (Test-Path -LiteralPath $resolvedDataRoot -PathType Container)) {
 if ($ForceDestructive) {
     Write-Warning "DESTRUCTIVE OVERRIDE ENABLED: JSON collections under $resolvedDataRoot will be replaced."
 }
+if ($StageCurrentInventoryToPreInventory) {
+    Write-Host 'Current inventory will be staged into Pre Inventory / General for manual reconciliation after import.' -ForegroundColor Yellow
+}
 if (-not (Test-Path -LiteralPath $WorkbookPath)) {
     throw "Workbook not found: $WorkbookPath"
 }
@@ -198,6 +203,31 @@ function Next-Id {
     $id = $nextId[$Collection]
     $nextId[$Collection] = $id + 1
     return $id
+}
+
+function Resolve-ImportedInventoryPlacement {
+    param(
+        [string]$HumidorName,
+        [string]$SectionName,
+        [switch]$StageCurrentInventoryToPreInventory
+    )
+
+    $fallbackSection = $sectionKeyToRecord['Pre Inventory|General']
+    if ($StageCurrentInventoryToPreInventory) {
+        return [pscustomobject]@{
+            location = $humidorByName['Pre Inventory']
+            section = $fallbackSection
+        }
+    }
+
+    $location = $humidorByName[$HumidorName]
+    $section = $sectionKeyToRecord[$HumidorName + '|' + $SectionName]
+    if (-not $location) { $location = $humidorByName['Pre Inventory'] }
+    if (-not $section) { $section = $fallbackSection }
+    return [pscustomobject]@{
+        location = $location
+        section = $section
+    }
 }
 
 $catalog = @()
@@ -407,7 +437,7 @@ foreach ($row in $lotRows) {
     $fallbackSection = $sectionKeyToRecord['Pre Inventory|General']
     $storageLocationId = $fallbackSection.storageLocationId
     $storageSubLocationId = $fallbackSection.id
-    if ($inventoryRowsForLot.Count -eq 1) {
+    if (-not $StageCurrentInventoryToPreInventory -and $inventoryRowsForLot.Count -eq 1) {
         $singleInventoryRow = $inventoryRowsForLot[0]
         $humidorName = Convert-ToTrimmedString $singleInventoryRow.HumidorName
         $sectionName = Convert-ToTrimmedString $singleInventoryRow.SectionName
@@ -502,17 +532,14 @@ foreach ($row in $lotRows) {
             $quantity = [int](Convert-ToTrimmedString $inventoryRow.CurrentQuantity)
             if ($quantity -le 0) { continue }
 
-            $location = $humidorByName[$humidorName]
-            $section = $sectionKeyToRecord[$humidorName + '|' + $sectionName]
-            if (-not $location) { $location = $humidorByName['Pre Inventory'] }
-            if (-not $section) { $section = $sectionKeyToRecord['Pre Inventory|General'] }
+            $placement = Resolve-ImportedInventoryPlacement -HumidorName $humidorName -SectionName $sectionName -StageCurrentInventoryToPreInventory:$StageCurrentInventoryToPreInventory
 
             $balances += [pscustomobject][ordered]@{
                 id = Next-Id 'lot-location-balances'
                 purchaseLineId = $purchaseLine.id
                 lotId = $lot.id
-                storageLocationId = $location.id
-                storageSubLocationId = $section.id
+                storageLocationId = $placement.location.id
+                storageSubLocationId = $placement.section.id
                 quantity = $quantity
                 createdAt = $now
                 updatedAt = $now
@@ -645,3 +672,4 @@ Write-Host ("Catalog: " + $catalog.Count + ", Vendors: " + $vendors.Count + ", H
 #   .\tools\import-rich-workbook.ps1 -DataRoot "$env:TEMP\humidorhq-import-test"
 #   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "C:\Temp\HumidorHQ-TestData"
 #   .\tools\import-rich-workbook.ps1 -ForceDestructive
+#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test" -StageCurrentInventoryToPreInventory

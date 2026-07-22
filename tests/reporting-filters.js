@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.8
- * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-21 13:00 ET
+ * Revision: 1.10.10
+ * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, rating breakdown, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
+ * Modified Date: 2026-07-22 09:35 ET
  */
 
 const fs = require('node:fs')
@@ -31,8 +31,8 @@ globalThis.localStorage = {
 
 state.records = {
   'catalog-cigars': [
-    { id: 2, manufacturer: 'Bravo', series: 'Maduro', vitola: 'Toro', strength: 'Full', wrapper: 'Maduro', buyAgainStatus: 'YES', buyAgainNotes: 'Stock up' },
-    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', strength: 'Mild', wrapper: 'Connecticut', buyAgainStatus: null, buyAgainNotes: 'Evaluate after another smoke' },
+    { id: 2, manufacturer: 'Bravo', series: 'Maduro', vitola: 'Toro', length: '6.00', ringGauge: 54, strength: 'Full', wrapper: 'Maduro', country: 'Dominican Republic', buyAgainStatus: 'YES', buyAgainNotes: 'Stock up' },
+    { id: 1, manufacturer: 'Alpha', series: 'Reserve', vitola: 'Robusto', length: '5.00', ringGauge: 50, strength: 'Mild', wrapper: 'Connecticut', country: 'Nicaragua', buyAgainStatus: null, buyAgainNotes: 'Evaluate after another smoke' },
   ],
   vendors: [{ id: 1, name: 'Vendor One' }, { id: 2, name: 'Vendor Two' }],
   purchases: [
@@ -82,6 +82,18 @@ testAssert(catalogJournalRows.length === 2 && catalogJournalRows[0].event.id ===
 testAssert(catalogJournalRows.every((row) => row.locationLabel === 'Main Humidor'), 'Catalog Smoking Journal history lost its source Humidor context.')
 testAssert(catalogJournalMetrics.totalEntries === 2 && catalogJournalMetrics.effectiveQuantity === 2, 'Catalog Smoking Journal entry or effective quantity totals are incorrect.')
 testAssert(catalogJournalMetrics.averageRating === 8.5 && catalogJournalMetrics.lastSmokedDate === '2026-02-05', 'Catalog Smoking Journal rating or last-smoked summary is incorrect.')
+let ratingRows = ratingBreakdownRows()
+testAssert(ratingRows.length === 2 && ratingRows[0].label === 'Mild' && ratingRows[0].averageRating === 8.5 && ratingRows[0].ratingCount === 2 && ratingRows[1].label === 'Full' && ratingRows[1].averageRating === 10, 'Rating Breakdown strength summary is incorrect.')
+state.ratingBreakdownDimension = 'wrapper'
+ratingRows = ratingBreakdownRows()
+testAssert(ratingRows.length === 2 && ratingRows[0].label === 'Connecticut' && ratingRows[0].averageRating === 8.5 && ratingRows[1].label === 'Maduro' && ratingRows[1].averageRating === 10, 'Rating Breakdown wrapper summary is incorrect.')
+state.ratingBreakdownDimension = 'origin'
+ratingRows = ratingBreakdownRows()
+testAssert(ratingRows.length === 2 && ratingRows[0].label === 'Dominican Republic' && ratingRows[0].averageRating === 10 && ratingRows[1].label === 'Nicaragua' && ratingRows[1].averageRating === 8.5, 'Rating Breakdown origin summary is incorrect.')
+state.ratingBreakdownDimension = 'size'
+ratingRows = ratingBreakdownRows()
+testAssert(ratingRows.length === 2 && ratingRows[0].label === 'Robusto (5.00 × 50)' && ratingRows[0].averageRating === 8.5 && ratingRows[1].label === 'Toro (6.00 × 54)' && ratingRows[1].averageRating === 10, 'Rating Breakdown size summary is incorrect.')
+state.ratingBreakdownDimension = 'strength'
 state.reportPeriod = 'lifetime'
 state.reportRemovalType = 'all'
 state.reportSearch = 'pepper finish'
@@ -115,6 +127,10 @@ let stagingRows = preInventoryWorklist(preInventory)
 testAssert(stagingRows.length === 1 && stagingRows[0].cigar.id === 2, 'Pre Inventory worklist cigar selection is incorrect.')
 testAssert(stagingRows[0].stagedQuantity === 2 && stagingRows[0].placedQuantity === 1 && stagingRows[0].totalQuantity === 3, 'Pre Inventory staged and placed quantities do not reconcile.')
 testAssert(Math.abs(stagingRows[0].placementPercent - (100 / 3)) < 0.0001, 'Pre Inventory placement progress is incorrect.')
+const preInventorySummary = preInventoryReconciliationSummary(preInventory)
+testAssert(preInventorySummary?.stagedQuantity === 2 && preInventorySummary?.placedQuantity === 1 && preInventorySummary?.totalQuantity === 3, 'Pre Inventory reconciliation summary is incorrect.')
+testAssert(Math.abs(preInventorySummary.placementPercent - (100 / 3)) < 0.0001, 'Pre Inventory reconciliation completion percent is incorrect.')
+testAssert(preInventoryFirstStagedCigarId(preInventory) === 2, 'Pre Inventory focus target did not resolve the first staged cigar.')
 testAssert(inventoryEventCanBeReversed({ eventType: 'INVENTORY_ADJUSTMENT', id: 99 }), 'Inventory adjustments must support append-only reversal.')
 testAssert(inventoryEventDisplayQuantity({ eventType: 'INVENTORY_ADJUSTMENT', quantity: 2, quantityChange: -2 }) === -2, 'Activity must display a signed adjustment quantity.')
 state.records['storage-locations'][1].isActive = false
@@ -193,6 +209,7 @@ state.purchaseHistoryGroup = 'manufacturer'
 state.purchaseHistoryVendorId = ''
 state.purchaseHistoryManufacturer = 'alpha'
 state.purchaseHistoryBuyAgainFilter = 'YES'
+state.ratingBreakdownDimension = 'wrapper'
 state.reportPeriod = 'custom'
 state.reportRemovalType = 'SMOKED'
 state.reportSearch = 'pepper'
@@ -210,6 +227,7 @@ state.showAllActivity = true
 state.reportSectionState = {
   purchaseTrend: true,
   purchaseHistory: false,
+  ratingBreakdown: true,
   inventoryAging: true,
   removalHistory: false,
   activity: true,
@@ -224,6 +242,7 @@ state.purchaseHistoryGroup = 'vendor'
 state.purchaseHistoryVendorId = ''
 state.purchaseHistoryManufacturer = ''
 state.purchaseHistoryBuyAgainFilter = ''
+state.ratingBreakdownDimension = 'strength'
 state.reportPeriod = 'lifetime'
 state.reportRemovalType = 'all'
 state.reportSearch = ''
@@ -241,13 +260,14 @@ state.showAllActivity = false
 state.reportSectionState = {
   purchaseTrend: false,
   purchaseHistory: false,
+  ratingBreakdown: false,
   inventoryAging: false,
   removalHistory: false,
   activity: false,
 }
 testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
-testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
-testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
+testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
+testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
 testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
 testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
 state.purchaseTrendPeriod = 'year'
@@ -379,6 +399,11 @@ state.purchaseRecordsFilterLabel = ''
 openCatalogForBuyAgainCigar(1)
 testAssert(state.selectedCatalogHistoryCigarId === 1 && state.catalogSearch === '' && state.activePage === 'Catalog', 'Buy Again drill-through did not select the Catalog cigar.')
 state.selectedCatalogHistoryCigarId = null
+state.ratingBreakdownDimension = 'strength'
+const ratingDrillRow = ratingBreakdownRows().find((row) => row.label === 'Mild')
+openCatalogForRatingBreakdown(ratingDrillRow)
+testAssert(state.selectedCatalogHistoryCigarId === null && state.catalogSearch === 'Mild' && state.activePage === 'Catalog', 'Rating Breakdown drill-through did not open the matching Catalog subset.')
+state.catalogSearch = ''
 state.agingHumidorId = '2'
 openCollectionForAgingCigar(2)
 testAssert(state.collectionHumidorFilterId === 2 && state.collectionSectionFilterId === null && state.selectedCollectionCigarId === 2 && state.collectionScrollTargetCigarId === 2 && state.activePage === 'Collection', 'Inventory Aging drill-through did not open the filtered Collection view.')
