@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.14
+Revision: 1.30.15
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-21 13:00 ET
+Modified Date: 2026-07-22 00:10 ET
 -->
 
 # HumidorHQ
@@ -53,6 +53,7 @@ The app should be deployable as normal files to Hostinger, with GitHub used as t
 - `public/` - static assets
 - `api/` - PHP API front controller and supporting libraries
 - `data/` - default runtime JSON and credentials, ignored by Git and denied direct browser access
+- `local-data/` - machine-local working data, ignored by Git except for a committed `.placeholder` file that preserves the folder path
 - `seed-data/` - tracked empty initialization JSON for explicitly initialized copies
 - `HUMIDORHQ_DATA_ROOT` - optional override for a different runtime directory
 - `docs/` - design notes, migration notes, and conversion tracking
@@ -255,4 +256,6 @@ Use `major.minor.feature` numbering:
 - `feature` - focused feature work, fixes, documentation updates, or small compatibility updates
 
 Every meaningful change should be recorded in `CHANGELOG.md` before deployment.
+
+
 
