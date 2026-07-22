@@ -1,11 +1,13 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.11
+# Revision : 1.32.15
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-21 13:00 ET
+# Modified Date : 2026-07-22 09:35 ET
 # Changelog :
-# 1.32.11 verify Collection, Purchase History, and Reports saved views with report-section persistence
+# 1.32.15 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown drill-through/sort
+# 1.32.14 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown reports
+# 1.32.13 verify Collection, Purchase History, Reports saved views, import staging safety, and Pre Inventory reconciliation
 # 1.32.7 verify cigar home-screen icon wiring
 # 1.32.6 verify concise collapsible report section headers
 # 1.32.5 verify collapsible report sections and removed Buy Again report section
@@ -287,8 +289,14 @@ foreach ($savedViewHook in @('humidorhq.collection.views.v1', 'function collecti
 foreach ($purchaseHistorySavedViewHook in @('humidorhq.purchaseHistory.views.v1', 'function purchaseHistorySavedViews', 'function savePurchaseHistoryView', 'function applyPurchaseHistoryView', 'function deletePurchaseHistoryView', 'purchase-history-saved-view-bar', 'Saved Views', 'Load a saved view...', 'View Name', 'Save View', 'Delete View')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($purchaseHistorySavedViewHook)) { throw "Purchase History saved views are missing hook: $purchaseHistorySavedViewHook" }
 }
+foreach ($ratingReportHook in @('function ratingBreakdownRows', 'function ratingBreakdownLabel', 'function ratingBreakdownDimensionLabel', 'function ratingBreakdownSearchTerm', 'function ratingBreakdownSortValue', 'function openCatalogForRatingBreakdown', 'function renderRatingBreakdownReport', 'ratingBreakdownDimension', 'Rating Breakdown', 'Average Rating', 'Total Smokes', 'Rated Entries', 'Distinct Cigars', 'Group By', 'Strength', 'Wrapper', 'Origin', 'Size', 'Manufacturer', 'clickable-record-row', 'data-rating-breakdown-key')) {
+    if ($appJs -notmatch [regex]::Escape($ratingReportHook)) { throw "Rating Breakdown reporting is missing hook: $ratingReportHook" }
+}
 foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(activity, savedViewBar)')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($reportSavedViewHook)) { throw "Reports saved views are missing hook: $reportSavedViewHook" }
+}
+foreach ($importHook in @('function Resolve-ImportedInventoryPlacement', 'StageCurrentInventoryToPreInventory', 'Pre Inventory / General', 'manual reconciliation after import')) {
+    if ((Get-Content -LiteralPath (Join-Path $repoRoot 'tools\import-rich-workbook.ps1') -Raw) -notmatch [regex]::Escape($importHook)) { throw "Workbook import staging is missing hook: $importHook" }
 }
 if ($appJs -match '<h3>\$\{escapeHtml\(cigarName\(item\.cigar\)\)\}</h3>') { throw 'Expanded Collection detail must not repeat the selected cigar heading.' }
 foreach ($humidorNavigationHook in @('function selectCollectionHumidor', 'function openCollectionForHumidor', 'View ${column.value(record)} inventory in Collection')) {
@@ -335,6 +343,9 @@ foreach ($mobileCatalogHook in @('catalog-records-table', '.responsive-table > t
 }
 foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', 'function preInventoryWorklist', "metricCard('Pre Inventory'", 'Pre Inventory Worklist', 'Placed Elsewhere', 'Placement Progress', 'interactive-metric-card', 'data-pre-inventory-cigar-id')) {
     if ($appJs -notmatch [regex]::Escape($preInventoryHook)) { throw "Pre Inventory Dashboard staging is missing hook: $preInventoryHook" }
+}
+foreach ($collectionPreInventoryHook in @('function preInventoryReconciliationSummary', 'collection-pre-inventory-panel', 'Pre Inventory Reconciliation', 'Staged Quantity', 'Focus First Staged Cigar', 'Clear Pre Inventory Filter')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($collectionPreInventoryHook)) { throw "Collection Pre Inventory reconciliation is missing hook: $collectionPreInventoryHook" }
 }
 foreach ($collectionNavigationHook in @('collectionScrollTargetCigarId', 'data-collection-cigar-id', "scrollIntoView({ behavior: 'smooth', block: 'center' })", "focus({ preventScroll: true })")) {
     if ($appJs -notmatch [regex]::Escape($collectionNavigationHook)) { throw "Pre Inventory Collection navigation is missing hook: $collectionNavigationHook" }

@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.13
+ * Revision: 1.24.16
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-21 13:00 ET
+ * Modified Date: 2026-07-22 09:35 ET
  */
 
 const API_BASE_URL = 'api'
@@ -32,6 +32,7 @@ const state = {
   selectedCatalogHistoryCigarId: null,
   selectedCollectionCigarId: null,
   collectionScrollTargetCigarId: null,
+  collectionAutoOpenMoveCigarId: null,
   selectedPurchaseId: null,
   editingPurchaseLineId: null,
   purchaseLineCatalogId: null,
@@ -73,10 +74,12 @@ const state = {
   reportSectionState: {
     purchaseTrend: false,
     purchaseHistory: false,
+    ratingBreakdown: false,
     inventoryAging: false,
     removalHistory: false,
     activity: false,
   },
+  ratingBreakdownDimension: 'strength',
   agingManufacturer: '',
   agingHumidorId: '',
   selectedAgingBucketKey: null,
@@ -344,6 +347,7 @@ function reportsViewSnapshot() {
     purchaseHistoryVendorId: String(state.purchaseHistoryVendorId || ''),
     purchaseHistoryManufacturer: String(state.purchaseHistoryManufacturer || ''),
     purchaseHistoryBuyAgainFilter: String(state.purchaseHistoryBuyAgainFilter || ''),
+    ratingBreakdownDimension: state.ratingBreakdownDimension,
     reportPeriod: state.reportPeriod,
     reportRemovalType: state.reportRemovalType,
     reportSearch: String(state.reportSearch || ''),
@@ -361,6 +365,7 @@ function reportsViewSnapshot() {
     reportSectionState: {
       purchaseTrend: Boolean(state.reportSectionState?.purchaseTrend),
       purchaseHistory: Boolean(state.reportSectionState?.purchaseHistory),
+      ratingBreakdown: Boolean(state.reportSectionState?.ratingBreakdown),
       inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
       removalHistory: Boolean(state.reportSectionState?.removalHistory),
       activity: Boolean(state.reportSectionState?.activity),
@@ -384,6 +389,7 @@ function normalizeReportsViewRecord(entry) {
       purchaseHistoryVendorId: String(snapshot.purchaseHistoryVendorId || ''),
       purchaseHistoryManufacturer: String(snapshot.purchaseHistoryManufacturer || ''),
       purchaseHistoryBuyAgainFilter: String(snapshot.purchaseHistoryBuyAgainFilter || ''),
+      ratingBreakdownDimension: ['strength', 'wrapper', 'origin', 'size', 'manufacturer'].includes(snapshot.ratingBreakdownDimension) ? snapshot.ratingBreakdownDimension : 'strength',
       reportPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.reportPeriod) ? snapshot.reportPeriod : 'lifetime',
       reportRemovalType: ['all', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(snapshot.reportRemovalType) ? snapshot.reportRemovalType : 'all',
       reportSearch: String(snapshot.reportSearch || ''),
@@ -401,6 +407,7 @@ function normalizeReportsViewRecord(entry) {
       reportSectionState: {
         purchaseTrend: Boolean(snapshot.reportSectionState?.purchaseTrend),
         purchaseHistory: Boolean(snapshot.reportSectionState?.purchaseHistory),
+        ratingBreakdown: Boolean(snapshot.reportSectionState?.ratingBreakdown),
         inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
         removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
         activity: Boolean(snapshot.reportSectionState?.activity),
@@ -448,6 +455,7 @@ function applyReportsView(name) {
   state.purchaseHistoryVendorId = view.snapshot.purchaseHistoryVendorId
   state.purchaseHistoryManufacturer = view.snapshot.purchaseHistoryManufacturer
   state.purchaseHistoryBuyAgainFilter = view.snapshot.purchaseHistoryBuyAgainFilter
+  state.ratingBreakdownDimension = view.snapshot.ratingBreakdownDimension
   state.reportPeriod = view.snapshot.reportPeriod
   state.reportRemovalType = view.snapshot.reportRemovalType
   state.reportSearch = view.snapshot.reportSearch
@@ -1308,6 +1316,28 @@ function preInventoryWorklist(preInventory = preInventoryDashboardSummary()) {
     .sort((left, right) => cigarName(left.cigar).localeCompare(cigarName(right.cigar), undefined, { sensitivity: 'base' }) || Number(left.cigar.id || 0) - Number(right.cigar.id || 0))
 }
 
+function preInventoryReconciliationSummary(preInventory = preInventoryDashboardSummary()) {
+  if (!preInventory) {
+    return null
+  }
+  const rows = preInventoryWorklist(preInventory)
+  const stagedQuantity = rows.reduce((sum, row) => sum + Number(row.stagedQuantity || 0), 0)
+  const placedQuantity = rows.reduce((sum, row) => sum + Number(row.placedQuantity || 0), 0)
+  const totalQuantity = rows.reduce((sum, row) => sum + Number(row.totalQuantity || 0), 0)
+  return {
+    preInventory,
+    rows,
+    stagedQuantity,
+    placedQuantity,
+    totalQuantity,
+    placementPercent: totalQuantity > 0 ? placedQuantity / totalQuantity * 100 : 0,
+  }
+}
+
+function preInventoryFirstStagedCigarId(preInventory = preInventoryDashboardSummary()) {
+  return Number(preInventoryReconciliationSummary(preInventory)?.rows[0]?.cigar?.id || 0) || null
+}
+
 function humidorCurrentCount(humidorId) {
   return buildHumidorSummaries().find((item) => Number(item.humidor.id) === Number(humidorId))?.totalQuantity || 0
 }
@@ -1951,6 +1981,138 @@ function smokingJournalHistoryMetrics(rows) {
   }
 }
 
+function cigarOriginLabel(cigar) {
+  return String(cigar?.country || cigar?.origin || '').trim() || 'Unknown Origin'
+}
+
+function cigarSizeLabel(cigar) {
+  const vitola = String(cigar?.vitola || '').trim()
+  const length = String(cigar?.length || '').trim()
+  const ringGauge = String(cigar?.ringGauge || '').trim()
+  if (vitola && length && ringGauge) {
+    return `${vitola} (${length} × ${ringGauge})`
+  }
+  if (vitola) return vitola
+  if (length && ringGauge) return `${length} × ${ringGauge}`
+  if (length) return length
+  if (ringGauge) return `${ringGauge} RG`
+  return 'Unknown Size'
+}
+
+function cigarSizeSortValue(cigar) {
+  const length = Number.parseFloat(String(cigar?.length || '').trim())
+  const ringGauge = Number.parseFloat(String(cigar?.ringGauge || '').trim())
+  return {
+    length: Number.isFinite(length) ? length : Number.POSITIVE_INFINITY,
+    ringGauge: Number.isFinite(ringGauge) ? ringGauge : Number.POSITIVE_INFINITY,
+    label: cigarSizeLabel(cigar).toLowerCase(),
+  }
+}
+
+function ratingBreakdownDimensionLabel(dimension) {
+  if (dimension === 'wrapper') return 'Wrapper'
+  if (dimension === 'origin') return 'Origin'
+  if (dimension === 'size') return 'Size'
+  if (dimension === 'manufacturer') return 'Manufacturer'
+  return 'Strength'
+}
+
+function ratingBreakdownLabel(cigar, dimension) {
+  if (dimension === 'wrapper') return String(cigar?.wrapper || '').trim() || 'Unknown Wrapper'
+  if (dimension === 'origin') return cigarOriginLabel(cigar)
+  if (dimension === 'size') return cigarSizeLabel(cigar)
+  if (dimension === 'manufacturer') return String(cigar?.manufacturer || '').trim() || 'Unknown Manufacturer'
+  return String(cigar?.strength || '').trim() || 'Unknown Strength'
+}
+
+function ratingBreakdownSearchTerm(cigar, dimension) {
+  if (dimension === 'size') {
+    return [cigar?.vitola, cigar?.length, cigar?.ringGauge].filter((value) => String(value || '').trim().length > 0).join(' ').trim()
+  }
+  return ratingBreakdownLabel(cigar, dimension)
+}
+
+function ratingBreakdownSortValue(cigar, dimension, label) {
+  if (dimension === 'strength') {
+    return {
+      primary: strengthSortRank(label),
+      secondary: String(label || '').trim().toLowerCase(),
+    }
+  }
+  if (dimension === 'size') {
+    const size = cigarSizeSortValue(cigar)
+    return {
+      primary: size.length,
+      secondary: size.ringGauge,
+      tertiary: size.label,
+    }
+  }
+  return {
+    primary: String(label || '').trim().toLowerCase(),
+  }
+}
+
+function ratingBreakdownRows(dimension = state.ratingBreakdownDimension) {
+  const groups = new Map()
+  effectiveInventoryEvents().forEach((event) => {
+    if (normalizeEventType(event.eventType) !== 'SMOKED') return
+    const journal = smokingJournalEntryForEvent(event.id)
+    const rating = Number(journal?.rating)
+    if (!journal || !Number.isInteger(rating) || rating < 1 || rating > 10) return
+    const cigar = catalogCigarForInventoryEvent(event)
+    const label = ratingBreakdownLabel(cigar, dimension)
+    const key = `${String(label || '').trim().toLowerCase()}|${String(dimension || '')}`
+    const sortValue = ratingBreakdownSortValue(cigar, dimension, label)
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label,
+        sortValue,
+        searchTerm: ratingBreakdownSearchTerm(cigar, dimension),
+        ratings: [],
+        smokeCount: 0,
+        cigarIds: new Set(),
+        lastSmokedDate: '',
+      })
+    }
+    const row = groups.get(key)
+    row.smokeCount += 1
+    row.ratings.push(rating)
+    const cigarId = Number(cigar?.id || 0)
+    if (cigarId) row.cigarIds.add(cigarId)
+    const smokedDate = removalEventDate(event) || ''
+    if (!row.lastSmokedDate || (smokedDate && smokedDate > row.lastSmokedDate)) {
+      row.lastSmokedDate = smokedDate
+    }
+  })
+  return [...groups.values()]
+    .map((row) => {
+      const averageRating = row.ratings.length ? row.ratings.reduce((sum, rating) => sum + rating, 0) / row.ratings.length : null
+      return {
+        key: row.key,
+        label: row.label,
+        smokeCount: row.smokeCount,
+        ratingCount: row.ratings.length,
+        cigarCount: row.cigarIds.size,
+        averageRating,
+        lastSmokedDate: row.lastSmokedDate,
+        sortValue: row.sortValue,
+        searchTerm: row.searchTerm,
+      }
+    })
+    .sort((left, right) => {
+      if (dimension === 'strength') {
+        return left.sortValue.primary - right.sortValue.primary || left.sortValue.secondary.localeCompare(right.sortValue.secondary, undefined, { sensitivity: 'base' })
+      }
+      if (dimension === 'size') {
+        return left.sortValue.primary - right.sortValue.primary
+          || left.sortValue.secondary - right.sortValue.secondary
+          || left.sortValue.tertiary.localeCompare(right.sortValue.tertiary, undefined, { sensitivity: 'base' })
+      }
+      return left.sortValue.primary.localeCompare(right.sortValue.primary, undefined, { sensitivity: 'base' })
+    })
+}
+
 function savingsPercent(cost, msrp) {
   if (!hasKnownMoney(cost) || !hasKnownMoney(msrp)) {
     return null
@@ -2252,6 +2414,9 @@ function renderCollectionPage(view) {
   const metrics = currentCollectionMetrics()
   const items = sortCollectionItems(metrics.items)
   const selectedCigarId = Number(state.selectedCollectionCigarId || 0)
+  const preInventory = preInventoryDashboardSummary()
+  const preInventorySummary = preInventoryReconciliationSummary(preInventory)
+  const isPreInventoryView = Boolean(preInventorySummary && Number(state.collectionHumidorFilterId || 0) === Number(preInventorySummary.preInventory.humidor.id))
   const availableSections = records('storage-sub-locations')
     .filter((section) => recordIsActive(section) && (!state.collectionHumidorFilterId || Number(section.storageLocationId) === Number(state.collectionHumidorFilterId)))
     .sort((left, right) => sectionName(left).localeCompare(sectionName(right)))
@@ -2442,6 +2607,60 @@ function renderCollectionPage(view) {
     metricCard('MSRP Value', metrics.currentMsrpValue, 'Current MSRP of on-hand cigars', true),
   )
 
+  let preInventoryPanel = null
+  if (isPreInventoryView && preInventorySummary) {
+    preInventoryPanel = document.createElement('section')
+    preInventoryPanel.className = 'dashboard-panel collection-pre-inventory-panel'
+    preInventoryPanel.innerHTML = `
+      <div class="section-heading compact-heading">
+        <div>
+          <h3>Pre Inventory Reconciliation</h3>
+          <p class="muted">Use the collection cards below to move staged cigars into their permanent humidors after your manual count.</p>
+        </div>
+      </div>
+    `
+    preInventoryPanel.querySelector('.section-heading').append(infoBadge(`${formatCount(preInventorySummary.rows.length)} cigars staged`))
+    const summaryGrid = document.createElement('div')
+    summaryGrid.className = 'metric-grid compact collection-summary-grid'
+    summaryGrid.append(
+      metricCard('Staged Quantity', preInventorySummary.stagedQuantity, 'Current quantity still staged in Pre Inventory', true),
+      metricCard('Placed Elsewhere', preInventorySummary.placedQuantity, 'Quantity already moved into permanent humidors', true),
+      metricCard('Total On Hand', preInventorySummary.totalQuantity, 'Staged plus placed quantity across the current worklist', true),
+      metricCard('Placement Complete', formatPercent(preInventorySummary.placementPercent), 'Overall progress toward placing this worklist'),
+    )
+    preInventoryPanel.append(summaryGrid)
+    const actions = document.createElement('div')
+    actions.className = 'report-actions'
+    const focusFirst = document.createElement('button')
+    focusFirst.type = 'button'
+    focusFirst.className = 'secondary-button'
+    focusFirst.textContent = 'Focus First Staged Cigar'
+    focusFirst.disabled = preInventorySummary.rows.length === 0
+    focusFirst.addEventListener('click', () => {
+      const firstCigarId = preInventoryFirstStagedCigarId(preInventorySummary.preInventory)
+      if (!firstCigarId) return
+      state.collectionHumidorFilterId = Number(preInventorySummary.preInventory.humidor.id)
+      state.collectionSectionFilterId = null
+      state.selectedCollectionCigarId = firstCigarId
+      state.collectionScrollTargetCigarId = firstCigarId
+      state.collectionAutoOpenMoveCigarId = firstCigarId
+      render()
+    })
+    const clearFocus = document.createElement('button')
+    clearFocus.type = 'button'
+    clearFocus.className = 'secondary-button'
+    clearFocus.textContent = 'Clear Pre Inventory Filter'
+    clearFocus.addEventListener('click', () => {
+      state.collectionHumidorFilterId = null
+      state.collectionSectionFilterId = null
+      state.selectedCollectionCigarId = null
+      state.collectionScrollTargetCigarId = null
+      render()
+    })
+    actions.append(focusFirst, clearFocus)
+    preInventoryPanel.append(actions)
+  }
+
   if (items.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
@@ -2449,7 +2668,11 @@ function renderCollectionPage(view) {
     empty.innerHTML = hasOnHandInventory
       ? '<h3>No Matching Cigars</h3><p>No on-hand cigars match the current search and filters.</p>'
       : '<h3>No On-Hand Collection Yet</h3><p>Create a purchase and at least one purchase line to begin tracking on-hand inventory.</p>'
-    view.append(controls, summary, empty, savedViewBar)
+    if (preInventoryPanel) {
+      view.append(controls, summary, preInventoryPanel, empty, savedViewBar)
+    } else {
+      view.append(controls, summary, empty, savedViewBar)
+    }
     return
   }
 
@@ -2762,6 +2985,9 @@ function renderCollectionPage(view) {
   })
 
   view.append(controls, summary)
+  if (preInventoryPanel) {
+    view.append(preInventoryPanel)
+  }
   renderPendingSmokingJournal(view)
   view.append(tableWrap)
   view.append(savedViewBar)
@@ -2772,6 +2998,13 @@ function renderCollectionPage(view) {
     window.requestAnimationFrame(() => {
       scrollTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       scrollTarget?.querySelector('button[data-cigar-id]')?.focus({ preventScroll: true })
+    })
+  }
+  const autoOpenMoveCigarId = Number(state.collectionAutoOpenMoveCigarId || 0)
+  state.collectionAutoOpenMoveCigarId = null
+  if (autoOpenMoveCigarId) {
+    window.requestAnimationFrame(() => {
+      table.querySelector(`tr[data-collection-cigar-id="${autoOpenMoveCigarId}"] button[data-move-toggle-id]`)?.click()
     })
   }
 }
@@ -5434,6 +5667,14 @@ function openCatalogForBuyAgainCigar(cigarId) {
   navigateToPage('Catalog')
 }
 
+function openCatalogForRatingBreakdown(row) {
+  if (!row) return
+  state.selectedCatalogHistoryCigarId = null
+  state.catalogSearch = String(row.searchTerm || row.label || '').trim()
+  state.editing['catalog-cigars'] = null
+  navigateToPage('Catalog')
+}
+
 function activityEventContextTarget(event) {
   const targetEvent = normalizeEventType(event?.eventType) === 'REVERSAL'
     ? activityRelationshipEvent(event) || event
@@ -5713,6 +5954,102 @@ function renderBuyAgainReport(view) {
   view.append(panel)
 }
 
+function renderRatingBreakdownReport(view) {
+  const rows = ratingBreakdownRows()
+  const totalSmokes = rows.reduce((sum, row) => sum + Number(row.smokeCount || 0), 0)
+  const totalRatings = rows.reduce((sum, row) => sum + Number(row.ratingCount || 0), 0)
+  const uniqueCigars = rows.reduce((sum, row) => sum + Number(row.cigarCount || 0), 0)
+  const averageRating = totalRatings > 0
+    ? rows.reduce((sum, row) => sum + Number(row.averageRating || 0) * Number(row.ratingCount || 0), 0) / totalRatings
+    : null
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'rating-breakdown-panel',
+    title: 'Rating Breakdown',
+    description: 'Average smoking ratings by cigar strength, wrapper, origin, size, or manufacturer.',
+    stateKey: 'ratingBreakdown',
+  })
+
+  const filters = document.createElement('div')
+  filters.className = 'report-filter-grid'
+  const group = document.createElement('fieldset')
+  group.className = 'report-filter-group'
+  group.innerHTML = '<legend>Group By</legend>'
+  const groupButtons = document.createElement('div')
+  groupButtons.className = 'report-filter-buttons purchase-report-group-buttons'
+  groupButtons.append(
+    reportFilterButton('Strength', 'strength', 'ratingBreakdownDimension'),
+    reportFilterButton('Wrapper', 'wrapper', 'ratingBreakdownDimension'),
+    reportFilterButton('Origin', 'origin', 'ratingBreakdownDimension'),
+    reportFilterButton('Size', 'size', 'ratingBreakdownDimension'),
+    reportFilterButton('Manufacturer', 'manufacturer', 'ratingBreakdownDimension'),
+  )
+  group.append(groupButtons)
+  filters.append(group)
+  body.append(filters)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
+  metrics.append(
+    metricCard('Average Rating', averageRating === null ? null : averageRating.toFixed(1), 'Rated smoked cigars', true),
+    metricCard('Total Smokes', totalSmokes, 'Smoked removals included in the breakdown'),
+    metricCard('Rated Entries', totalRatings, 'Smoking Journal entries with valid ratings'),
+    metricCard('Distinct Cigars', uniqueCigars, 'Cigars represented in the selected breakdown'),
+    metricCard('Breakdown Rows', rows.length, 'Characteristic groups in the current view'),
+  )
+  body.append(metrics)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No rated smoking journal entries are available for this breakdown.</p>'
+    body.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll compact-top-gap'
+  tableWrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>${escapeHtml(ratingBreakdownDimensionLabel(state.ratingBreakdownDimension))}</th>
+          <th>Average Rating</th>
+          <th>Rated Smokes</th>
+          <th>Distinct Cigars</th>
+          <th>Last Smoked</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr class="clickable-record-row" tabindex="0" data-rating-breakdown-key="${escapeHtml(row.key)}">
+            <td>${escapeHtml(row.label)}</td>
+            <td>${escapeHtml(row.averageRating === null ? '—' : row.averageRating.toFixed(1))}</td>
+            <td>${formatCount(row.ratingCount)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${escapeHtml(row.lastSmokedDate || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  body.append(tableWrap)
+  tableWrap.querySelectorAll('[data-rating-breakdown-key]').forEach((rowElement) => {
+    const row = rows.find((item) => item.key === rowElement.dataset.ratingBreakdownKey)
+    if (!row) return
+    rowElement.setAttribute('aria-label', `Open Catalog filtered to ${row.label}`)
+    const open = () => openCatalogForRatingBreakdown(row)
+    rowElement.addEventListener('click', open)
+    rowElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        open()
+      }
+    })
+  })
+  view.append(panel)
+}
+
 function focusActivityEventReference(eventId) {
   state.activityPeriod = 'lifetime'
   state.activityType = 'all'
@@ -5759,6 +6096,7 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)
+  renderRatingBreakdownReport(view)
   renderInventoryAgingReport(view)
   renderRemovalHistory(view)
 
