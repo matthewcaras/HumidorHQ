@@ -37,6 +37,12 @@ Changed by: Matt
 
 Changed by: Matt
 
+- Aligned the collection cost basis display with the authoritative purchase total in the current pre-inventory state so it matches the purchase total when no removals or collection filters are active.
+
+## 1.30.29 - 2026-07-22
+
+Changed by: Matt
+
 - Aligned the dashboard cost basis display with the authoritative purchase totals while there are no removals, so the dashboard matches Purchase History for the current pre-inventory state.
 
 ## 1.30.26 - 2026-07-22

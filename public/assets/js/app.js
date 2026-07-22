@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.24.21
+ * Revision: 1.24.22
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-22 13:45 ET
  */
@@ -704,6 +704,10 @@ function sumMoneyValues(values) {
     : null
 }
 
+function authoritativePurchaseTotalPaid() {
+  return sumMoneyValues(records('purchases').map((purchase) => purchase.totalPaid))
+}
+
 function roundMoney(value) {
   return Math.round(numericValue(value) * 100) / 100
 }
@@ -1214,15 +1218,30 @@ function currentCollectionMetrics(useCollectionFilters = true) {
   const knownMsrpTotal = items.reduce((sum, item) => sum + item.knownMsrpTotal, 0)
   const costComplete = knownCostQuantity === totalQuantity
   const msrpComplete = knownMsrpQuantity === totalQuantity
+  const hasRemovalHistory = records('inventory-events').some((event) => {
+    const type = normalizeEventType(event.eventType)
+    return type === 'SMOKED' || type === 'GIFTED' || type === 'DISCARDED'
+  })
+  const purchaseTotalPaid = authoritativePurchaseTotalPaid()
+  const currentCostBasis = !useCollectionFilters && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid)
+    ? purchaseTotalPaid
+    : costComplete
+      ? knownCostTotal
+      : null
+  const averageCostPerCigar = !useCollectionFilters && !hasRemovalHistory && hasKnownMoney(purchaseTotalPaid) && totalQuantity > 0
+    ? roundMoney(Number(purchaseTotalPaid) / totalQuantity)
+    : costComplete && totalQuantity > 0
+      ? knownCostTotal / totalQuantity
+      : null
   return {
     items,
     totalQuantity,
     uniqueCigarCount: items.length,
     humidorCount: records('storage-locations').filter(recordIsActive).length,
-    currentCostBasis: costComplete ? knownCostTotal : null,
+    currentCostBasis,
     currentMsrpValue: msrpComplete ? knownMsrpTotal : null,
-    currentSavings: costComplete && msrpComplete ? knownMsrpTotal - knownCostTotal : null,
-    averageCostPerCigar: costComplete && totalQuantity > 0 ? knownCostTotal / totalQuantity : null,
+    currentSavings: currentCostBasis !== null && msrpComplete ? knownMsrpTotal - currentCostBasis : null,
+    averageCostPerCigar,
     averageMsrpPerCigar: msrpComplete && totalQuantity > 0 ? knownMsrpTotal / totalQuantity : null,
     knownCostQuantity,
     knownMsrpQuantity,
@@ -2263,7 +2282,7 @@ function renderDashboard(view) {
   const smoked = removalMetrics('SMOKED')
   const gifted = removalMetrics('GIFTED')
   const discarded = removalMetrics('DISCARDED')
-  const purchaseTotalPaid = completeMoneyTotal(records('purchases').map((purchase) => purchase.totalPaid))
+  const purchaseTotalPaid = authoritativePurchaseTotalPaid()
   const dashboardCostBasis = (smoked.quantity + gifted.quantity + discarded.quantity) > 0
     ? current.currentCostBasis
     : purchaseTotalPaid
