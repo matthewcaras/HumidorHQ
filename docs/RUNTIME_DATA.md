@@ -1,8 +1,8 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.5.0
+Revision: 1.6.0
 Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
-Modified Date: 2026-07-19 15:00 ET
+Modified Date: 2026-07-22 13:45 ET
 -->
 
 # Runtime Data Setup
@@ -18,6 +18,8 @@ Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Trac
 Authenticated users can create, download, import, preview, and restore portable bundles from the `Backup & Restore` page. Server-side bundles are stored under ignored `backups/`, where a separate tracked `.htaccess` denies direct HTTP access. Downloaded bundles contain password hashes and should be stored securely outside the deployment account. The append-only audit log is intentionally not included in restore bundles.
 
 All listed bundles pass format, SHA-256, and JSON-shape checks. Backup creation and download remain available to preserve parseable legacy data even when the integrity checker reports existing defects. Import and restore also require valid IDs, counters, relationships, and Lot/balance reconciliation; those defects must be corrected before restore. Restore requires an exact confirmation phrase and a current-state fingerprint from a fresh preview. It creates a pre-restore safety bundle and uses the existing transaction journal before replacing any runtime collections. Existing runtime data is never changed merely by creating, listing, downloading, importing, or previewing a backup.
+
+The separate production import workflow packages the approved live runtime JSON into a ZIP outside the repository, then uploads it through the authenticated admin-only Production Import page. That package contains only the approved runtime JSON collections plus a manifest, verifies per-file SHA-256 hashes and record counts, rejects unexpected filenames and path traversal, and disables the feature after a successful first use. It never includes `auth-users.json` or `audit-log.jsonl`.
 
 ## Windows
 

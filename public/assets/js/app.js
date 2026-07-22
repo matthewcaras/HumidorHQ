@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.18
+ * Revision: 1.24.19
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-22 12:00 ET
+ * Modified Date: 2026-07-22 13:45 ET
  */
 
 const API_BASE_URL = 'api'
@@ -86,6 +86,8 @@ const state = {
   backupData: null,
   backupPreview: null,
   backupMessage: '',
+  productionImportData: null,
+  productionImportMessage: '',
   sidebarCollapsed: Boolean(globalThis.matchMedia?.('(max-width: 850px)').matches),
 }
 
@@ -99,6 +101,7 @@ const pages = [
   { id: 'Humidors', label: 'Humidors' },
   { id: 'Reports', label: 'Reports' },
   { id: 'Backups', label: 'Backup & Restore' },
+  { id: 'ProductionImport', label: 'Production Import', hidden: true },
   { id: 'Audit', label: 'Audit', hidden: true },
   { id: 'Changelog', label: 'Changelog', hidden: true },
   { id: 'Todo', label: 'TODO', hidden: true },
@@ -1527,11 +1530,12 @@ function setStatus(_text, _mode = 'neutral') {
 
 async function apiRequest(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase()
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'same-origin',
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(method !== 'GET' && state.session?.csrfToken ? { 'X-CSRF-Token': state.session.csrfToken } : {}),
       ...(options.headers || {}),
     },
@@ -1551,6 +1555,12 @@ function apiGet(path) {
 }
 
 function apiPost(path, payload = null) {
+  if (typeof FormData !== 'undefined' && payload instanceof FormData) {
+    return apiRequest(path, {
+      method: 'POST',
+      body: payload,
+    })
+  }
   return apiRequest(path, {
     method: 'POST',
     body: payload === null ? undefined : JSON.stringify(payload),
@@ -1583,6 +1593,9 @@ async function ensurePageData(pageId) {
   if (pageId === 'Backups' && !state.backupData) {
     state.backupData = await apiGet('/backups')
   }
+  if (pageId === 'ProductionImport' && !state.productionImportData) {
+    state.productionImportData = await apiGet('/production-import')
+  }
   const managedPage = managedPages[pageId]
   if (managedPage) {
     await Promise.all([managedPage.collection, ...(managedPage.dependencies || [])].map(ensureRecords))
@@ -1599,6 +1612,7 @@ function renderBackupPage(view) {
     <p class="muted">Create an authenticated backup of runtime JSON, including user password hashes. The audit log is not included. Store downloaded copies securely.</p>
     <div class="form-actions">
       <button type="button" class="primary-button" data-action="create-backup">Create Backup</button>
+      <button type="button" class="secondary-button" data-action="open-production-import">Open Production Import</button>
       <label class="secondary-button" role="button">Import Backup<input type="file" accept="application/json,.json" data-backup-import hidden></label>
     </div>
     ${state.backupMessage ? `<p>${escapeHtml(state.backupMessage)}</p>` : ''}
@@ -1614,6 +1628,9 @@ function renderBackupPage(view) {
       state.backupMessage = error.message
     }
     render()
+  })
+  panel.querySelector('[data-action="open-production-import"]').addEventListener('click', () => {
+    navigateToPage('ProductionImport')
   })
   panel.querySelector('[data-backup-import]').addEventListener('change', async (event) => {
     const file = event.target.files?.[0]
@@ -1695,8 +1712,78 @@ function renderBackupPage(view) {
   view.append(restorePanel)
 }
 
+function renderProductionImportPage(view) {
+  const data = state.productionImportData || { enabled: true, completed: false, result: null }
+  const result = data.result || null
+  const panel = document.createElement('section')
+  panel.className = 'data-form'
+  panel.innerHTML = `
+    <h3>Production Runtime Import</h3>
+    <p class="muted">Upload a locally packaged runtime ZIP to initialize the live data root. Auth users and the audit log are not part of this package. The exact confirmation phrase is required.</p>
+    ${result ? `
+      <div class="empty-state">
+        <p><strong>Import ID:</strong> ${escapeHtml(result.importId || '')}</p>
+        <p><strong>Status:</strong> ${escapeHtml(result.status || '')}</p>
+        <p><strong>Catalog Count:</strong> ${formatCount(result.catalogCount || 0)}</p>
+        <p><strong>Purchase Count:</strong> ${formatCount(result.purchaseCount || 0)}</p>
+        <p><strong>Lot Count:</strong> ${formatCount(result.lotCount || 0)}</p>
+        <p><strong>Receipts:</strong> ${formatCount(result.receipts || 0)}</p>
+        <p><strong>Removals:</strong> ${formatCount(result.removals || 0)}</p>
+        <p><strong>On Hand:</strong> ${formatCount(result.onHand || 0)}</p>
+        <p><strong>Integrity:</strong> ${formatCount(result.integrityErrors || 0)} errors, ${formatCount(result.integrityWarnings || 0)} warnings</p>
+      </div>
+    ` : '<p class="muted">No production import has been completed yet.</p>'}
+    ${state.productionImportMessage ? `<p>${escapeHtml(state.productionImportMessage)}</p>` : ''}
+    ${data.enabled ? `
+      <form class="record-form" data-production-import-form>
+        <label class="form-field wide"><span>Import Package ZIP</span><input type="file" name="package" accept=".zip,application/zip" required></label>
+        <label class="form-field wide"><span>Confirmation Phrase</span><input name="confirmation" autocomplete="off" required placeholder="APPLY-HUMIDORHQ-PRODUCTION-IMPORT"></label>
+        <div class="form-actions">
+          <button type="submit" class="primary-button">Apply Production Import</button>
+          <button type="button" class="secondary-button" data-back-to-backups>Back to Backups</button>
+        </div>
+      </form>
+    ` : `
+      <p class="muted">Production import is disabled because it has already been completed. View the summary above for the applied import.</p>
+      <div class="form-actions">
+        <button type="button" class="secondary-button" data-back-to-backups>Back to Backups</button>
+      </div>
+    `}
+  `
+  const form = panel.querySelector('[data-production-import-form]')
+  const backButton = panel.querySelector('[data-back-to-backups]')
+  if (backButton) {
+    backButton.addEventListener('click', () => navigateToPage('Backups'))
+  }
+  if (form) {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const submit = form.querySelector('[type="submit"]')
+      submit.disabled = true
+      state.productionImportMessage = ''
+      try {
+        const formData = new FormData(form)
+        const result = await apiPost('/production-import', formData)
+        state.productionImportMessage = `Production import applied successfully: ${result.importId}`
+        state.productionImportData = await apiGet('/production-import')
+      } catch (error) {
+        state.productionImportMessage = error.message || 'The production import could not be applied.'
+        try {
+          state.productionImportData = await apiGet('/production-import')
+        } catch {
+        }
+      }
+      render()
+    })
+  }
+  view.append(panel)
+}
+
 async function recordPageView(page) {
   if (!isAuthenticated()) {
+    return
+  }
+  if (page === 'ProductionImport') {
     return
   }
   try {
@@ -6561,6 +6648,15 @@ function render() {
       return
     }
     renderBackupPage(view)
+    return
+  }
+  if (state.activePage === 'ProductionImport') {
+    if (!state.productionImportData) {
+      view.innerHTML = '<p class="muted">Loading production import status...</p>'
+      ensurePageData('ProductionImport').then(render).catch((error) => { state.error = error; render() })
+      return
+    }
+    renderProductionImportPage(view)
     return
   }
 

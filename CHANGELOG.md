@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.23
+Revision: 1.30.26
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 12:00 ET
+Modified Date: 2026-07-22 13:45 ET
 -->
 
 # Changelog
@@ -21,6 +21,21 @@ Author convention:
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
 
+## 1.30.26 - 2026-07-22
+
+Changed by: Matt
+
+- Added an admin-only production runtime import page and API route for uploading a locally packaged ZIP of approved runtime JSON files.
+- Added a local packaging utility that assembles the import ZIP with per-file SHA-256 hashes, record counts, and production inventory totals.
+- Added isolated import-route rehearsal tests covering auth, CSRF, tamper rejection, duplicate rejection, and rollback.
+
+## 1.30.25 - 2026-07-22
+
+Changed by: Matt
+
+- Removed the Excel COM dependency from the rich workbook importer so it reads `.xlsx` files directly through OpenXML.
+- Updated the README import notes to state that Excel is not required for import validation.
+
 ## 1.30.21 - 2026-07-22
 
 Changed by: Matt and Jason
@@ -28,6 +43,13 @@ Changed by: Matt and Jason
 - Added Collection drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
 - Added local-data/ Git ignore rules that keep the folder path visible through a committed `.placeholder` file while ignoring all machine-local contents.
 - Documented the local-data/.placeholder pattern in the README so empty local working folders can stay present without tracking runtime files.
+
+## 1.30.24 - 2026-07-22
+
+Changed by: Matt
+
+- Aligned the rich workbook importer and workbook-strength sync defaults to the provided `HumidorHQ_Rich_Import_Workbook - v2.xlsx` file.
+- Updated the README import examples to reference the v2 workbook filename.
 
 ## 1.30.23 - 2026-07-22
 

@@ -1,16 +1,17 @@
 # Filename: sync-workbook-strengths.ps1
-# Revision : 1.2.0
+# Revision : 1.2.1
 # Description : Syncs cigar strength values into the selected runtime catalog JSON.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-19
+# Modified Date : 2026-07-22
 # Changelog :
+# 1.2.1 default workbook path updated to the v2 import file
 # 1.2.0 default to repository data while retaining DataRoot and environment overrides
 # 1.1.0 require an external DataRoot or HUMIDORHQ_DATA_ROOT instead of repository data
 # 1.0.0 initial release
 
 param(
-    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx',
+    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook - v2.xlsx',
     [string]$DataRoot
 )
 

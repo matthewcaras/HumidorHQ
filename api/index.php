@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.16.1
+ * Revision: 1.16.2
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-22 12:00 ET
+ * Modified Date: 2026-07-22 13:45 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -14,6 +14,7 @@ require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
 require_once API_ROOT . '/lib/services/InventoryAdjustmentService.php';
 require_once API_ROOT . '/lib/services/InventoryReversalService.php';
 require_once API_ROOT . '/lib/services/BackupRestoreService.php';
+require_once API_ROOT . '/lib/services/ProductionImportService.php';
 send_security_headers();
 
 function sample_data_collections(): array
@@ -1717,6 +1718,14 @@ try {
             exit;
         }
         json_error('METHOD_NOT_ALLOWED', 'Method not allowed.', 405);
+    }
+    if ($path === '/production-import' && $method === 'GET') {
+        require_import_admin();
+        json_success(production_import_status());
+    }
+    if ($path === '/production-import' && $method === 'POST') {
+        require_import_admin();
+        json_success(production_import_apply_package($_FILES['package'] ?? [], $_POST), 201);
     }
     if ($path === '/inventory/move' && $method === 'POST') {
         require_auth();

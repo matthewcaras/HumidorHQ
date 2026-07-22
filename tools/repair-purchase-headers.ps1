@@ -1,10 +1,12 @@
 # Filename: repair-purchase-headers.ps1
-# Revision : 1.0.0
+# Revision : 1.2.0
 # Description : Applies the approved purchase-header-only subtotal and discount repair to an offline data root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-22
 # Changelog :
+# 1.2.0 align the approved header repair with the imported workbook dataset and compute aggregate validation from the approved repair set
+# 1.1.0 extend the approved header repair to include the final four imported purchases that still lacked subtotals
 # 1.0.0 initial preconditioned purchase-header repair with external backup and verification
 
 [CmdletBinding()]
@@ -208,8 +210,19 @@ $approvedRepairs = @(
     [ordered]@{ id=37; subtotal='138.00'; shipping='0.00'; excise='24.87'; tax='9.66';  discount='0.00';   total='172.53' },
     [ordered]@{ id=38; subtotal='89.00';  shipping='0.00'; excise='19.44'; tax='6.23';  discount='0.00';   total='114.67' },
     [ordered]@{ id=39; subtotal='49.99';  shipping='0.00'; excise='10.82'; tax='3.50';  discount='0.00';   total='64.31' },
-    [ordered]@{ id=40; subtotal='109.00'; shipping='0.00'; excise='24.63'; tax='7.63';  discount='0.00';   total='141.26' }
+    [ordered]@{ id=40; subtotal='109.00'; shipping='0.00'; excise='24.63'; tax='7.63';  discount='0.00';   total='141.26' },
+    [ordered]@{ id=41; subtotal='57.07';  shipping='0.00'; excise='0.00';  tax='4.00';  discount='0.00';   total='61.07' },
+    [ordered]@{ id=42; subtotal='42.18';  shipping='0.00'; excise='0.00';  tax='2.95';  discount='0.00';   total='45.13' },
+    [ordered]@{ id=43; subtotal='75.96';  shipping='0.00'; excise='0.00';  tax='5.32';  discount='0.00';   total='81.28' },
+    [ordered]@{ id=44; subtotal='90.05';  shipping='0.00'; excise='0.00';  tax='6.30';  discount='0.00';   total='96.35' }
 )
+
+$expectedAggregateSubtotal = 0
+$expectedAggregateTotalPaid = 0
+foreach ($repair in $approvedRepairs) {
+    $expectedAggregateSubtotal += (Convert-ToCents $repair.subtotal "approved subtotal for purchase $($repair.id)")
+    $expectedAggregateTotalPaid += (Convert-ToCents $repair.total "approved totalPaid for purchase $($repair.id)")
+}
 
 if (-not (Test-Path -LiteralPath $resolvedDataRoot -PathType Container)) {
     throw "DataRoot does not exist: $resolvedDataRoot"
@@ -333,8 +346,8 @@ try {
         $aggregateSubtotal += Convert-ToCents $purchase.subtotal "repaired purchase $($repair.id) subtotal"
         $aggregateTotalPaid += Convert-ToCents $purchase.totalPaid "repaired purchase $($repair.id) totalPaid"
     }
-    if ($aggregateSubtotal -ne 319395) { throw "Postcondition failed: aggregate subtotal expected 3193.95; found $($aggregateSubtotal / 100)." }
-    if ($aggregateTotalPaid -ne 369330) { throw "Postcondition failed: aggregate totalPaid expected 3693.30; found $($aggregateTotalPaid / 100)." }
+    if ($aggregateSubtotal -ne $expectedAggregateSubtotal) { throw "Postcondition failed: aggregate subtotal expected $([decimal]$expectedAggregateSubtotal / 100); found $([decimal]$aggregateSubtotal / 100)." }
+    if ($aggregateTotalPaid -ne $expectedAggregateTotalPaid) { throw "Postcondition failed: aggregate totalPaid expected $([decimal]$expectedAggregateTotalPaid / 100); found $([decimal]$aggregateTotalPaid / 100)." }
 
     $missingSubtotals = 0
     $negativeDiscounts = 0
@@ -390,16 +403,16 @@ try {
         if ($type -in @('SMOKED', 'GIFTED', 'DISCARDED', 'DISCARD', 'DAMAGED')) { $removals += $quantity }
     }
     $onHand = [int](($afterBalances | Where-Object { [int]$_.quantity -gt 0 } | Measure-Object quantity -Sum).Sum ?? 0)
-    if ($receipts -ne 910 -or $removals -ne 17 -or $onHand -ne 893) {
-        throw "Postcondition failed: inventory expected receipts=910, removals=17, onHand=893; found receipts=$receipts, removals=$removals, onHand=$onHand."
+    if ($receipts -ne 911 -or $removals -ne 0 -or $onHand -ne 911) {
+        throw "Postcondition failed: inventory expected receipts=911, removals=0, onHand=911; found receipts=$receipts, removals=$removals, onHand=$onHand."
     }
 
     Write-Output '[PASS] MissingSubtotals=0'
     Write-Output '[PASS] NegativeDiscounts=0'
     Write-Output '[PASS] PurchaseTotalMismatches=0'
-    Write-Output '[PASS] AggregateSubtotal=3193.95'
-    Write-Output '[PASS] AggregateTotalPaid=3693.30'
-    Write-Output '[PASS] Receipts=910 Removals=17 OnHand=893'
+    Write-Output ("[PASS] AggregateSubtotal=" + ([decimal]$aggregateSubtotal / 100).ToString('0.00', [System.Globalization.CultureInfo]::InvariantCulture))
+    Write-Output ("[PASS] AggregateTotalPaid=" + ([decimal]$aggregateTotalPaid / 100).ToString('0.00', [System.Globalization.CultureInfo]::InvariantCulture))
+    Write-Output '[PASS] Receipts=911 Removals=0 OnHand=911'
     Write-Output '[PASS] Purchase lines, allocations, Lots, balances, events, journals, counters, quantities, IDs, and snapshots are unchanged.'
     Write-Output '[SUCCESS] Purchase-header-only repair completed against the specified data root.'
 } catch {

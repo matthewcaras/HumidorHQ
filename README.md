@@ -161,6 +161,14 @@ The authenticated `Backup & Restore` page creates portable JSON bundles under `b
 
 A bundle contains all twelve runtime JSON collections but deliberately excludes `audit-log.jsonl`. Creation and download remain available for preserving parseable legacy data. Import and restore additionally validate IDs, counters, required relationships, and Lot/balance reconciliation without changing runtime data; an integrity failure must be corrected before that bundle can be restored. Restore requires a fresh preview, the exact phrase `RESTORE-HUMIDORHQ-BACKUP`, and an unchanged current-state fingerprint. It creates a timestamped pre-restore safety bundle before replacing collections through the existing journaled multi-file transaction. Existing audit history is never replaced by restore.
 
+For the one-time production import, package the already-validated runtime JSON with:
+
+```powershell
+.\tools\package-production-import.ps1 -SourceRoot .\data -OutputPath .\production-import\humidorhq-production-import.zip
+```
+
+Then upload that ZIP through the authenticated, admin-only `Production Import` page. The package contains only the approved runtime JSON files plus a manifest, verifies per-file SHA-256 hashes and record counts, rejects unexpected filenames or path traversal, and disables the import feature after one successful application. It never includes `auth-users.json` or `audit-log.jsonl`.
+
 ## Codex Setup Shortcut
 
 For a new computer or Matt's setup, run:
@@ -175,6 +183,8 @@ The script prompts for the existing HumidorHQ project folder, validates that it 
 
 No package install or build command is required. Existing runtime JSON remains in `data/` and is never overwritten by initialization. Missing non-auth runtime files are created from validated `seed-data/` templates, and a missing audit log is created empty. The optional copy utility remains dry-run by default for deliberately creating a separate runtime directory.
 
+The production import workflow is separate from backup/restore. Use it only when you are intentionally applying the locally packaged runtime JSON to a fresh or empty live runtime directory. After that one-time use, the Production Import page becomes disabled by a completion marker.
+
 Recommended:
 
 ```powershell
@@ -186,9 +196,11 @@ To use an optional external override, pass `-DataRoot` or set `HUMIDORHQ_DATA_RO
 To import the rich historical workbook into the local JSON model:
 
 ```powershell
-.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test"
-.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test" -StageCurrentInventoryToPreInventory
+.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook - v2.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test"
+.\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook - v2.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test" -StageCurrentInventoryToPreInventory
 ```
+
+The importer reads the workbook directly from the `.xlsx` file and does not require Excel to be installed.
 
 The importer and inventory rebuild utility require an explicit isolated `-DataRoot` for testing or a deliberate destructive override. They are not part of runtime initialization. The legacy rebuild utility refuses any dataset containing reversals or inventory adjustments because reconstructing that ledger would discard authoritative correction semantics.
 

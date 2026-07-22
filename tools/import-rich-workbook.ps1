@@ -1,16 +1,18 @@
 # Filename: import-rich-workbook.ps1
-# Revision : 1.2.0
+# Revision : 1.3.0
 # Description : Imports the HumidorHQ rich Excel workbook into the local flat-file JSON data model.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-16
-# Modified Date : 2026-07-21
+# Modified Date : 2026-07-22
 # Changelog :
+# 1.3.0 remove Excel COM dependency by reading the workbook directly from OpenXML
+# 1.2.1 default workbook path updated to the v2 import file
 # 1.2.0 add explicit Pre Inventory staging mode for current inventory
 # 1.1.0 require an isolated data root or explicit destructive override
 # 1.0.0 initial release
 
 param(
-    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook.xlsx',
+    [string]$WorkbookPath = 'C:\Users\mcaras\OneDrive\Documents\HumidorHQ_Rich_Import_Workbook - v2.xlsx',
     [string]$DataRoot,
     [switch]$ForceDestructive,
     [switch]$StageCurrentInventoryToPreInventory
@@ -63,6 +65,9 @@ function Convert-ToDateString {
     param([object]$Value)
     $text = Convert-ToTrimmedString $Value
     if ($text -eq '') { return $null }
+    if ($text -match '^\d+(\.\d+)?$') {
+        return ([datetime]::FromOADate([double]$text)).ToString('yyyy-MM-dd')
+    }
     $parsed = [datetime]::Parse($text, [System.Globalization.CultureInfo]::InvariantCulture)
     return $parsed.ToString('yyyy-MM-dd')
 }
@@ -71,38 +76,163 @@ function New-IsoTimestamp {
     return [datetime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
 }
 
+function Open-ZipEntryXml {
+    param(
+        [System.IO.Compression.ZipArchive]$Archive,
+        [string]$EntryPath
+    )
+
+    $entry = $Archive.Entries | Where-Object { $_.FullName -eq $EntryPath } | Select-Object -First 1
+    if (-not $entry) {
+        throw "Workbook entry not found: $EntryPath"
+    }
+
+    $stream = $entry.Open()
+    try {
+        $reader = New-Object System.IO.StreamReader($stream)
+        try {
+            return [xml]$reader.ReadToEnd()
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-SharedStrings {
+    param([System.IO.Compression.ZipArchive]$Archive)
+
+    $entry = $Archive.Entries | Where-Object { $_.FullName -eq 'xl/sharedStrings.xml' } | Select-Object -First 1
+    if (-not $entry) {
+        return @()
+    }
+
+    $xml = Open-ZipEntryXml -Archive $Archive -EntryPath 'xl/sharedStrings.xml'
+    $strings = @()
+    foreach ($node in $xml.sst.si) {
+        if ($node.t) {
+            $strings += [string]$node.t
+            continue
+        }
+        $runs = @($node.r | ForEach-Object { [string]$_.t })
+        $strings += ($runs -join '')
+    }
+    return $strings
+}
+
+function Get-WorkbookSheetPath {
+    param(
+        [System.IO.Compression.ZipArchive]$Archive,
+        [string]$SheetName
+    )
+
+    $workbookXml = Open-ZipEntryXml -Archive $Archive -EntryPath 'xl/workbook.xml'
+    $relationshipsXml = Open-ZipEntryXml -Archive $Archive -EntryPath 'xl/_rels/workbook.xml.rels'
+    $sheet = $workbookXml.workbook.sheets.sheet | Where-Object { $_.name -eq $SheetName } | Select-Object -First 1
+    if (-not $sheet) {
+        throw "Workbook sheet was not found: $SheetName"
+    }
+
+    $relationshipId = $sheet.GetAttribute('id', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships')
+    $relationship = $relationshipsXml.Relationships.Relationship | Where-Object { $_.Id -eq $relationshipId } | Select-Object -First 1
+    if (-not $relationship) {
+        throw "Workbook relationship was not found for sheet $SheetName."
+    }
+
+    return ('xl/' + $relationship.Target).Replace('\', '/')
+}
+
+function Get-CellValue {
+    param(
+        [System.Xml.XmlElement]$Cell,
+        [string[]]$SharedStrings
+    )
+
+    if (-not $Cell) {
+        return ''
+    }
+
+    $type = $Cell.GetAttribute('t')
+    if ($type -eq 'inlineStr') {
+        return Convert-ToTrimmedString ($Cell.is.t.'#text')
+    }
+
+    $rawValue = Convert-ToTrimmedString $Cell.v
+    if ($rawValue -eq '') {
+        return ''
+    }
+
+    if ($type -eq 's') {
+        $sharedIndex = [int]$rawValue
+        if ($sharedIndex -ge 0 -and $sharedIndex -lt $SharedStrings.Count) {
+            return Convert-ToTrimmedString $SharedStrings[$sharedIndex]
+        }
+    }
+
+    return $rawValue
+}
+
 function Read-WorksheetRows {
     param(
-        [object]$Workbook,
+        [string]$WorkbookPath,
         [string]$SheetName,
         [int]$HeaderRow = 3
     )
 
-    $sheet = $Workbook.Worksheets.Item($SheetName)
-    $used = $sheet.UsedRange
-    $columnCount = $used.Columns.Count
-    $rowCount = $used.Rows.Count
-    $headers = @()
-    for ($column = 1; $column -le $columnCount; $column++) {
-        $headers += (Convert-ToTrimmedString $used.Cells.Item($HeaderRow, $column).Text)
-    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $fileStream = [System.IO.File]::Open($WorkbookPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $archive = New-Object System.IO.Compression.ZipArchive($fileStream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
+        try {
+            $sharedStrings = Get-SharedStrings -Archive $archive
+            $sheetPath = Get-WorkbookSheetPath -Archive $archive -SheetName $SheetName
+            $sheetXml = Open-ZipEntryXml -Archive $archive -EntryPath $sheetPath
+            $rows = @($sheetXml.worksheet.sheetData.row)
+            if ($rows.Count -lt $HeaderRow) {
+                return @()
+            }
 
-    $rows = @()
-    for ($row = $HeaderRow + 1; $row -le $rowCount; $row++) {
-        $record = [ordered]@{}
-        $hasData = $false
-        for ($column = 1; $column -le $columnCount; $column++) {
-            $header = $headers[$column - 1]
-            if ($header -eq '') { continue }
-            $value = Convert-ToTrimmedString $used.Cells.Item($row, $column).Text
-            if ($value -ne '') { $hasData = $true }
-            $record[$header] = $value
+            $headerRowNode = $rows | Where-Object { [int]$_.r -eq $HeaderRow } | Select-Object -First 1
+            if (-not $headerRowNode) {
+                return @()
+            }
+
+            $headers = @{}
+            foreach ($cell in @($headerRowNode.c)) {
+                $reference = [string]$cell.r
+                $column = ($reference -replace '\d', '')
+                $headers[$column] = Get-CellValue -Cell $cell -SharedStrings $sharedStrings
+            }
+
+            $records = @()
+            foreach ($row in ($rows | Where-Object { [int]$_.r -gt $HeaderRow })) {
+                $record = [ordered]@{}
+                $hasData = $false
+                foreach ($cell in @($row.c)) {
+                    $reference = [string]$cell.r
+                    $column = ($reference -replace '\d', '')
+                    $header = Convert-ToTrimmedString $headers[$column]
+                    if ($header -eq '') {
+                        continue
+                    }
+                    $value = Get-CellValue -Cell $cell -SharedStrings $sharedStrings
+                    if ($value -ne '') {
+                        $hasData = $true
+                    }
+                    $record[$header] = $value
+                }
+                if ($hasData) {
+                    $records += [pscustomobject]$record
+                }
+            }
+            return $records
+        } finally {
+            $archive.Dispose()
         }
-        if ($hasData) {
-            $rows += [pscustomobject]$record
-        }
+    } finally {
+        $fileStream.Dispose()
     }
-    return $rows
 }
 
 function Save-JsonCollection {
@@ -161,28 +291,14 @@ foreach ($file in $dataFiles) {
     }
 }
 
-$excel = New-Object -ComObject Excel.Application
-$excel.Visible = $false
-$excel.DisplayAlerts = $false
-$workbook = $excel.Workbooks.Open($WorkbookPath, $null, $true)
-
-try {
-    $catalogRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Catalog'
-    $vendorRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Vendors'
-    $humidorRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Humidors'
-    $purchaseRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Purchases'
-    $lotRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Purchase Lots'
-    $inventoryRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Current Inventory'
-    $smokingRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Smoking History'
-    $giftRows = Read-WorksheetRows -Workbook $workbook -SheetName 'Gift-Discard History'
-} finally {
-    $workbook.Close($false)
-    $excel.Quit()
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbook) | Out-Null
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-    [GC]::Collect()
-    [GC]::WaitForPendingFinalizers()
-}
+$catalogRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Catalog'
+$vendorRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Vendors'
+$humidorRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Humidors'
+$purchaseRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Purchases'
+$lotRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Purchase Lots'
+$inventoryRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Current Inventory'
+$smokingRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Smoking History'
+$giftRows = Read-WorksheetRows -WorkbookPath $WorkbookPath -SheetName 'Gift-Discard History'
 
 $now = New-IsoTimestamp
 $nextId = @{
@@ -670,6 +786,6 @@ Write-Host ("Catalog: " + $catalog.Count + ", Vendors: " + $vendors.Count + ", H
 
 # Example Usage:
 #   .\tools\import-rich-workbook.ps1 -DataRoot "$env:TEMP\humidorhq-import-test"
-#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "C:\Temp\HumidorHQ-TestData"
+#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook - v2.xlsx" -DataRoot "C:\Temp\HumidorHQ-TestData"
 #   .\tools\import-rich-workbook.ps1 -ForceDestructive
-#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test" -StageCurrentInventoryToPreInventory
+#   .\tools\import-rich-workbook.ps1 -WorkbookPath "C:\Path\HumidorHQ_Rich_Import_Workbook - v2.xlsx" -DataRoot "$env:TEMP\humidorhq-import-test" -StageCurrentInventoryToPreInventory
