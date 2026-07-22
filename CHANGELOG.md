@@ -27,6 +27,12 @@ Changed by: Matt
 
 - Updated the browser entry point cache key so the production app loads the current JavaScript bundle and exposes the Production Import button from Backup & Restore.
 
+## 1.30.28 - 2026-07-22
+
+Changed by: Matt
+
+- Made authenticated login land on the Dashboard first instead of preserving a Collection page hash from a prior session.
+
 ## 1.30.26 - 2026-07-22
 
 Changed by: Matt

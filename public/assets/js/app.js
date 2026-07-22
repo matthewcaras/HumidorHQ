@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.24.19
+ * Revision: 1.24.20
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-22 13:45 ET
  */
@@ -6558,6 +6558,7 @@ function renderLogin(view) {
         username: String(formData.get('username') || ''),
         password: String(formData.get('password') || ''),
       })
+      setActivePage('Dashboard')
       await refreshSampleData()
       await recordPageView(state.activePage)
     } catch (error) {
