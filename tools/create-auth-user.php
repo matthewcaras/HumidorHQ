@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: create-auth-user.php
- * Revision: 1.0.0
- * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 00:13 ET
+ * Revision: 1.2.0
+ * Description: Creates or updates a user in the selected HumidorHQ runtime data directory.
+ * Modified Date: 2026-07-19 10:00 ET
  */
 
 $script = basename(__FILE__);
@@ -24,13 +24,27 @@ if (strlen($password) < 8) {
 }
 
 $root = dirname(__DIR__);
-$dataPath = $root . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'auth-users.json';
+$configuredDataRoot = trim((string) getenv('HUMIDORHQ_DATA_ROOT'));
+if ($configuredDataRoot === '') {
+    $configuredDataRoot = $root . DIRECTORY_SEPARATOR . 'data';
+}
+$dataRoot = realpath($configuredDataRoot);
+if ($dataRoot === false || !is_dir($dataRoot)) {
+    fwrite(STDERR, "The selected runtime data path does not identify an existing directory.\n");
+    exit(1);
+}
+if (!is_readable($dataRoot) || !is_writable($dataRoot)) {
+    fwrite(STDERR, "The runtime data directory must be readable and writable.\n");
+    exit(1);
+}
+
+$dataPath = $dataRoot . DIRECTORY_SEPARATOR . 'auth-users.json';
 $users = [];
 if (file_exists($dataPath)) {
     $raw = file_get_contents($dataPath);
     $decoded = json_decode(is_string($raw) ? $raw : '[]', true);
     if (!is_array($decoded)) {
-        fwrite(STDERR, "Existing data/auth-users.json is not valid JSON.\n");
+        fwrite(STDERR, "Existing auth-users.json is not valid JSON.\n");
         exit(1);
     }
     $users = $decoded;
@@ -61,12 +75,14 @@ if (!$updated) {
 }
 
 $json = json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-if (!is_string($json) || file_put_contents($dataPath, $json . PHP_EOL) === false) {
-    fwrite(STDERR, "Could not write data/auth-users.json.\n");
+$temporaryPath = $dataPath . '.tmp.' . bin2hex(random_bytes(6));
+if (!is_string($json) || file_put_contents($temporaryPath, $json . PHP_EOL) === false || !rename($temporaryPath, $dataPath)) {
+    @unlink($temporaryPath);
+    fwrite(STDERR, "Could not atomically write auth-users.json.\n");
     exit(1);
 }
 
-fwrite(STDOUT, ($updated ? 'Updated' : 'Created') . " auth user '$username' in data/auth-users.json.\n");
-fwrite(STDOUT, "Keep data/auth-users.json out of Git and upload it securely to Hostinger.\n");
+fwrite(STDOUT, ($updated ? 'Updated' : 'Created') . " auth user '$username' in the selected runtime directory.\n");
+fwrite(STDOUT, "Keep auth-users.json ignored by Git and protected from direct browser access.\n");
 
 

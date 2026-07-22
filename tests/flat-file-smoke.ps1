@@ -1,17 +1,50 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.12.4
-# Description : Verifies the flat-file HumidorHQ shell, app metadata, auth, dashboard and collection hooks, connected CRUD endpoints, purchase builder lifecycle flow, inline collection actions, collection filters, responsive table wrappers, and PHP JSON sample data.
+# Revision : 1.32.12
+# Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-17 9:03 AM ET
+# Modified Date : 2026-07-22 00:40 ET
 # Changelog :
-# 1.12.4 verify explicit sidebar toggle labels
-# 1.12.3 reuse loaded CSS content for static hook checks
-# 1.12.2 verify private utility shortcut is documented as !jnl
-# 1.12.1 verify authenticated chrome, private utility gate, raw markdown denial rules, and shortcut buffer reset
-# 1.12.0 verify prefixed page keyboard shortcuts
-# 1.11.1 verify mobile menu collapses vertically and footer moves below content
-# 1.11.0 verify collapsible main menu, /j utility menu, and !jnl shortcut
+# 1.32.12 verify keyboard shortcuts, auth-pending shell state, and raw markdown denial
+# 1.32.11 verify Collection, Purchase History, and Reports saved views with report-section persistence
+# 1.32.7 verify cigar home-screen icon wiring
+# 1.32.6 verify concise collapsible report section headers
+# 1.32.5 verify collapsible report sections and removed Buy Again report section
+# 1.32.4 verify headless-safe Activity drill-through helpers
+# 1.32.3 verify headless-safe buy-again and aging drill-through helpers
+# 1.32.2 verify Buy Again and Inventory Aging drill-through navigation
+# 1.32.1 verify clickable Purchase Trend drill-through into filtered Purchases
+# 1.32.0 verify read-only Purchase Trend analytics and trend/vendor/manufacturer reconciliation
+# 1.31.1 verify concise Aging summaries and expandable bucket-level cigar detail
+# 1.31.0 verify read-only Inventory Aging reconciliation, filters, unknowns, and Collection links
+# 1.30.0 verify filterable Activity history and original/reversal cross-references
+# 1.29.1 verify full-width mobile Catalog Journal details and bordered cigar cards
+# 1.29.0 verify read-only Catalog Smoking Journal history, reversal status, and report links/search
+# 1.28.4 verify whole-card Collection expansion and keyboard accessibility
+# 1.28.3 verify mobile Collection avoids selected-row summary duplication and retains blend details
+# 1.28.2 verify concise Collection details, two-column mobile actions, and staging-only reconciliation
+# 1.28.1 verify mobile primary shortcuts, compact summaries, progressive disclosure, and Humidor links
+# 1.28.0 verify collapsible navigation, responsive stacked tables, and compact mobile controls
+# 1.27.2 verify shared expanded-record and open-action border treatments
+# 1.27.1 verify full-balance move defaults and Pre Inventory Collection scrolling
+# 1.27.0 verify idempotent physical-count adjustments, stale guards, reversals, and ledger reconciliation
+# 1.26.0 verify the Pre Inventory reconciliation worklist and direct Collection access
+# 1.25.0 verify active Pre Inventory Dashboard staging and concise record-count copy
+# 1.24.0 verify Catalog alphabetical search and Smoking Journal Buy Again defaults
+# 1.23.0 verify Catalog and Smoking Journal Buy Again decisions and rejection rollback
+# 1.22.0 verify purchase-history reporting and Collection search/strength hooks
+# 1.21.0 verify backup/restore route inventory is present
+# 1.20.0 keep reversal fixtures valid across local calendar dates
+# 1.19.0 verify the APP_ROOT/data default and retirement of external-only startup guards
+# 1.18.0 verify append-only idempotent receipt, move, removal reversals and corrected replacement receipts
+# 1.17.0 verify history-preserving archive/restore and active-only workflow destinations
+# 1.16.0 verify dated idempotent smoke/gift/discard removals, source locations, metrics, and journal history
+# 1.15.0 verify transactional idempotent partial receiving, status derivation, split placement, and over-receipt guards
+# 1.14.0 verify local/validated dates, authoritative/unknown money, deterministic allocation, and Lot cache reconciliation
+# 1.13.0 verify CSRF session tokens and authenticated mutation compatibility
+# 1.12.0 use tracked seed data and verify external runtime-root startup enforcement
+# 1.11.1 verify received-purchase line creation, reassignment, incomplete-line, and rejection hash guards
+# 1.11.0 isolate all runtime data and verify Stage 0 move, immutability, deletion, journal, and integrity protections
 # 1.10.9 verify Mobile preview defaults to iPhone 16 Pro without full web preset
 # 1.10.8 verify visible Mobile preview page, sidebar link, no-wrap currency values, and narrower menu
 # 1.10.7 verify Consumption Totals metric font sizing and latest CSS asset
@@ -65,27 +98,51 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$repositoryDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'data'))
+$seedDataRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'seed-data'))
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('humidorhq-flat-file-smoke-' + [guid]::NewGuid().ToString('N'))
+$testDataRoot = Join-Path $testRoot 'data'
+$testRootFull = [System.IO.Path]::GetFullPath($testRoot)
+$systemTempFull = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+if (-not $testRootFull.StartsWith($systemTempFull, [System.StringComparison]::OrdinalIgnoreCase) -or $testRootFull -eq $systemTempFull) {
+    throw 'Smoke test temporary root did not resolve safely beneath the system temporary directory.'
+}
+[System.IO.Directory]::CreateDirectory($testDataRoot) | Out-Null
+
+function Get-RepositoryDataHashes {
+    $result = @{}
+    Get-ChildItem -LiteralPath $repositoryDataRoot -File | Where-Object { $_.Extension -in @('.json', '.jsonl') } | ForEach-Object {
+        $result[$_.Name] = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash
+    }
+    return $result
+}
+
+function Assert-RepositoryDataHashes {
+    param([hashtable]$Expected)
+    $actual = Get-RepositoryDataHashes
+    if ($actual.Count -ne $Expected.Count) { throw 'Repository runtime data file set changed during the isolated smoke test.' }
+    foreach ($name in $Expected.Keys) {
+        if (-not $actual.ContainsKey($name) -or $actual[$name] -ne $Expected[$name]) {
+            throw "Repository runtime data changed during the isolated smoke test: $name"
+        }
+    }
+}
+
+$sourceDataHashes = Get-RepositoryDataHashes
+Get-ChildItem -LiteralPath $seedDataRoot -Filter '*.json' -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $testDataRoot $_.Name)
+}
+
 $indexPath = Join-Path $repoRoot 'index.html'
 $appJsPath = Join-Path $repoRoot 'public\assets\js\app.js'
 $appCssPath = Join-Path $repoRoot 'public\assets\css\app.css'
 $apiIndexPath = Join-Path $repoRoot 'api\index.php'
+$bootstrapPath = Join-Path $repoRoot 'api\bootstrap.php'
 $rootHtaccessPath = Join-Path $repoRoot '.htaccess'
 $authPlaceholderPath = Join-Path $repoRoot 'data\auth-users.json.placeholder'
 $auditPlaceholderPath = Join-Path $repoRoot 'data\audit-log.jsonl.placeholder'
-$authUsersPath = Join-Path $repoRoot 'data\auth-users.json'
-$authUsersBackupPath = Join-Path $env:TEMP 'humidorhq-auth-users.backup.json'
-$auditLogPath = Join-Path $repoRoot 'data\audit-log.jsonl'
-$runtimeCollections = @('vendors', 'catalog-cigars', 'storage-locations', 'purchases', 'purchase-lines', 'storage-sub-locations', 'lots', 'lot-location-balances', 'inventory-events', 'counters')
-$runtimeBackups = @{}
-foreach ($collection in $runtimeCollections) {
-    $runtimePath = Join-Path $repoRoot "data\$collection.json"
-    $runtimeBackups[$collection] = [pscustomobject]@{
-        Path = $runtimePath
-        BackupPath = Join-Path $env:TEMP "humidorhq-$collection.backup.json"
-        HadFile = Test-Path -LiteralPath $runtimePath
-    }
-}
-$authUsersHadFile = Test-Path -LiteralPath $authUsersPath
+$authUsersPath = Join-Path $testDataRoot 'auth-users.json'
+$auditLogPath = Join-Path $testDataRoot 'audit-log.jsonl'
 
 function Get-PhpCommand {
     $phpCommand = Get-Command php -ErrorAction SilentlyContinue
@@ -108,12 +165,70 @@ function Get-PhpCommand {
     return $phpPath
 }
 
+function Invoke-ExpectedApiError {
+    param(
+        [string]$Uri,
+        [string]$Method,
+        [Microsoft.PowerShell.Commands.WebRequestSession]$Session,
+        [object]$Body,
+        [int]$StatusCode,
+        [string]$ErrorCode
+    )
+    $parameters = @{
+        Uri = $Uri
+        Method = $Method
+        WebSession = $Session
+        SkipHttpErrorCheck = $true
+    }
+    if ($null -ne $Body) {
+        $parameters.ContentType = 'application/json'
+        $parameters.Body = ($Body | ConvertTo-Json -Depth 8)
+    }
+    $response = Invoke-WebRequest @parameters
+    if ($response.StatusCode -ne $StatusCode) {
+        throw "Expected HTTP $StatusCode from $Method $Uri, got $($response.StatusCode)."
+    }
+    $payload = $response.Content | ConvertFrom-Json
+    if ($payload.error.code -ne $ErrorCode) {
+        throw "Expected error code $ErrorCode from $Method $Uri, got $($payload.error.code)."
+    }
+    return $payload
+}
+
+function Get-TestDataHashSnapshot {
+    param([string]$DataRoot)
+    $snapshot = @{}
+    foreach ($name in @('catalog-cigars.json', 'vendors.json', 'storage-locations.json', 'storage-sub-locations.json', 'purchases.json', 'purchase-lines.json', 'counters.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'audit-log.jsonl')) {
+        $path = Join-Path $DataRoot $name
+        $snapshot[$name] = if (Test-Path -LiteralPath $path -PathType Leaf) {
+            (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+        } else {
+            $null
+        }
+    }
+    return $snapshot
+}
+
+function Assert-TestDataHashSnapshot {
+    param(
+        [string]$DataRoot,
+        [hashtable]$Expected,
+        [string]$Context
+    )
+    $actual = Get-TestDataHashSnapshot -DataRoot $DataRoot
+    foreach ($name in $Expected.Keys) {
+        if ($actual[$name] -ne $Expected[$name]) {
+            throw "$Context changed protected test data: $name"
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $indexPath)) { throw 'index.html is missing.' }
 
 $jasonPagePath = Join-Path $repoRoot 'j\index.php'
 if (-not (Test-Path -LiteralPath $jasonPagePath)) { throw 'Hidden Jason utility page is missing at j/index.php.' }
 $jasonPage = Get-Content -LiteralPath $jasonPagePath -Raw
-foreach ($jasonPageHook in @('current_auth_user', 'Location: ../', '../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view', 'jason-menu-toggle', 'menu-collapsed', 'humidorhq-jason-menu-collapsed')) {
+foreach ($jasonPageHook in @('current_auth_user', 'Location: ../', '../#Dashboard', '../#Changelog', '../#Audit', '../#Todo', 'TODO', 'Full Web View - 1200 x 800', 'iPhone 16 Pro', 'mobile-preview', 'Apply selected view')) {
     if ($jasonPage -notmatch [regex]::Escape($jasonPageHook)) { throw "Hidden Jason utility page is missing hook: $jasonPageHook" }
 }
 $mobilePagePath = Join-Path $repoRoot 'mobile\index.php'
@@ -132,10 +247,11 @@ if ($mobilePage -notmatch [regex]::Escape('<p class="size-readout" id="size-read
 $index = Get-Content -LiteralPath $indexPath -Raw
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
-if ($index -notmatch 'auth-pending' -or $index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer' -or $index -notmatch 'sidebar-toggle') { throw 'Authenticated shell containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.11\.3') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.6\.2') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
-if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.0') { throw 'index.html does not load the cache-busted cigar favicon.' }
+if ($index -notmatch 'auth-pending' -or $index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
+if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.14') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
+if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.4') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
+if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }
 
 foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceholderPath, $rootHtaccessPath)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
@@ -147,38 +263,145 @@ foreach ($htaccessHook in @('<FilesMatch "\.(md|markdown)$">', 'Require all deni
 }
 
 $appJs = Get-Content -LiteralPath $appJsPath -Raw
+$appCss = Get-Content -LiteralPath $appCssPath -Raw
+foreach ($responsiveUiHook in @('id="sidebar-toggle"', 'aria-controls="app-nav"')) {
+    if ($index -notmatch [regex]::Escape($responsiveUiHook)) { throw "Collapsible navigation markup is missing hook: $responsiveUiHook" }
+}
+foreach ($mobilePrimaryHook in @('class="mobile-primary-nav"', 'data-mobile-primary-page="Dashboard"', 'data-mobile-primary-page="Collection"')) {
+    if ($index -notmatch [regex]::Escape($mobilePrimaryHook)) { throw "Mobile primary navigation is missing hook: $mobilePrimaryHook" }
+}
+foreach ($responsiveJsHook in @('function renderSidebarState', 'function initializeSidebarToggle', 'function enhanceResponsiveTables', "table.classList.add('responsive-table')", "cell.dataset.label = headings[index] || ''")) {
+    if ($appJs -notmatch [regex]::Escape($responsiveJsHook)) { throw "Responsive application behavior is missing hook: $responsiveJsHook" }
+}
+foreach ($responsiveCssHook in @('.app-shell.sidebar-collapsed', '.sidebar-collapsed .nav', '.responsive-table > tbody', 'content: attr(data-label)', 'overflow-x: visible', 'grid-template-columns: repeat(2, minmax(0, 1fr))')) {
+    if ($appCss -notmatch [regex]::Escape($responsiveCssHook)) { throw "Responsive layout styling is missing hook: $responsiveCssHook" }
+}
+foreach ($compactMobileHook in @('.collection-summary-grid', '.mobile-primary-nav', '.mobile-record-summary', '.collection-table > tbody > tr:not(.responsive-detail-row)', '.purchase-records-table > tbody > tr:not(.selected-row)')) {
+    if ($appCss -notmatch [regex]::Escape($compactMobileHook)) { throw "Compact mobile layout is missing hook: $compactMobileHook" }
+}
+foreach ($conciseCollectionHook in @('function balanceAllowsCountReconciliation', 'balanceAllowsCountReconciliation(balance)', '.inline-action-buttons', 'grid-template-columns: repeat(2, minmax(0, 1fr))')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($conciseCollectionHook)) { throw "Concise Collection detail behavior is missing hook: $conciseCollectionHook" }
+}
+foreach ($mobileCigarHook in @('Wrapper:', 'Binder:', 'Filler:', '.collection-table > tbody > tr:not(.responsive-detail-row) > td:not(:first-child)')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($mobileCigarHook)) { throw "Mobile cigar detail cleanup is missing hook: $mobileCigarHook" }
+}
+foreach ($collectionCardHook in @('function toggleCollectionCigarSelection', "row.className = isSelected ? 'clickable-record-row selected-row' : 'clickable-record-row'", "row.setAttribute('aria-expanded'", "event.key === 'Enter' || event.key === ' '")) {
+    if ($appJs -notmatch [regex]::Escape($collectionCardHook)) { throw "Whole-card Collection expansion is missing hook: $collectionCardHook" }
+}
+foreach ($savedViewHook in @('humidorhq.collection.views.v1', 'function collectionSavedViews', 'function saveCollectionView', 'function applyCollectionView', 'function deleteCollectionView', 'collection-saved-view-bar', 'Saved Views', 'Load a saved view...', 'View Name', 'Save View', 'Delete View')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($savedViewHook)) { throw "Collection saved views are missing hook: $savedViewHook" }
+}
+foreach ($purchaseHistorySavedViewHook in @('humidorhq.purchaseHistory.views.v1', 'function purchaseHistorySavedViews', 'function savePurchaseHistoryView', 'function applyPurchaseHistoryView', 'function deletePurchaseHistoryView', 'purchase-history-saved-view-bar', 'Saved Views', 'Load a saved view...', 'View Name', 'Save View', 'Delete View')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($purchaseHistorySavedViewHook)) { throw "Purchase History saved views are missing hook: $purchaseHistorySavedViewHook" }
+}
+foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(activity, savedViewBar)')) {
+    if (($appJs + $appCss) -notmatch [regex]::Escape($reportSavedViewHook)) { throw "Reports saved views are missing hook: $reportSavedViewHook" }
+}
+if ($appJs -match '<h3>\$\{escapeHtml\(cigarName\(item\.cigar\)\)\}</h3>') { throw 'Expanded Collection detail must not repeat the selected cigar heading.' }
+foreach ($humidorNavigationHook in @('function selectCollectionHumidor', 'function openCollectionForHumidor', 'View ${column.value(record)} inventory in Collection')) {
+    if ($appJs -notmatch [regex]::Escape($humidorNavigationHook)) { throw "Humidor-to-Collection navigation is missing hook: $humidorNavigationHook" }
+}
+foreach ($expandedStyleHook in @('.collection-expanded-card', 'border: 2px solid rgba(242, 182, 109, 0.48)', '.inline-move-form.is-open', 'border: 1px solid var(--line-strong)')) {
+    if ($appCss -notmatch [regex]::Escape($expandedStyleHook)) { throw "Expanded-state styling is missing hook: $expandedStyleHook" }
+}
+foreach ($cssAuthHook in @('body.auth-pending .sidebar', 'body.is-unauthenticated .sidebar', 'max-width: 520px')) {
+    if ($appCss -notmatch [regex]::Escape($cssAuthHook)) { throw "CSS is missing authenticated layout hook: $cssAuthHook" }
+}
 if ($appJs -match 'queued for plain JavaScript conversion') { throw 'Plain JavaScript app still shows queued conversion placeholder text.' }
 if ($appJs -notmatch 'project-meta') { throw 'Plain JavaScript app is missing project metadata rendering.' }
 if ($appJs -notmatch 'dashboard-shell' -or $appJs -notmatch 'currentCollectionMetrics' -or $appJs -notmatch 'removalMetrics') { throw 'Plain JavaScript app is missing current dashboard financial calculation hooks.' }
 if ($appJs -notmatch 'pageFromHash' -or $appJs -notmatch 'hashchange' -or $appJs -notmatch 'navigateToPage') { throw 'Plain JavaScript app is missing hash-based page routing.' }
 if ($appJs -notmatch 'renderSidebarAccount' -or $appJs -match 'renderAccountBar\(' -or $appJs -notmatch 'sidebar-logout' -or $appJs -notmatch 'sidebar-mobile-link') { throw 'Signed-in controls and Mobile link must render in the sidebar footer.' }
-foreach ($sidebarHook in @('SIDEBAR_COLLAPSED_KEY', 'sidebarCollapsed', 'applySidebarCollapsed', 'installSidebarToggle', 'Close Menu', 'Open Menu', 'SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', "command: '!jnl'", 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
+foreach ($sidebarHook in @('SHORTCUT_PREFIX', 'PAGE_SHORTCUTS', 'PRIVATE_PAGE_SHORTCUT', "command: '!jnl'", 'installKeyboardShortcuts', 'event.key.length !== 1', 'isAuthenticated()', 'auth-pending', 'is-unauthenticated')) {
     if ($appJs -notmatch [regex]::Escape($sidebarHook)) { throw "Plain JavaScript app is missing sidebar or shortcut hook: $sidebarHook" }
 }
 foreach ($pageShortcutHook in @("token: 'das', page: 'Dashboard'", "token: 'col', page: 'Collection'", "token: 'cat', page: 'Catalog'", "token: 'ven', page: 'Vendors'", "token: 'pur', page: 'Purchases'", "token: 'hum', page: 'Humidors'", "token: 'rep', page: 'Reports'", "SHORTCUT_PREFIX = '!'")) {
     if ($appJs -notmatch [regex]::Escape($pageShortcutHook)) { throw "Plain JavaScript app is missing page shortcut hook: $pageShortcutHook" }
 }
-if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch '<h3>Activity</h3>' -or $appJs -notmatch 'Purchase receipts, moves, smoked cigars, gifts, and discard events.') { throw 'Reports page must render the activity history section.' }
+if ($appJs -notmatch 'function renderReportsPage' -or $appJs -notmatch "title: 'Activity'" -or $appJs -notmatch 'matching purchase, movement, removal, and reversal events.') { throw 'Reports page must render the activity history section.' }
+foreach ($activityReportHook in @('function filteredActivityEvents', 'function activityEventLocationLabel', 'function activityRelationshipEvent', 'function activityEventContextTarget', 'function openActivityEventContext', 'function createCollapsibleReportSection', 'report-collapsible', 'report-collapsible-body', 'function renderActivityReference', 'activityPeriod', 'activityType', 'activityLotId', 'activityHumidorId', 'Search Activity', 'Reversed by Event #', 'Open Purchase', 'Open Collection')) {
+    if ($appJs -notmatch [regex]::Escape($activityReportHook)) { throw "Filterable Activity reporting is missing hook: $activityReportHook" }
+}
+foreach ($agingReportHook in @('function inventoryAgingRows', 'function summarizeInventoryAging', 'function inventoryAgingBucketSummaries', 'function renderInventoryAgingReport', 'Unknown Receipt Date', 'Future Receipt Date', 'agingManufacturer', 'agingHumidorId', 'data-aging-cigar-id', 'costValueCents', 'msrpValueCents')) {
+    if ($appJs -notmatch [regex]::Escape($agingReportHook)) { throw "Inventory Aging reporting is missing hook: $agingReportHook" }
+}
+foreach ($agingExpansionHook in @('selectedAgingBucketKey', 'data-aging-bucket-key', 'aging-bucket-toggle', 'aging-bucket-detail', 'aria-expanded')) {
+    if ($appJs -notmatch [regex]::Escape($agingExpansionHook) -and $appCss -notmatch [regex]::Escape($agingExpansionHook)) { throw "Expandable Aging buckets are missing hook: $agingExpansionHook" }
+}
+if ($appJs -match '<h3>Aging Detail</h3>') { throw 'Inventory Aging must not render a separate always-visible detail section.' }
+foreach ($agingDrillHook in @('function openCollectionForAgingCigar', 'data-aging-cigar-id', 'clickable-record-row', 'data-aging-bucket-key')) {
+    if ($appJs -notmatch [regex]::Escape($agingDrillHook)) { throw "Inventory Aging drill-through is missing hook: $agingDrillHook" }
+}
 if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'function filteredRemovalEvents' -or $appJs -notmatch 'All Removals' -or $appJs -notmatch 'Quantity Included') { throw 'Reports page is missing the filterable removal history report.' }
+foreach ($trendReportHook in @('function renderPurchaseTrendReport', 'function purchaseTrendRows', 'function purchaseTrendVendorRows', 'function purchaseTrendManufacturerRows', 'function purchaseRecordsForDisplay', 'function setPurchaseRecordsFilter', 'function clearPurchaseRecordsFilter', 'purchaseTrendPeriod', 'purchaseRecordsFilterType', 'Purchase Trend Analytics', 'By Year', 'By Month', 'Vendor Breakdown', 'Manufacturer Breakdown', 'data-purchase-trend-key', 'data-purchase-trend-vendor-id', 'data-purchase-trend-manufacturer')) {
+    if ($appJs -notmatch [regex]::Escape($trendReportHook)) { throw "Purchase trend analytics is missing hook: $trendReportHook" }
+}
+foreach ($buyAgainDrillHook in @('function openCatalogForBuyAgainCigar', 'data-buy-again-cigar-id')) {
+    if ($appJs -notmatch [regex]::Escape($buyAgainDrillHook)) { throw "Buy Again drill-through is missing hook: $buyAgainDrillHook" }
+}
+if ($appJs -match 'renderPurchaseHistoryReport\(view\)\s+renderBuyAgainReport\(view\)') { throw 'Reports page must not render the Buy Again report section.' }
+foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
+    if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
+}
+foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'function smokingJournalHistoryMetrics', 'function renderCatalogSmokingHistory', 'Journal Entries', 'Reversed — history retained', 'data-journal-catalog-id', 'journal?.notes', 'journal?.rating')) {
+    if ($appJs -notmatch [regex]::Escape($journalHistoryHook)) { throw "Smoking Journal history visibility is missing hook: $journalHistoryHook" }
+}
+foreach ($mobileCatalogHook in @('catalog-records-table', '.responsive-table > tbody > tr.responsive-detail-row > td', 'max-width: none', 'border: 2px solid rgba(242, 182, 109, 0.48)')) {
+    if ($appJs -notmatch [regex]::Escape($mobileCatalogHook) -and $appCss -notmatch [regex]::Escape($mobileCatalogHook)) { throw "Mobile Catalog presentation is missing hook: $mobileCatalogHook" }
+}
+foreach ($preInventoryHook in @('function isPreInventoryHumidor', 'function preInventoryDashboardSummary', 'function preInventoryWorklist', "metricCard('Pre Inventory'", 'Pre Inventory Worklist', 'Placed Elsewhere', 'Placement Progress', 'interactive-metric-card', 'data-pre-inventory-cigar-id')) {
+    if ($appJs -notmatch [regex]::Escape($preInventoryHook)) { throw "Pre Inventory Dashboard staging is missing hook: $preInventoryHook" }
+}
+foreach ($collectionNavigationHook in @('collectionScrollTargetCigarId', 'data-collection-cigar-id', "scrollIntoView({ behavior: 'smooth', block: 'center' })", "focus({ preventScroll: true })")) {
+    if ($appJs -notmatch [regex]::Escape($collectionNavigationHook)) { throw "Pre Inventory Collection navigation is missing hook: $collectionNavigationHook" }
+}
+if ($appJs -notmatch 'name="quantity" type="number" min="1" max="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" step="1" value="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" required') {
+    throw 'Collection move quantity must default to the full selected balance quantity.'
+}
+if ($appJs -match 'Discard\s*/\s*Damage|Discarded\s*/\s*Damaged') { throw 'User-facing discard terminology must not mention damage.' }
+if ($appJs -notmatch [regex]::Escape("['catalog-cigars', 'vendors', 'storage-locations'].includes(collection)")) { throw 'Managed Catalog, Vendor, and Humidor record counts must omit runtime filenames.' }
+foreach ($removedPurchaseReportDetail in @("metricCard('Line Items'", "metricCard('Line Purchase Price'", 'Authoritative purchase totals')) {
+    if ($appJs -match [regex]::Escape($removedPurchaseReportDetail)) { throw "Purchase summary still contains removed detail: $removedPurchaseReportDetail" }
+}
+foreach ($removalHook in @("DISCARDED: 'Discard'", 'DISCARDED', 'removalIdempotencyKey', 'eventDate', 'renderPendingSmokingJournal', 'Journal Notes', 'fromStorageLocationId')) {
+    if ($appJs -notmatch [regex]::Escape($removalHook)) { throw "Removal and journal workflow is missing hook: $removalHook" }
+}
+foreach ($archiveHook in @('Show Archived', 'Hide Archived', 'apiPatch', '/archive', '/restore', 'recordIsActive')) {
+    if ($appJs -notmatch [regex]::Escape($archiveHook)) { throw "Archive and restore workflow is missing hook: $archiveHook" }
+}
+foreach ($reversalHook in @('effectiveInventoryEvents', 'inventoryEventCanBeReversed', 'purchaseLineHasInventoryHistory', 'Confirm Reversal', '/reverse', 'reversalIdempotencyKey', 'Show All Activity')) {
+    if ($appJs -notmatch [regex]::Escape($reversalHook)) { throw "Inventory correction/reversal workflow is missing hook: $reversalHook" }
+}
+foreach ($adjustmentHook in @('/inventory/adjust-count', 'Reconcile Count', 'Expected Quantity', 'Physical Count', 'Adjustment Reason', 'adjustmentIdempotencyKey', 'INVENTORY_ADJUSTMENT')) {
+    if ($appJs -notmatch [regex]::Escape($adjustmentHook)) { throw "Physical-count adjustment workflow is missing hook: $adjustmentHook" }
+}
 if ($appJs -notmatch 'currentCollectionMetrics\(false\)' -or $appJs -notmatch 'Move all.*assigned cigars' -or $appJs -notmatch "inlineEdit: true") { throw 'Dashboard filter isolation or humidor edit/delete protections are missing.' }
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-if ($apiIndex -notmatch 'save_collection\(''storage-sub-locations'', \$sections\)' -or $apiIndex -notmatch 'linkedSectionIds') { throw 'API is missing empty humidor section cleanup.' }
+if ($apiIndex -notmatch 'RECEIVED_INVENTORY_IMMUTABLE' -or $apiIndex -notmatch 'RECORD_REFERENCED') { throw 'API is missing Stage 0 immutability or referential guards.' }
+$bootstrapSource = Get-Content -LiteralPath $bootstrapPath -Raw
+foreach ($startupGuard in @('DATA_ROOT_MISSING', 'DATA_ROOT_NOT_WRITABLE', 'DATA_FILE_MISSING', 'DATA_FILE_NOT_WRITABLE', 'DATA_FILE_INVALID_JSON')) {
+    if ($bootstrapSource -notmatch [regex]::Escape($startupGuard)) { throw "Bootstrap is missing runtime startup guard: $startupGuard" }
+}
+foreach ($retiredStartupGuard in @('DATA_ROOT_NOT_CONFIGURED', 'DATA_ROOT_INSIDE_APP', 'Set HUMIDORHQ_DATA_ROOT to an external runtime data directory')) {
+    if ($bootstrapSource -match [regex]::Escape($retiredStartupGuard)) { throw "Bootstrap retains retired runtime startup logic: $retiredStartupGuard" }
+}
+if ($bootstrapSource -notmatch "APP_ROOT\s*\.\s*DIRECTORY_SEPARATOR\s*\.\s*'data'") { throw 'Bootstrap does not default runtime data to APP_ROOT/data.' }
 if ($appJs -notmatch 'function renderPurchaseOverview' -or $appJs -notmatch 'En Route Cigars' -or $appJs -notmatch '\+ Add Purchase') { throw 'Purchases page must render its summary and on-demand add-purchase control.' }
-if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Edit / Receive') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
-if ($appJs -notmatch "\{ \.\.\.purchase, status: 'received' \}" -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Receive defaults and lifetime smoked/gifted averages are missing.' }
+if ($appJs -match "return '2026-07-16'" -or $appJs -match 'toISOString\(\)\.slice\(0, 10\)' -or $appJs -notmatch 'today\.getFullYear\(\)') { throw 'Date defaults must use the current local calendar date.' }
+foreach ($moneyCompletenessHook in @('function hasKnownMoney', 'function sumMoneyValues', "return 'Unknown'", 'knownCostQuantity', 'costComplete')) {
+    if ($appJs -notmatch [regex]::Escape($moneyCompletenessHook)) { throw "Unknown-money handling is missing hook: $moneyCompletenessHook" }
+}
+if ($appJs -notmatch 'function renderPurchaseRecords' -or $appJs -notmatch 'function renderPurchaseLineDetails' -or $appJs -notmatch 'Receive and Store Cigars') { throw 'Purchase records must expand to show cigars and retain receiving controls.' }
+if ($appJs -notmatch 'receiptKeyForPurchaseLine' -or $appJs -notmatch '/receive`' -or $appJs -notmatch 'Avg Gifted Cost' -or $appJs -notmatch 'Avg Gifted MSRP') { throw 'Idempotent receipt controls or lifetime smoked/gifted averages are missing.' }
 if ($appJs -notmatch 'lifetime-quantity-card') { throw 'Lifetime metric layout is missing its tall quantity card.' }
 if ($index -match 'Flat-file collection manager' -or $appJs -match 'Smoked inventory events' -or $appJs -match 'Gifted inventory events') { throw 'Removed sidebar and consumption helper labels are still present.' }
 if ($appJs -notmatch 'function render\(\)[\s\S]*renderProjectMeta\(\)') { throw 'Plain JavaScript app render path does not update project metadata.' }
 foreach ($metaHook in @('modifiedParts', 'modifiedDate', 'modifiedTime')) {
     if ($appJs -notmatch [regex]::Escape($metaHook)) { throw "Plain JavaScript app is missing stacked project metadata hook: $metaHook" }
 }
-$appCss = Get-Content -LiteralPath $appCssPath -Raw
-if ($appCss -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
-foreach ($sidebarCssHook in @('sidebar-toggle', 'app-shell.sidebar-collapsed', 'grid-template-columns: 58px minmax(0, 1fr)', 'grid-template-rows: minmax(0, 1fr) auto', 'order: 2', 'max-height: 42vh')) {
-    if ($appCss -notmatch [regex]::Escape($sidebarCssHook)) { throw "CSS is missing collapsible sidebar hook: $sidebarCssHook" }
-}
+if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch 'grid-template-columns: 165px minmax\(0, 1fr\);') { throw 'Sidebar width should be reduced to 165px.' }
 foreach ($consumptionCssHook in @('.lifetime-metric-grid .metric-card strong', 'font-size: 1.12rem', 'white-space: nowrap', '.lifetime-metric-grid .lifetime-quantity-card strong')) {
-    if ($appCss -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
+    if ((Get-Content -LiteralPath $appCssPath -Raw) -notmatch [regex]::Escape($consumptionCssHook)) { throw "CSS is missing Consumption Totals sizing hook: $consumptionCssHook" }
 }
 foreach ($hiddenToolHook in @('renderHiddenPageTools', 'Jason Tools', 'href="j/"', "label: 'TODO'", 'pageLabel(state.activePage)')) {
     if ($appJs -notmatch [regex]::Escape($hiddenToolHook)) { throw "Plain JavaScript app is missing hidden utility hook: $hiddenToolHook" }
@@ -199,11 +422,7 @@ foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'pur
     if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
 }
 
-if ($appCss -match 'display: contents') { throw 'CSS should not use display: contents on landmark/sidebar layout containers.' }
-foreach ($cssAuthHook in @('body.auth-pending .sidebar', 'grid-template-rows: minmax(0, 1fr) auto', 'grid-row: 2', 'order: 2')) {
-    if ($appCss -notmatch [regex]::Escape($cssAuthHook)) { throw "CSS is missing authenticated layout hook: $cssAuthHook" }
-}
-
+$appCss = Get-Content -LiteralPath $appCssPath -Raw
 if ($appCss -match '`r`n') { throw 'CSS contains literal PowerShell newline escape text.' }
 
 $trackedFiles = & git -C $repoRoot ls-files
@@ -235,7 +454,7 @@ $disallowedTrackedFiles = $trackedFiles | Where-Object {
 if ($disallowedTrackedFiles.Count -gt 0) { throw "Tracked compile/runtime files remain: $($disallowedTrackedFiles -join ', ')" }
 
 $apiIndex = Get-Content -LiteralPath $apiIndexPath -Raw
-foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/records/', '/inventory/move', 'purchase-lines', 'storage-sub-locations')) {
+foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', '/app-meta', '/backups', '/backups/import', 'preview|restore|download', '/records/', '/inventory/move', '/purchase-lines/', '/receive', 'storage-sub-locations')) {
     if ($apiIndex -notmatch [regex]::Escape($route)) { throw "PHP API is missing the $route route." }
 }
 
@@ -243,21 +462,19 @@ $php = Get-PhpCommand
 $hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
 if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
 
-if ($authUsersHadFile) { Copy-Item -LiteralPath $authUsersPath -Destination $authUsersBackupPath -Force }
-foreach ($backup in $runtimeBackups.Values) {
-    if ($backup.HadFile) { Copy-Item -LiteralPath $backup.Path -Destination $backup.BackupPath -Force }
-}
-if (Test-Path -LiteralPath $auditLogPath) { Remove-Item -LiteralPath $auditLogPath -Force }
-
 @(
     [pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true }
 ) | ConvertTo-Json -Depth 4 -AsArray | Set-Content -LiteralPath $authUsersPath -Encoding UTF8
 
 $port = 8765
-$serverOutLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.out.log'
-$serverErrLog = Join-Path $env:TEMP 'humidorhq-flat-file-smoke-php.err.log'
+$serverOutLog = Join-Path $testRoot 'php.out.log'
+$serverErrLog = Join-Path $testRoot 'php.err.log'
 $phpArgs = "-S 127.0.0.1:$port -t `"$repoRoot`""
+$previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
+$env:HUMIDORHQ_DATA_ROOT = $testDataRoot
 $process = Start-Process -FilePath $php -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
+$env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
+$testFailure = $null
 try {
     Start-Sleep -Milliseconds 700
     $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -274,14 +491,14 @@ try {
 
     $anonymousSample = Invoke-WebRequest "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session -SkipHttpErrorCheck
     if ($anonymousSample.StatusCode -ne 401) { throw "Sample-data should require authentication. Expected 401, got $($anonymousSample.StatusCode)." }
-    foreach ($protectedPage in @('/j/', '/mobile/')) {
-        $anonymousPage = Invoke-WebRequest "http://127.0.0.1:$port$protectedPage" -Method Get -WebSession $session
-        if ($anonymousPage.Content -notmatch 'Sign In' -or $anonymousPage.Content -match 'Mobile Preview|Jason Tools') { throw "Anonymous $protectedPage page should land on sign-in only." }
-    }
 
+    if (-not $anonymousSession.data.csrfToken) { throw 'Anonymous session did not return a CSRF token.' }
+    $session.Headers['X-CSRF-Token'] = [string]$anonymousSession.data.csrfToken
     $loginBody = @{ username = 'testuser'; password = 'testpass' } | ConvertTo-Json
     $login = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $session
     if ($login.data.authenticated -ne $true -or $login.data.user.username -ne 'testuser') { throw 'Login did not return an authenticated test user.' }
+    if (-not $login.data.csrfToken) { throw 'Authenticated session did not return a CSRF token.' }
+    $session.Headers['X-CSRF-Token'] = [string]$login.data.csrfToken
 
     $sample = Invoke-RestMethod "http://127.0.0.1:$port/api/sample-data" -Method Get -WebSession $session
     if ($null -eq $sample.data.collections) { throw 'Sample-data endpoint did not return collection summaries.' }
@@ -306,23 +523,99 @@ try {
     $updatedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Put -ContentType 'application/json' -Body $updatedVendorBody -WebSession $session
     if ($updatedVendor.data.name -ne 'Smoke Test Vendor Updated') { throw 'Vendor update endpoint did not return the updated record.' }
 
+    $archivedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedVendor.data.isActive -ne $false) { throw 'Vendor archive endpoint did not preserve the record as inactive.' }
+    $archivedVendorHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $archivedVendorReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedVendorReplay.data.isActive -ne $false) { throw 'Repeated Vendor archive did not return the inactive record.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorHashes -Context 'Repeated Vendor archive'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Put -Session $session -Body @{ notes = 'blocked while archived' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorHashes -Context 'Archived Vendor edit'
+    $restoredVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)/restore" -Method Patch -WebSession $session
+    if ($restoredVendor.data.isActive -ne $true) { throw 'Vendor restore endpoint did not reactivate the record.' }
+
     $deletedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($createdVendor.data.id)" -Method Delete -WebSession $session
     if ($deletedVendor.data.id -ne $createdVendor.data.id) { throw 'Vendor delete endpoint did not return the deleted record.' }
 
     $linkedVendorBody = @{ name = 'Linked Smoke Vendor'; website = 'https://example.com'; phone = '555-0200'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $linkedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors" -Method Post -ContentType 'application/json' -Body $linkedVendorBody -WebSession $session
 
-    $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $catalogBody = @{ manufacturer = 'Smoke'; series = 'Connected'; vitola = 'Robusto'; shape = 'Parejo'; length = '5'; ringGauge = '50'; wrapper = 'Test'; binder = 'Test'; filler = 'Test'; country = 'Test'; strength = 'Medium'; msrp = '9.50'; buyAgainStatus = 'MAYBE'; buyAgainNotes = 'Initial smoke-test decision'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -ContentType 'application/json' -Body $catalogBody -WebSession $session
+    if ($createdCigar.data.buyAgainStatus -ne 'MAYBE' -or $createdCigar.data.buyAgainNotes -ne 'Initial smoke-test decision') { throw 'Catalog create did not preserve the normalized Buy Again decision.' }
+    $catalogDecisionUpdate = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Put -ContentType 'application/json' -Body (@{ buyAgainStatus = 'NO'; buyAgainNotes = 'Updated through Catalog' } | ConvertTo-Json) -WebSession $session
+    if ($catalogDecisionUpdate.data.buyAgainStatus -ne 'NO' -or $catalogDecisionUpdate.data.buyAgainNotes -ne 'Updated through Catalog') { throw 'Catalog update did not save the Buy Again decision.' }
+    $invalidBuyAgainHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Post -Session $session -Body @{ manufacturer = 'Invalid'; series = 'Decision'; buyAgainStatus = 'ALWAYS' } -StatusCode 422 -ErrorCode 'BUY_AGAIN_VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $invalidBuyAgainHashes -Context 'Rejected Catalog Buy Again decision'
+
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedVendorAssignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedVendorAssignmentHashes -Context 'Archived Vendor purchase assignment'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+
+    $invalidPurchaseBase = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-02-30'; status = 'pending'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidPurchaseBase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $invalidMoneyPurchase = $invalidPurchaseBase.Clone(); $invalidMoneyPurchase.purchaseDate = '2026-07-17'; $invalidMoneyPurchase.discount = '-1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidMoneyPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $invalidPrecisionPurchase = $invalidPurchaseBase.Clone(); $invalidPrecisionPurchase.purchaseDate = '2026-07-17'; $invalidPrecisionPurchase.shipping = '0.001'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $invalidPrecisionPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $partialStatusPurchase = $invalidPurchaseBase.Clone(); $partialStatusPurchase.purchaseDate = '2026-07-17'; $partialStatusPurchase.status = 'partially-received'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases" -Method Post -Session $session -Body $partialStatusPurchase -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+
+    $authoritativePurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; shipping = '1'; exciseTax = '0'; salesTax = '0'; discount = '1'; totalPaid = '999' }
+    $authoritativePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($authoritativePurchaseBody | ConvertTo-Json) -WebSession $session
+    if ($authoritativePurchase.data.totalPaid -ne 10) { throw 'PHP did not override the client totalPaid with the authoritative formula.' }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedCatalogAssignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -Session $session -Body @{ purchaseId = [string]$authoritativePurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedCatalogAssignmentHashes -Context 'Archived Catalog purchase-line assignment'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($authoritativePurchase.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $unknownPurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '10'; totalPaid = '999' }
+    $unknownPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($unknownPurchaseBody | ConvertTo-Json) -WebSession $session
+    if ($null -ne $unknownPurchase.data.totalPaid) { throw 'Missing purchase adjustments must keep totalPaid unknown.' }
+    $unknownLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{ purchaseId = [string]$unknownPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10' } | ConvertTo-Json) -WebSession $session
+    if ($null -ne $unknownLine.data.trueCostBasis -or $null -ne $unknownLine.data.trueCostPerCigar) { throw 'Missing header money must keep allocated line cost unknown.' }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($unknownLine.data.id)" -Method Delete -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($unknownPurchase.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $pennyPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body (@{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; subtotal = '0.03'; shipping = '0.01'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '0' } | ConvertTo-Json) -WebSession $session
+    $pennyLines = @()
+    1..3 | ForEach-Object {
+        $pennyLines += Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{ purchaseId = [string]$pennyPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '0.01'; unitCost = '0.01' } | ConvertTo-Json) -WebSession $session
+    }
+    $storedPennyLines = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') | ConvertFrom-Json) | Where-Object { $_.purchaseId -eq $pennyPurchase.data.id } | Sort-Object id)
+    if (($storedPennyLines | Measure-Object -Property allocatedShipping -Sum).Sum -ne 0.01 -or $storedPennyLines[0].allocatedShipping -ne 0.01 -or $storedPennyLines[1].allocatedShipping -ne 0 -or $storedPennyLines[2].allocatedShipping -ne 0) {
+        throw 'Deterministic largest-remainder allocation did not reconcile the penny to stable line-ID order.'
+    }
+    foreach ($line in $pennyLines) { Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($line.data.id)" -Method Delete -WebSession $session | Out-Null }
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($pennyPurchase.data.id)" -Method Delete -WebSession $session | Out-Null
 
     $emptyHumidorBody = @{ name = 'Empty Smoke Humidor'; type = 'Cabinet'; capacity = '10'; notes = 'temporary empty humidor' } | ConvertTo-Json
     $emptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $emptyHumidorBody -WebSession $session
     $emptySectionBody = @{ storageLocationId = "$($emptyHumidor.data.id)"; name = 'Empty Drawer'; type = 'Drawer'; capacity = '10'; notes = 'temporary empty section' } | ConvertTo-Json
     $emptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $emptySectionBody -WebSession $session
+    $activeSectionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_SECTIONS_ASSIGNED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $activeSectionHashes -Context 'Humidor archive with active section'
+    $archivedEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedEmptySection.data.isActive -ne $false) { throw 'Empty Humidor section was not archived.' }
+    $archivedEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedEmptyHumidor.data.isActive -ne $false) { throw 'Empty Humidor was not archived.' }
+    $archivedStorageHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -Session $session -Body @{ storageLocationId = [string]$emptyHumidor.data.id; name = 'Blocked Archived Parent'; type = 'Drawer'; capacity = '1'; notes = '' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedStorageHashes -Context 'Section creation under archived Humidor'
+    $restoredEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)/restore" -Method Patch -WebSession $session
+    $restoredEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)/restore" -Method Patch -WebSession $session
+    if ($restoredEmptyHumidor.data.isActive -ne $true -or $restoredEmptySection.data.isActive -ne $true) { throw 'Humidor or section restore did not reactivate its record.' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    $deletedEmptySection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($emptySection.data.id)" -Method Delete -WebSession $session
+    if ($deletedEmptySection.data.id -ne $emptySection.data.id) { throw 'Unreferenced Humidor section deletion should remain permitted.' }
     $deletedEmptyHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($emptyHumidor.data.id)" -Method Delete -WebSession $session
-    if ($deletedEmptyHumidor.data.id -ne $emptyHumidor.data.id) { throw 'Empty humidor delete endpoint did not return the deleted record.' }
-    $sectionListAfterDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Get -WebSession $session
-    if ($sectionListAfterDelete.data.records | Where-Object { $_.id -eq $emptySection.data.id }) { throw 'Deleting an empty humidor did not remove its empty section.' }
+    if ($deletedEmptyHumidor.data.id -ne $emptyHumidor.data.id) { throw 'Unreferenced Humidor deletion should remain permitted.' }
 
     $humidorBody = @{ name = 'Linked Smoke Humidor'; type = 'Cabinet'; capacity = '25'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body $humidorBody -WebSession $session
@@ -330,6 +623,110 @@ try {
     $sectionBody = @{ storageLocationId = "$($createdHumidor.data.id)"; name = 'Drawer 1'; type = 'Drawer'; capacity = '10'; notes = 'temporary linked smoke test section' } | ConvertTo-Json
     $createdSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body $sectionBody -WebSession $session
     if ($createdSection.data.name -ne 'Drawer 1' -or [string]$createdSection.data.storageLocationId -ne [string]$createdHumidor.data.id) { throw 'Storage sub-location create endpoint did not return the linked drawer record.' }
+
+    $partialPurchaseBody = @{
+        vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-16'; subtotal = '70'; receivedDate = ''
+        status = 'pending'; invoiceNumber = 'SMOKE-PARTIAL-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'
+        discount = '0'; totalPaid = '70'; notes = ''
+    }
+    $partialPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($partialPurchaseBody | ConvertTo-Json) -WebSession $session
+    $partialLineOne = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{
+        purchaseId = [string]$partialPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'partial line one'
+    } | ConvertTo-Json) -WebSession $session
+    $partialLineTwo = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body (@{
+        purchaseId = [string]$partialPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        quantity = '2'; purchasePrice = '20'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'partial line two'
+    } | ConvertTo-Json) -WebSession $session
+
+    $firstReceiptBody = @{
+        quantity = '2'; receivedDate = '2026-07-17'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-partial-0001'; notes = 'first carton'
+    }
+    $archivedReceiptHumidor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body (@{ name = 'Archived Receipt Destination'; type = 'Cabinet'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $archivedReceiptBody = $firstReceiptBody.Clone()
+    $archivedReceiptBody.storageLocationId = [string]$archivedReceiptHumidor.data.id
+    $archivedReceiptBody.storageSubLocationId = ''
+    $archivedReceiptBody.idempotencyKey = 'receipt-archived-location-001'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $archivedReceiptBody -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedReceiptHashes -Context 'Receipt into archived Humidor'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archivedReceiptHumidor.data.id)" -Method Delete -WebSession $session | Out-Null
+    $firstReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($firstReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($firstReceipt.data.idempotentReplay -ne $false -or $firstReceipt.data.receivedQuantity -ne 2 -or $firstReceipt.data.remainingQuantity -ne 3) {
+        throw 'First partial receipt did not return the expected quantities.'
+    }
+    if ($firstReceipt.data.purchase.status -ne 'partially-received' -or $firstReceipt.data.purchase.receivedDate) {
+        throw 'First partial receipt did not derive partially-received purchase status with no completion date.'
+    }
+    if ($firstReceipt.data.purchaseLine.receivedQuantity -ne 2 -or $firstReceipt.data.purchaseLine.receivedDate) {
+        throw 'First partial receipt did not preserve ordered versus received line quantities.'
+    }
+    if ($firstReceipt.data.lot.initialQuantity -ne 2 -or $firstReceipt.data.lot.currentQuantity -ne 2 -or $firstReceipt.data.balance.quantity -ne 2) {
+        throw 'First partial receipt did not create the expected Lot and location balance.'
+    }
+    if ($firstReceipt.data.inventoryEvent.quantity -ne 2 -or $firstReceipt.data.inventoryEvent.receiptKey -ne $firstReceiptBody.idempotencyKey) {
+        throw 'First partial receipt did not create the expected idempotent receipt event.'
+    }
+
+    $firstReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $firstReceiptReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($firstReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($firstReceiptReplay.data.idempotentReplay -ne $true -or $firstReceiptReplay.data.inventoryEvent.id -ne $firstReceipt.data.inventoryEvent.id) {
+        throw 'An exact receipt retry did not return the original event as an idempotent replay.'
+    }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstReceiptHashes -Context 'Exact receipt replay'
+
+    $receiptKeyConflict = $firstReceiptBody.Clone(); $receiptKeyConflict.quantity = '1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $receiptKeyConflict -StatusCode 409 -ErrorCode 'RECEIPT_IDEMPOTENCY_CONFLICT' | Out-Null
+    $overReceipt = $firstReceiptBody.Clone(); $overReceipt.quantity = '4'; $overReceipt.idempotencyKey = 'receipt-smoke-partial-over-0002'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $overReceipt -StatusCode 409 -ErrorCode 'RECEIPT_QUANTITY_EXCEEDED' | Out-Null
+    $earlyReceipt = $firstReceiptBody.Clone(); $earlyReceipt.quantity = '1'; $earlyReceipt.receivedDate = '2026-07-15'; $earlyReceipt.idempotencyKey = 'receipt-smoke-partial-early-003'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -Session $session -Body $earlyReceipt -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstReceiptHashes -Context 'Rejected partial receipt requests'
+
+    $partialHeaderNotes = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($partialPurchase.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'partial header notes remain editable' } | ConvertTo-Json) -WebSession $session
+    if ($partialHeaderNotes.data.status -ne 'partially-received' -or $partialHeaderNotes.data.notes -ne 'partial header notes remain editable') {
+        throw 'Safe header editing did not preserve derived partially-received status.'
+    }
+    $partialLineNotes = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($partialLineOne.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'partial line notes remain editable' } | ConvertTo-Json) -WebSession $session
+    if ($partialLineNotes.data.receivedQuantity -ne 2 -or $partialLineNotes.data.notes -ne 'partial line notes remain editable') {
+        throw 'Safe line editing did not preserve partial receipt fields.'
+    }
+
+    $secondReceiptBody = @{
+        quantity = '3'; receivedDate = '2026-07-18'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = ''; idempotencyKey = 'receipt-smoke-partial-0002'; notes = 'remaining first line'
+    }
+    $secondReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineOne.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($secondReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($secondReceipt.data.receivedQuantity -ne 5 -or $secondReceipt.data.remainingQuantity -ne 0 -or $secondReceipt.data.purchase.status -ne 'partially-received') {
+        throw 'Completing one line did not leave the multi-line purchase partially received.'
+    }
+    if ($secondReceipt.data.purchaseLine.receivedDate -ne '2026-07-18' -or $secondReceipt.data.lot.initialQuantity -ne 5 -or $secondReceipt.data.lot.currentQuantity -ne 5) {
+        throw 'Completing the first line did not reconcile its dates and Lot quantities.'
+    }
+    $partialLineOneBalances = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json) | Where-Object { $_.lotId -eq $secondReceipt.data.lot.id })
+    if ($partialLineOneBalances.Count -ne 2 -or ($partialLineOneBalances | Measure-Object -Property quantity -Sum).Sum -ne 5) {
+        throw 'Split partial receipts did not reconcile across exact location balances.'
+    }
+    $partialLineOneEvents = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json) | Where-Object { $_.purchaseLineId -eq $partialLineOne.data.id -and $_.eventType -eq 'purchase-receipt' })
+    if ($partialLineOneEvents.Count -ne 2 -or ($partialLineOneEvents | Measure-Object -Property quantity -Sum).Sum -ne 5) {
+        throw 'Partial receipt events did not reconcile to the first line ordered quantity.'
+    }
+
+    $finalReceiptBody = @{
+        quantity = '2'; receivedDate = '2026-07-19'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-partial-0003'; notes = 'second line complete'
+    }
+    $finalReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($partialLineTwo.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($finalReceiptBody | ConvertTo-Json) -WebSession $session
+    if ($finalReceipt.data.purchase.status -ne 'received' -or $finalReceipt.data.purchase.receivedDate -ne '2026-07-19') {
+        throw 'Final line receipt did not derive the received purchase status and completion date.'
+    }
+    $completedReceiptHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $afterCompleteBody = $finalReceiptBody.Clone(); $afterCompleteBody.idempotencyKey = 'receipt-smoke-after-complete-004'; $afterCompleteBody.quantity = '1'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineTwo.data.id)/receive" -Method Post -Session $session -Body $afterCompleteBody -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $completedReceiptHashes -Context 'Receipt after purchase completion'
 
     $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = ''; status = 'pending'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
     $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
@@ -340,50 +737,412 @@ try {
     if ((-not $createdLine.data.id) -or $createdLine.data.createdLotId -or $createdLine.data.createdInventoryEventId) { throw 'Pending purchase lines should not create receipt inventory ids before the order is received.' }
     if ($createdLine.data.trueCostPerCigar -ne 10 -or $createdLine.data.allocatedShipping -ne 0 -or $createdLine.data.msrpPerCigarResolved -ne 9.5) { throw 'Purchase line create endpoint did not return allocated financial fields.' }
 
-    $lots = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lots.json') -Raw | ConvertFrom-Json
+    $lots = Get-Content -LiteralPath (Join-Path $testDataRoot 'lots.json') -Raw | ConvertFrom-Json
     $pendingLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
     if ($pendingLot) { throw 'Pending purchase lines should not create lots before receipt and location assignment.' }
 
-    $balances = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $balances = Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json
     $pendingBalance = $balances | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
     if ($pendingBalance) { throw 'Pending purchase lines should not create location balances before receipt and location assignment.' }
 
-    $events = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $events = Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json
     $pendingEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
     if ($pendingEvent) { throw 'Pending purchase lines should not create receipt events before receipt and location assignment.' }
 
-    $receivedPurchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = '2026-07-16'; status = 'received'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
-    $receivedPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -ContentType 'application/json' -Body $receivedPurchaseBody -WebSession $session
-    if ($receivedPurchase.data.status -ne 'received' -or $receivedPurchase.data.receivedDate -ne '2026-07-16') { throw 'Purchase update endpoint did not mark the order received.' }
+    $manualStatusHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'received'; receivedDate = '2026-07-16' } -StatusCode 409 -ErrorCode 'RECEIPT_WORKFLOW_REQUIRED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $manualStatusHashes -Context 'Rejected manual purchase status transition'
 
-    $assignLineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; storageLocationId = "$($createdHumidor.data.id)"; storageSubLocationId = "$($createdSection.data.id)"; quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
-    $assignedLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -ContentType 'application/json' -Body $assignLineBody -WebSession $session
+    $fullReceiptBody = @{
+        quantity = '5'; receivedDate = '2026-07-16'; storageLocationId = [string]$createdHumidor.data.id
+        storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-smoke-full-line-0001'; notes = 'temporary linked smoke test record'
+    }
+    $fullReceipt = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body ($fullReceiptBody | ConvertTo-Json) -WebSession $session
+    $receivedPurchase = $fullReceipt.data.purchase
+    if ($receivedPurchase.status -ne 'received' -or $receivedPurchase.receivedDate -ne '2026-07-16') { throw 'Receive endpoint did not mark the completed order received.' }
 
-    $lots = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lots.json') -Raw | ConvertFrom-Json
+    $lots = Get-Content -LiteralPath (Join-Path $testDataRoot 'lots.json') -Raw | ConvertFrom-Json
     $linkedLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
     if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id -or $linkedLot.costPerCigarSnapshot -ne 10 -or $linkedLot.msrpPerCigarSnapshot -ne 9.5) { throw 'Received purchase line did not create the expected linked lot.' }
 
-    $balances = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $balances = Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json
     $linkedBalance = $balances | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id } | Select-Object -First 1
     if (-not $linkedBalance -or $linkedBalance.quantity -ne 5 -or $linkedBalance.storageSubLocationId -ne $createdSection.data.id) { throw 'Received purchase line did not create the expected lot-location balance.' }
 
-    $events = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $events = Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json
     $linkedEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
     if (-not $linkedEvent -or $linkedEvent.quantity -ne 5 -or $linkedEvent.storageSubLocationId -ne $createdSection.data.id -or $linkedEvent.costPerCigarAtEvent -ne 10 -or $linkedEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Received purchase line did not create the expected purchase-receipt inventory event.' }
+
+    $activeStorageHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($createdHumidor.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_INVENTORY_ASSIGNED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-sub-locations/$($createdSection.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_INVENTORY_ASSIGNED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $activeStorageHashes -Context 'Storage archive with current inventory'
+
+    $archiveDestination = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations" -Method Post -ContentType 'application/json' -Body (@{ name = 'Archived Move Destination'; type = 'Cabinet'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedDestinationHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/move" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; toStorageLocationId = [string]$archiveDestination.data.id; toStorageSubLocationId = ''; notes = 'blocked archived destination' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedDestinationHashes -Context 'Move to archived Humidor'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-locations/$($archiveDestination.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $archiveSection = Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations" -Method Post -ContentType 'application/json' -Body (@{ storageLocationId = [string]$createdHumidor.data.id; name = 'Archived Move Section'; type = 'Drawer'; capacity = '10'; notes = '' } | ConvertTo-Json) -WebSession $session
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)/archive" -Method Patch -WebSession $session | Out-Null
+    $archivedSectionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/move" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; toStorageLocationId = [string]$createdHumidor.data.id; toStorageSubLocationId = [string]$archiveSection.data.id; notes = 'blocked archived section' } -StatusCode 409 -ErrorCode 'RECORD_ARCHIVED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $archivedSectionHashes -Context 'Move to archived section'
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/storage-sub-locations/$($archiveSection.data.id)" -Method Delete -WebSession $session | Out-Null
+
+    $guardedPaths = @(
+        (Join-Path $testDataRoot 'lot-location-balances.json'),
+        (Join-Path $testDataRoot 'inventory-events.json'),
+        (Join-Path $testDataRoot 'counters.json')
+    )
+    $guardedHashesBefore = @{}
+    foreach ($path in $guardedPaths) { $guardedHashesBefore[$path] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
+    $sameLocationMove = @{
+        sourceBalanceId = [string]$linkedBalance.id
+        quantity = '1'
+        toStorageLocationId = [string]$createdHumidor.data.id
+        toStorageSubLocationId = [string]$createdSection.data.id
+        notes = 'must be rejected'
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/move" -Method Post -Session $session -Body $sameLocationMove -StatusCode 400 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    foreach ($path in $guardedPaths) {
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $guardedHashesBefore[$path]) {
+            throw "Same-location move changed protected data: $path"
+        }
+    }
+
+    $quantityEdit = @{
+        purchaseId = [string]$createdPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = [string]$createdSection.data.id
+        quantity = '6'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'blocked quantity edit'
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -Session $session -Body $quantityEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+
+    $locationEdit = @{
+        purchaseId = [string]$createdPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id
+        storageLocationId = ''; storageSubLocationId = ''
+        quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'blocked location edit'
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -Session $session -Body $locationEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+
+    $historyIdentityPaths = @('purchases.json', 'purchase-lines.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json', 'smoking-journal-entries.json', 'counters.json') | ForEach-Object { Join-Path $testDataRoot $_ }
+    $historyIdentityHashes = @{}
+    foreach ($path in $historyIdentityPaths) { $historyIdentityHashes[$path] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
+    $archivedLinkedCigar = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/archive" -Method Patch -WebSession $session
+    $archivedLinkedVendor = Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/archive" -Method Patch -WebSession $session
+    if ($archivedLinkedCigar.data.isActive -ne $false -or $archivedLinkedVendor.data.isActive -ne $false) { throw 'Linked Catalog or Vendor record did not archive in place.' }
+    foreach ($path in $historyIdentityPaths) {
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $historyIdentityHashes[$path]) { throw "Archiving a linked identity changed historical data: $path" }
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+    Invoke-RestMethod "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)/restore" -Method Patch -WebSession $session | Out-Null
+
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/catalog-cigars/$($createdCigar.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/vendors/$($linkedVendor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($createdHumidor.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-sub-locations/$($createdSection.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
+
+    $receivedDateEdit = @{
+        vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = '2026-07-17'
+        status = 'received'; invoiceNumber = 'SMOKE-PO-1'; expectedDate = ''; trackingNumber = ''; shipping = '0'
+        exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = ''
+    }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body $receivedDateEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'pending' } -StatusCode 409 -ErrorCode 'RECEIPT_WORKFLOW_REQUIRED' | Out-Null
+
+    $draftPurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; invoiceNumber = 'DRAFT-DELETE'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10'; notes = '' }
+    $draftPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($draftPurchaseBody | ConvertTo-Json) -WebSession $session
+    $draftLineBody = @{ purchaseId = [string]$draftPurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'unreceived draft' }
+    $draftLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body ($draftLineBody | ConvertTo-Json) -WebSession $session
+    $pendingLineEdit = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($draftLine.data.id)" -Method Put -ContentType 'application/json' -Body (@{ quantity = '2'; storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = [string]$createdSection.data.id } | ConvertTo-Json) -WebSession $session
+    if ($pendingLineEdit.data.quantity -ne 2 -or $pendingLineEdit.data.storageLocationId -ne $createdHumidor.data.id) { throw 'Pending-purchase line structural editing should remain permitted.' }
+    $reassignmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($draftLine.data.id)" -Method Put -Session $session -Body @{ purchaseId = [string]$createdPurchase.data.id } -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $reassignmentHashes -Context 'Rejected received-purchase reassignment'
+    $deletedDraftLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($draftLine.data.id)" -Method Delete -WebSession $session
+    if ($deletedDraftLine.data.id -ne $draftLine.data.id) { throw 'Unreceived draft purchase line deletion should remain permitted.' }
+
+    $incompletePurchaseBody = @{ vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-17'; status = 'pending'; invoiceNumber = 'INCOMPLETE-RECEIVED'; subtotal = '10'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '10'; notes = '' }
+    $incompletePurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body ($incompletePurchaseBody | ConvertTo-Json) -WebSession $session
+    $incompleteLineBody = @{ purchaseId = [string]$incompletePurchase.data.id; catalogCigarId = [string]$createdCigar.data.id; quantity = '1'; purchasePrice = '10'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'incomplete before receipt' }
+    $incompleteLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body ($incompleteLineBody | ConvertTo-Json) -WebSession $session
+    $isolatedPurchasesPath = Join-Path $testDataRoot 'purchases.json'
+    $isolatedPurchases = @(Get-Content -LiteralPath $isolatedPurchasesPath -Raw | ConvertFrom-Json)
+    foreach ($isolatedPurchaseRecord in $isolatedPurchases) {
+        if ($isolatedPurchaseRecord.id -eq $incompletePurchase.data.id) {
+            $isolatedPurchaseRecord.status = 'received'
+            $isolatedPurchaseRecord.receivedDate = '2026-07-17'
+        }
+    }
+    $isolatedPurchases | ConvertTo-Json -Depth 8 -AsArray | Set-Content -LiteralPath $isolatedPurchasesPath -Encoding UTF8
+
+    $incompleteGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $incompleteLineCount = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') -Raw | ConvertFrom-Json)).Count
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -Session $session -Body $incompleteLineBody -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($incompleteLine.data.id)" -Method Put -Session $session -Body @{ quantity = '2' } -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($incompleteLine.data.id)" -Method Put -Session $session -Body @{ storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = [string]$createdSection.data.id } -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($incompleteLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $incompleteGuardHashes -Context 'Rejected incomplete received-line requests'
+    $incompleteLineCountAfter = @((Get-Content -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') -Raw | ConvertFrom-Json)).Count
+    if ($incompleteLineCountAfter -ne $incompleteLineCount) { throw 'Rejected received-line creation or deletion changed the line count.' }
+    $incompleteNotesEdit = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($incompleteLine.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'notes-only edit remains allowed' } | ConvertTo-Json) -WebSession $session
+    if ($incompleteNotesEdit.data.notes -ne 'notes-only edit remains allowed') { throw 'Notes-only editing should remain permitted for an incomplete line on a received purchase.' }
 
     $moveBody = @{ sourceBalanceId = "$($linkedBalance.id)"; quantity = '2'; toStorageLocationId = "$($createdHumidor.data.id)"; toStorageSubLocationId = ''; notes = 'temporary smoke move' } | ConvertTo-Json
     $moveResult = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/move" -Method Post -ContentType 'application/json' -Body $moveBody -WebSession $session
     if ($moveResult.data.quantityMoved -ne 2 -or $moveResult.data.lotId -ne $linkedLot.id) { throw 'Inventory move endpoint did not return the moved lot and quantity.' }
 
-    $balancesAfterMove = Get-Content -LiteralPath (Join-Path $repoRoot 'data\lot-location-balances.json') -Raw | ConvertFrom-Json
+    $balancesAfterMove = Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json
     $movedSource = $balancesAfterMove | Where-Object { $_.id -eq $linkedBalance.id } | Select-Object -First 1
     $movedDestination = $balancesAfterMove | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id -and ($_.storageSubLocationId -eq $null -or $_.storageSubLocationId -eq '') -and $_.id -ne $linkedBalance.id } | Select-Object -First 1
     if (-not $movedSource -or $movedSource.quantity -ne 3) { throw 'Inventory move did not reduce the source balance correctly.' }
     if (-not $movedDestination -or $movedDestination.quantity -ne 2) { throw 'Inventory move did not create the destination balance correctly.' }
+    if (($balancesAfterMove | Where-Object { $_.lotId -eq $linkedLot.id } | Measure-Object -Property quantity -Sum).Sum -ne 5) { throw 'Valid partial move changed total lot quantity.' }
 
-    $eventsAfterMove = Get-Content -LiteralPath (Join-Path $repoRoot 'data\inventory-events.json') -Raw | ConvertFrom-Json
+    $eventsAfterMove = Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json
     $moveEvent = $eventsAfterMove | Where-Object { $_.eventType -eq 'move' -and $_.lotId -eq $linkedLot.id -and $_.quantity -eq 2 } | Select-Object -First 1
     if (-not $moveEvent -or $moveEvent.costPerCigarAtEvent -ne 10 -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the lot cost and MSRP on the move event.' }
+
+    $adjustmentGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '2'; eventDate = '2026-07-18'; notes = 'no variance'; idempotencyKey = 'adjustment-no-change-test-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '3'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = 'stale count'; idempotencyKey = 'adjustment-stale-test-00001' } -StatusCode 409 -ErrorCode 'ADJUSTMENT_STALE_BALANCE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = ''; idempotencyKey = 'adjustment-no-reason-test-01' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2020-01-01'; notes = 'too early'; idempotencyKey = 'adjustment-early-date-test-01' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2099-01-01'; notes = 'future'; idempotencyKey = 'adjustment-future-date-test-1' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $adjustmentGuardHashes -Context 'Rejected physical-count adjustments'
+
+    $decreaseAdjustmentRequest = @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = 'physical count found one fewer'; idempotencyKey = 'adjustment-decrease-test-001' }
+    $decreaseAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($decreaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($decreaseAdjustment.data.quantityChange -ne -1 -or $decreaseAdjustment.data.inventoryEvent.adjustmentDirection -ne 'DECREASE' -or $decreaseAdjustment.data.idempotentReplay -ne $false) { throw 'Downward physical-count adjustment did not return the expected event.' }
+    if ($decreaseAdjustment.data.inventoryEvent.costPerCigarAtEvent -ne 10 -or $decreaseAdjustment.data.inventoryEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Physical-count adjustment did not preserve Lot cost and MSRP snapshots.' }
+    $decreaseLot = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $decreaseBalanceTotal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($decreaseLot.currentQuantity -ne 4 -or $decreaseBalanceTotal.Sum -ne 4) { throw 'Downward physical-count adjustment did not reconcile balance and Lot quantities exactly once.' }
+    $decreaseAdjustmentHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $decreaseReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($decreaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($decreaseReplay.data.idempotentReplay -ne $true -or $decreaseReplay.data.inventoryEventId -ne $decreaseAdjustment.data.inventoryEventId) { throw 'Exact physical-count adjustment replay did not return the original event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $decreaseAdjustmentHashes -Context 'Exact physical-count adjustment replay'
+    $adjustmentConflict = $decreaseAdjustmentRequest.Clone(); $adjustmentConflict.countedQuantity = '0'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body $adjustmentConflict -StatusCode 409 -ErrorCode 'ADJUSTMENT_IDEMPOTENCY_CONFLICT' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $decreaseAdjustmentHashes -Context 'Conflicting physical-count adjustment replay'
+
+    $adjustmentReversalDate = Get-Date -Format 'yyyy-MM-dd'
+    $decreaseReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($decreaseAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct count entry'; idempotencyKey = 'reversal-adjust-down-test-001' } | ConvertTo-Json) -WebSession $session
+    if ($decreaseReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Downward adjustment reversal did not create a compensating event.' }
+
+    $increaseAdjustmentRequest = @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '3'; eventDate = '2026-07-18'; notes = 'physical count found one additional'; idempotencyKey = 'adjustment-increase-test-001' }
+    $increaseAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($increaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
+    if ($increaseAdjustment.data.quantityChange -ne 1 -or $increaseAdjustment.data.inventoryEvent.adjustmentDirection -ne 'INCREASE') { throw 'Upward physical-count adjustment did not return the expected event.' }
+    $increaseReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($increaseAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct additional count entry'; idempotencyKey = 'reversal-adjust-up-test-0001' } | ConvertTo-Json) -WebSession $session
+    if ($increaseReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Upward adjustment reversal did not create a compensating event.' }
+
+    $zeroAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body (@{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '0'; eventDate = '2026-07-18'; notes = 'physical count found no cigars'; idempotencyKey = 'adjustment-zero-count-test-01' } | ConvertTo-Json) -WebSession $session
+    if ($zeroAdjustment.data.quantityChange -ne -2 -or @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.id -eq $movedDestination.id }).Count -ne 0) { throw 'Zero physical count did not remove the depleted balance through the adjustment transaction.' }
+    $zeroReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($zeroAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct zero count entry'; idempotencyKey = 'reversal-adjust-zero-test-01' } | ConvertTo-Json) -WebSession $session
+    if ($zeroReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Zero-count adjustment reversal did not create a compensating event.' }
+    $movedDestination = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id -and ($_.storageSubLocationId -eq $null -or $_.storageSubLocationId -eq '') }) | Select-Object -First 1
+    if (-not $movedDestination -or $movedDestination.quantity -ne 2) { throw 'Zero-count adjustment reversal did not recreate the exact location quantity.' }
+    $balancesAfterAdjustmentReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id })
+    $lotAfterAdjustmentReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    if (($balancesAfterAdjustmentReversals | Measure-Object -Property quantity -Sum).Sum -ne 5 -or $lotAfterAdjustmentReversals.currentQuantity -ne 5) { throw 'Adjustment reversals did not restore the original inventory quantity.' }
+    $rebuildGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $rebuildGuardOut = Join-Path $testRoot 'rebuild-guard.out.log'
+    $rebuildGuardErr = Join-Path $testRoot 'rebuild-guard.err.log'
+    $rebuildGuardProcess = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', (Join-Path $repoRoot 'tools\rebuild-inventory-state.ps1'), '-DataRoot', $testDataRoot) -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $rebuildGuardOut -RedirectStandardError $rebuildGuardErr
+    $rebuildGuardOutput = ((Get-Content -LiteralPath $rebuildGuardOut -Raw) + (Get-Content -LiteralPath $rebuildGuardErr -Raw))
+    if ($rebuildGuardProcess.ExitCode -eq 0 -or $rebuildGuardOutput -notmatch 'cannot preserve REVERSAL or INVENTORY_ADJUSTMENT') { throw 'Legacy rebuild utility did not stop before replacing the corrected inventory ledger.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $rebuildGuardHashes -Context 'Rebuild correction-ledger safety stop'
+
+    $historyPaths = @('lots.json', 'lot-location-balances.json', 'inventory-events.json', 'counters.json') | ForEach-Object { Join-Path $testDataRoot $_ }
+    $historyHashesBefore = @{}
+    foreach ($path in $historyPaths) { $historyHashesBefore[$path] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
+    $safeHeaderEdit = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'safe header note' } | ConvertTo-Json) -WebSession $session
+    if ($safeHeaderEdit.data.notes -ne 'safe header note') { throw 'Safe received-purchase notes-only edit was not preserved.' }
+    $safeLineEdit = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Put -ContentType 'application/json' -Body (@{ notes = 'safe line note' } | ConvertTo-Json) -WebSession $session
+    if ($safeLineEdit.data.notes -ne 'safe line note') { throw 'Safe received-line notes-only edit was not preserved.' }
+    foreach ($path in $historyPaths) {
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $historyHashesBefore[$path]) {
+            throw "Safe notes-only edit reconstructed received inventory history: $path"
+        }
+    }
+
+    $removalGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $earlyRemoval = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2020-01-01'; notes = 'too early'; idempotencyKey = 'removal-smoke-test-early-0001' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $earlyRemoval -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    $futureRemoval = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2099-01-01'; notes = 'future'; idempotencyKey = 'removal-smoke-test-future-001' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $futureRemoval -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $removalGuardHashes -Context 'Rejected removal dates'
+
+    $removeRequest = @{ sourceBalanceId = [string]$movedDestination.id; quantity = '1'; eventType = 'SMOKED'; eventDate = '2026-07-17'; notes = 'journal guard smoke test'; idempotencyKey = 'removal-smoke-test-valid-0001' }
+    $removeBody = $removeRequest | ConvertTo-Json
+    $removed = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
+    if ($removed.data.idempotentReplay -ne $false -or $removed.data.inventoryEvent.eventDate -ne '2026-07-17') { throw 'Removal did not preserve the requested historical event date.' }
+    if ($removed.data.inventoryEvent.fromStorageLocationId -ne $createdHumidor.data.id -or $null -ne $removed.data.inventoryEvent.fromStorageSubLocationId) { throw 'Removal event did not preserve its exact General source location.' }
+    $firstRemovalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $replayedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
+    if ($replayedRemoval.data.idempotentReplay -ne $true -or $replayedRemoval.data.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Exact removal replay did not return the original event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstRemovalHashes -Context 'Exact removal replay'
+    $conflictingRemoval = $removeRequest.Clone()
+    $conflictingRemoval.quantity = '2'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/remove" -Method Post -Session $session -Body $conflictingRemoval -StatusCode 409 -ErrorCode 'REMOVAL_IDEMPOTENCY_CONFLICT' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $firstRemovalHashes -Context 'Conflicting removal replay'
+
+    $giftRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'GIFTED'; eventDate = '2026-07-18'; notes = 'gift workflow test'; idempotencyKey = 'removal-gift-test-valid-00001' }
+    $giftedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($giftRemoval | ConvertTo-Json) -WebSession $session
+    $discardRemoval = @{ sourceBalanceId = [string]$linkedBalance.id; quantity = '1'; eventType = 'DISCARDED'; eventDate = '2026-07-18'; notes = 'discard workflow test'; idempotencyKey = 'removal-discard-test-valid-01' }
+    $discardedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body ($discardRemoval | ConvertTo-Json) -WebSession $session
+    if ($giftedRemoval.data.eventType -ne 'GIFTED' -or $discardedRemoval.data.eventType -ne 'DISCARDED') { throw 'Gift or discard removal did not create the requested event type.' }
+    $removalEvents = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id -and $_.eventType -in @('SMOKED', 'GIFTED', 'DISCARDED') })
+    if (($removalEvents | Measure-Object -Property quantity -Sum).Sum -ne 3 -or @($removalEvents | Where-Object { $_.eventType -eq 'DISCARDED' }).Count -ne 1) { throw 'Smoke, gift, and discard events did not reconcile to three exact removals.' }
+    $lotAfterAllRemovals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $balanceAfterAllRemovals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($lotAfterAllRemovals.currentQuantity -ne 2 -or $balanceAfterAllRemovals.Sum -ne 2) { throw 'Removal workflows did not decrease inventory exactly once per cigar.' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 5; notes = 'not smoked' } -StatusCode 409 -ErrorCode 'JOURNAL_EVENT_NOT_SMOKED' | Out-Null
+    $lotAfterRemoval = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    $lotBalanceQuantity = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
+    if ($lotAfterRemoval.currentQuantity -ne $lotBalanceQuantity.Sum) { throw 'Lot currentQuantity did not reconcile to positive balances after removal.' }
+    $invalidJournalDecisionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 8; notes = 'must roll back'; buyAgainStatus = 'ALWAYS' } -StatusCode 422 -ErrorCode 'BUY_AGAIN_VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $invalidJournalDecisionHashes -Context 'Rejected Smoking Journal Buy Again decision'
+    $journalBody = @{ rating = 8; notes = 'must remain linked'; buyAgainStatus = 'YES'; buyAgainNotes = 'Excellent construction and flavor' } | ConvertTo-Json
+    $journal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body $journalBody -WebSession $session
+    if ($journal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Smoking Journal entry did not link to the smoked event.' }
+    if ($journal.data.inventoryEvent.sourceLocation.storageLocationId -ne $createdHumidor.data.id -or $journal.data.inventoryEvent.sourceLocation.storageSubLocationName -ne 'General') { throw 'Smoking Journal did not retain the smoked event General source location.' }
+    if ($journal.data.inventoryEvent.catalogCigar.buyAgainStatus -ne 'YES' -or $journal.data.inventoryEvent.catalogCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Smoking Journal did not atomically update the Catalog Buy Again decision.' }
+    $catalogAfterJournal = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Get -WebSession $session
+    $updatedJournalCigar = @($catalogAfterJournal.data.records | Where-Object { $_.id -eq $createdCigar.data.id }) | Select-Object -First 1
+    if ($updatedJournalCigar.buyAgainStatus -ne 'YES' -or $updatedJournalCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Catalog did not retain the Buy Again decision saved from Smoking Journal.' }
+    $journalRecords = Invoke-RestMethod "http://127.0.0.1:$port/api/records/smoking-journal-entries" -Method Get -WebSession $session
+    if (-not ($journalRecords.data.records | Where-Object { $_.inventoryEventId -eq $removed.data.inventoryEventId })) { throw 'Smoking Journal entry was not available to the read-only report collection.' }
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
+    $journalAfterBlockedDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
+    if ($journalAfterBlockedDelete.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Blocked purchase-line deletion orphaned or removed its Smoking Journal entry.' }
+
+    $currentLocalDate = Get-Date -Format 'yyyy-MM-dd'
+    $blockedReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'destination quantity unavailable'; idempotencyKey = 'reversal-move-blocked-quantity-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'receipt quantity unavailable'; idempotencyKey = 'reversal-receipt-blocked-qty-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-16'; notes = 'too early'; idempotencyKey = 'reversal-smoke-early-date-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = ''; idempotencyKey = 'reversal-smoke-no-reason-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $blockedReversalHashes -Context 'Rejected unavailable or invalid reversals'
+
+    $smokeReversalBody = @{ eventDate = $currentLocalDate; notes = 'correct mistaken smoke'; idempotencyKey = 'reversal-smoke-test-valid-001' }
+    $smokeReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body ($smokeReversalBody | ConvertTo-Json) -WebSession $session
+    if ($smokeReversal.data.reversedEventType -ne 'SMOKED' -or $smokeReversal.data.quantityReversed -ne 1 -or $smokeReversal.data.idempotentReplay -ne $false) { throw 'Smoked-event reversal did not return the expected compensating event.' }
+    $smokeReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    $smokeReversalReplay = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body ($smokeReversalBody | ConvertTo-Json) -WebSession $session
+    if ($smokeReversalReplay.data.inventoryEventId -ne $smokeReversal.data.inventoryEventId -or $smokeReversalReplay.data.idempotentReplay -ne $true) { throw 'Exact reversal replay did not return the original compensating event.' }
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Exact reversal replay'
+    $reversalConflict = $smokeReversalBody.Clone(); $reversalConflict.notes = 'different reversal request'
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body $reversalConflict -StatusCode 409 -ErrorCode 'REVERSAL_IDEMPOTENCY_CONFLICT' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'second reversal'; idempotencyKey = 'reversal-smoke-second-key-002' } -StatusCode 409 -ErrorCode 'EVENT_ALREADY_REVERSED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Rejected duplicate reversal'
+    $journalAfterReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
+    if ($journalAfterReversal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Reversing a smoked event deleted or orphaned its Smoking Journal history.' }
+
+    $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken discard'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    if ($giftReversal.data.reversedEventType -ne 'GIFTED' -or $discardReversal.data.reversedEventType -ne 'DISCARDED') { throw 'Gift or discard reversal did not preserve the reversed event type.' }
+
+    $moveReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken move'; idempotencyKey = 'reversal-move-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    if ($moveReversal.data.reversedEventType -ne 'MOVE') { throw 'Move reversal did not create a compensating event.' }
+    $balancesAfterOperationalReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id })
+    if (($balancesAfterOperationalReversals | Measure-Object -Property quantity -Sum).Sum -ne 5 -or $balancesAfterOperationalReversals.Count -ne 1 -or $balancesAfterOperationalReversals[0].storageSubLocationId -ne $createdSection.data.id) { throw 'Removal and move reversals did not restore the exact original inventory state.' }
+
+    $receiptReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'replace incorrect receipt'; idempotencyKey = 'reversal-receipt-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    if ($receiptReversal.data.reversedEventType -ne 'PURCHASE_RECEIPT') { throw 'Receipt reversal did not create a compensating event.' }
+    $purchaseAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchases.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdPurchase.data.id } | Select-Object -First 1
+    $lineAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdLine.data.id } | Select-Object -First 1
+    $lotAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
+    if ($purchaseAfterReceiptReversal.status -ne 'pending' -or $lineAfterReceiptReversal.receivedQuantity -ne 0 -or $lotAfterReceiptReversal.initialQuantity -ne 0 -or $lotAfterReceiptReversal.currentQuantity -ne 0) { throw 'Receipt reversal did not derive pending status and zero effective receipt/current quantities.' }
+    if (@((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }).Count -ne 0) { throw 'Receipt reversal left a positive balance for the fully reversed Lot.' }
+
+    $correctedReceiptOne = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body (@{ quantity = '4'; receivedDate = '2026-07-17'; storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = ''; idempotencyKey = 'receipt-correction-replace-0001'; notes = 'corrected quantity date and location' } | ConvertTo-Json) -WebSession $session
+    if ($correctedReceiptOne.data.purchase.status -ne 'partially-received' -or $correctedReceiptOne.data.receivedQuantity -ne 4) { throw 'Corrected replacement receipt did not derive partial receipt state.' }
+    $correctedReceiptTwo = Invoke-RestMethod "http://127.0.0.1:$port/api/purchase-lines/$($createdLine.data.id)/receive" -Method Post -ContentType 'application/json' -Body (@{ quantity = '1'; receivedDate = '2026-07-18'; storageLocationId = [string]$createdHumidor.data.id; storageSubLocationId = [string]$createdSection.data.id; idempotencyKey = 'receipt-correction-replace-0002'; notes = 'complete corrected receipt' } | ConvertTo-Json) -WebSession $session
+    if ($correctedReceiptTwo.data.purchase.status -ne 'received' -or $correctedReceiptTwo.data.receivedQuantity -ne 5 -or $correctedReceiptTwo.data.lot.currentQuantity -ne 5) { throw 'Corrected replacement receipts did not restore received status and inventory.' }
+    $journalAfterReceiptCorrection = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
+    if ($journalAfterReceiptCorrection.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Receipt correction damaged preserved Smoking Journal history.' }
+    $correctedIntegrityOutput = & (Join-Path $repoRoot 'tools\check-data-integrity.ps1') -DataRoot $testDataRoot 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or $correctedIntegrityOutput -notmatch '\[SUMMARY\] Errors=0 Warnings=0') {
+        Write-Host $correctedIntegrityOutput
+        throw 'Integrity checker did not reconcile the effective event ledger after reversals and corrected replacement receipts.'
+    }
+
+    $integrityFixtureRoot = Join-Path $testRoot 'integrity-defects'
+    [System.IO.Directory]::CreateDirectory($integrityFixtureRoot) | Out-Null
+    $fixtureCollections = @{
+        'catalog-cigars' = @(@{ id = 1; manufacturer = 'Fixture'; series = 'One' }, @{ id = 1; manufacturer = 'Fixture'; series = 'Duplicate' })
+        'vendors' = @(@{ id = 1; name = 'Fixture Vendor' })
+        'storage-locations' = @(@{ id = 1; name = 'Fixture Humidor' })
+        'storage-sub-locations' = @(@{ id = 1; storageLocationId = 1; name = 'Fixture Section' })
+        'purchases' = @(
+            @{ id = 1; vendorId = 999; subtotal = $null; shipping = 0; exciseTax = 0; salesTax = 0; discount = -1; totalPaid = 1 },
+            @{ id = 2; vendorId = 1; subtotal = 10; shipping = 0; exciseTax = 0; salesTax = 0; discount = 0; totalPaid = 5 }
+        )
+        'purchase-lines' = @(
+            @{ id = 1; purchaseId = 1; catalogCigarId = 999; storageLocationId = 999; storageSubLocationId = 999; quantity = 1 },
+            @{ id = 2; purchaseId = 2; catalogCigarId = 1; storageLocationId = 1; storageSubLocationId = 1; quantity = 5 }
+        )
+        'lots' = @(@{ id = 1; purchaseLineId = 2; purchaseId = 2; catalogCigarId = 1; initialQuantity = 5; currentQuantity = 99 })
+        'lot-location-balances' = @(
+            @{ id = 1; lotId = 1; purchaseLineId = 2; storageLocationId = 0; storageSubLocationId = $null; quantity = 2 },
+            @{ id = 2; lotId = 1; purchaseLineId = 2; storageLocationId = 1; storageSubLocationId = 1; quantity = 1 }
+        )
+        'inventory-events' = @(
+            @{ id = 1; eventType = 'purchase-receipt'; lotId = 1; catalogCigarId = 1; storageLocationId = 1; quantity = 5 },
+            @{ id = 2; eventType = 'SMOKED'; lotId = 1; catalogCigarId = 999; fromStorageLocationId = 1; quantity = 1 },
+            @{ id = 3; eventType = 'GIFTED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
+            @{ id = 4; eventType = 'DISCARDED'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; quantity = 1 },
+            @{ id = 5; eventType = 'move'; lotId = 1; catalogCigarId = 1; fromStorageLocationId = 1; fromStorageSubLocationId = 1; toStorageLocationId = 1; toStorageSubLocationId = 1; quantity = 1 },
+            @{ id = 6; eventType = 'REVERSAL'; reversesInventoryEventId = 999; lotId = 1; catalogCigarId = 1; quantity = 1 },
+            @{ id = 7; eventType = 'INVENTORY_ADJUSTMENT'; lotId = 1; catalogCigarId = 1; storageLocationId = 1; quantity = 1; quantityChange = 1; balanceQuantityBefore = 2; balanceQuantityAfter = 3; adjustmentDirection = 'INVALID' }
+        )
+        'smoking-journal-entries' = @(@{ id = 1; inventoryEventId = 999; rating = 8 })
+    }
+    foreach ($entry in $fixtureCollections.GetEnumerator()) {
+        $entry.Value | ConvertTo-Json -Depth 8 -AsArray | Set-Content -LiteralPath (Join-Path $integrityFixtureRoot ($entry.Key + '.json')) -Encoding UTF8
+    }
+    $fixtureCounters = @{
+        'catalog-cigars' = 1; 'vendors' = 1; 'storage-locations' = 1; 'storage-sub-locations' = 1
+        'purchases' = 1; 'purchase-lines' = 1; 'lots' = 1; 'lot-location-balances' = 1
+        'inventory-events' = 1; 'smoking-journal-entries' = 1
+    }
+    $fixtureCounters | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $integrityFixtureRoot 'counters.json') -Encoding UTF8
+    $fixtureHashesBefore = @{}
+    Get-ChildItem -LiteralPath $integrityFixtureRoot -File | ForEach-Object { $fixtureHashesBefore[$_.Name] = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash }
+    $powerShellExe = (Get-Process -Id $PID).Path
+    $integrityChecker = Join-Path $repoRoot 'tools\check-data-integrity.ps1'
+    $integrityOutLog = Join-Path $testRoot 'integrity.out.log'
+    $integrityErrLog = Join-Path $testRoot 'integrity.err.log'
+    $integrityProcess = Start-Process -FilePath $powerShellExe -ArgumentList @('-NoProfile', '-File', $integrityChecker, '-DataRoot', $integrityFixtureRoot) -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $integrityOutLog -RedirectStandardError $integrityErrLog
+    $integrityOutput = ((Get-Content -LiteralPath $integrityOutLog -Raw) + (Get-Content -LiteralPath $integrityErrLog -Raw))
+    if ($integrityProcess.ExitCode -eq 0) { throw 'Integrity checker should return nonzero for critical fixture defects.' }
+    foreach ($code in @(
+        'POSITIVE_BALANCE_QUANTITY', 'RECEIPT_QUANTITY', 'SMOKED_QUANTITY', 'GIFTED_QUANTITY', 'DISCARDED_QUANTITY',
+        'EXPECTED_CURRENT_QUANTITY', 'DISTINCT_LOT_COUNT', 'SPLIT_LOT_COUNT', 'LOT_CURRENT_MISMATCH', 'MISSING_CATALOG',
+        'MISSING_VENDOR', 'MISSING_HUMIDOR', 'MISSING_SECTION', 'BALANCE_LOCATION_ZERO', 'ORPHAN_JOURNAL', 'DUPLICATE_ID',
+        'COUNTER_NOT_AHEAD', 'SAME_LOCATION_MOVE', 'PURCHASE_TOTAL_MISMATCH', 'NEGATIVE_DISCOUNT', 'MISSING_SUBTOTAL',
+        'REVERSAL_TARGET_MISSING', 'ADJUSTMENT_NET_QUANTITY', 'INVALID_INVENTORY_ADJUSTMENT'
+    )) {
+        if ($integrityOutput -notmatch [regex]::Escape("[$code]")) {
+            Write-Host $integrityOutput
+            throw "Integrity checker did not report fixture defect code: $code"
+        }
+    }
+    Get-ChildItem -LiteralPath $integrityFixtureRoot -File | ForEach-Object {
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash -ne $fixtureHashesBefore[$_.Name]) {
+            throw "Integrity checker wrote to fixture file: $($_.Name)"
+        }
+    }
     $pageAuditBody = @{ page = 'Dashboard'; action = 'view' } | ConvertTo-Json
     $pageAudit = Invoke-RestMethod "http://127.0.0.1:$port/api/audit/page" -Method Post -ContentType 'application/json' -Body $pageAuditBody -WebSession $session
     if ($pageAudit.data.logged -ne $true) { throw 'Page audit endpoint did not confirm logging.' }
@@ -399,24 +1158,29 @@ try {
 
     $logout = Invoke-RestMethod "http://127.0.0.1:$port/api/logout" -Method Post -WebSession $session
     if ($logout.data.authenticated -ne $false) { throw 'Logout did not clear the authenticated session.' }
+} catch {
+    $testFailure = $_
+    Write-Host 'Flat-file smoke test failed. PHP diagnostics follow.' -ForegroundColor Red
+    if (Test-Path -LiteralPath $serverOutLog) { Get-Content -LiteralPath $serverOutLog | Write-Host }
+    if (Test-Path -LiteralPath $serverErrLog) { Get-Content -LiteralPath $serverErrLog | Write-Host }
 } finally {
     if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-    if ($authUsersHadFile) {
-        Copy-Item -LiteralPath $authUsersBackupPath -Destination $authUsersPath -Force
-        if ([System.IO.File]::Exists($authUsersBackupPath)) { [System.IO.File]::Delete($authUsersBackupPath) }
-    } else {
-        Remove-Item -LiteralPath $authUsersPath -Force -ErrorAction SilentlyContinue
-    }
-    foreach ($backup in $runtimeBackups.Values) {
-        if ($backup.HadFile) {
-            Copy-Item -LiteralPath $backup.BackupPath -Destination $backup.Path -Force
-            if ([System.IO.File]::Exists($backup.BackupPath)) { [System.IO.File]::Delete($backup.BackupPath) }
+    $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
+    try {
+        Assert-RepositoryDataHashes -Expected $sourceDataHashes
+    } catch {
+        if ($null -eq $testFailure) {
+            $testFailure = $_
         } else {
-            Remove-Item -LiteralPath $backup.Path -Force -ErrorAction SilentlyContinue
+            Write-Host $_.Exception.Message -ForegroundColor Red
         }
     }
-    Remove-Item -LiteralPath $auditLogPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $testRootFull -PathType Container) {
+        Remove-Item -LiteralPath $testRootFull -Recurse -Force
+    }
 }
+
+if ($null -ne $testFailure) { throw $testFailure }
 
 Write-Host 'Flat-file smoke test passed.' -ForegroundColor Green
 

@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.0.0
+Revision: 1.4.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-20 09:30 ET
 -->
 
 # HumidorHQ Data Model
@@ -30,8 +30,11 @@ Catalog fields for Version 1:
 - Country
 - Strength
 - MSRP
+- Buy Again status: `Yes`, `Maybe`, `No`, or an omitted/null value meaning `Not Evaluated`
+- Optional Buy Again decision notes
 
 Catalog records do not store quantity, purchase price, humidor location, or consumption history.
+Buy Again is Catalog-level metadata so one decision follows the cigar across Lots and purchases. It can be edited from Catalog or saved together with a Smoking Journal entry. A Journal save that includes a Buy Again decision updates the Journal and Catalog inside the same runtime-data transaction.
 
 ## Purchases
 
@@ -56,10 +59,14 @@ Each purchase line references one catalog cigar.
 
 Purchase line fields may include:
 - Catalog cigar
-- Quantity
+- Ordered quantity
+- Received quantity cache, reconciled to purchase-receipt events
+- First, latest, and completion receipt dates
 - Unit price
 - Line subtotal
 - MSRP per cigar
+
+Each accepted receipt creates one immutable purchase-receipt event. A required idempotency key makes an exact request retry return the original event and prevents duplicate quantity, Lot, balance, counter, or audit changes. Multiple receipts for one line accumulate into the line's single Lot and may create or increment different exact location balances.
 
 Shipping, excise tax, sales tax, and discounts should be allocated across purchase lines based on each line's share of the purchase subtotal.
 
@@ -92,6 +99,8 @@ Lots preserve:
 
 Lots can be split across humidors while retaining a link to the original purchase line.
 
+Inventory Aging is a read-only projection of positive Lot/location balances. It ages each balance from the Lot received-date snapshot, counts a split Lot once in distinct-Lot totals, weights average age by current quantity, and calculates value from immutable per-cigar snapshots in integer cents. Missing dates remain in an Unknown bucket, future dates are flagged separately, and a monetary total remains unknown unless every included cigar has a known value.
+
 ## Events
 
 Events record what happens to cigars over time.
@@ -104,9 +113,13 @@ Initial event types:
 Consumption reasons:
 - Smoked
 - Gifted / Shared
-- Damaged
+- Discarded
 
 Events should drive calculated inventory instead of manually maintaining totals.
+
+Physical count corrections use `INVENTORY_ADJUSTMENT` events. Each event stores a positive absolute `quantity`, signed `quantityChange`, `INCREASE` or `DECREASE` direction, exact balance quantity before and after the count, Humidor/section, count date, required reason, idempotency key, and immutable cost/MSRP snapshots. The balance and Lot cache change in the same serialized transaction. A stale expected balance or a count with no variance is rejected before mutation.
+
+Corrections are append-only. A `REVERSAL` InventoryEvent references exactly one prior purchase receipt, move, smoke, gift, discard, or inventory adjustment through `reversesInventoryEventId`. The original event remains immutable. Effective receipt, removal, and adjustment calculations exclude an event after one valid reversal, while Activity History retains both records. A reversal copies the target cost/MSRP snapshots, reverses the complete target quantity, and never deletes a Lot or Smoking Journal entry. Incorrect receipts are corrected by reversing the receipt and entering replacement receipt facts through Receive and Store.
 
 ## Smoking Journal
 
@@ -127,7 +140,11 @@ SmokingJournalEntry stores only:
 - Optional journal notes
 - Created and updated timestamps
 
+The Smoking Journal form can also update the linked Catalog cigar's Buy Again status and decision notes. Those fields remain on the Catalog record and are not duplicated in `smoking-journal-entries.json`.
+
 Date Smoked is not duplicated in the Journal table. Journal notes are separate from InventoryEvent removal notes. Deleting Journal details does not restore inventory or delete the underlying Smoked event.
+
+Catalog presents Journal history by joining each entry to its immutable Smoked InventoryEvent and linked Lot. Reversed smoke entries remain visible as preserved history but are excluded from effective smoked quantity, average rating, and latest-smoke summaries.
 
 Version 1 does not include pairing, images, photos, uploads, or image storage.
 

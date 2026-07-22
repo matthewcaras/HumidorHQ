@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.5.5
+Revision: 1.4.49
 Description: HTML entry point for the HumidorHQ flat-file app.
-Modified Date: 2026-07-17 9:03 AM ET
+Modified Date: 2026-07-22 00:40 ET
 -->
 
 <!doctype html>
@@ -12,24 +12,34 @@ Modified Date: 2026-07-17 9:03 AM ET
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="HumidorHQ flat-file cigar collection manager">
     <title>HumidorHQ</title>
-    <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.0">
-    <link rel="stylesheet" href="public/assets/css/app.css?v=1.6.2">
+    <link rel="icon" type="image/svg+xml" href="public/favicon.svg?v=1.1.1">
+    <link rel="apple-touch-icon" sizes="180x180" href="public/apple-touch-icon.png?v=1.0.0">
+    <link rel="stylesheet" href="public/assets/css/app.css?v=1.8.4">
   </head>
   <body class="auth-pending">
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand">
-          <h1>HumidorHQ</h1>
-          <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-expanded="true" aria-controls="app-nav sidebar-account project-meta" title="Close Menu">Close Menu</button>
+          <div class="brand-row">
+            <h1>HumidorHQ</h1>
+            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="app-nav" aria-expanded="true" title="Close Menu">
+              <span aria-hidden="true" data-sidebar-toggle-icon>&lsaquo;</span>
+              <span class="sidebar-toggle-label" data-sidebar-toggle-label>Close Menu</span>
+            </button>
+          </div>
+        </div>
+        <div class="mobile-primary-nav" aria-label="Mobile primary pages">
+          <button type="button" data-mobile-primary-page="Dashboard">Dashboard</button>
+          <button type="button" data-mobile-primary-page="Collection">Collection</button>
         </div>
         <nav class="nav" id="app-nav"></nav>
+        <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
       </aside>
-      <div class="sidebar-footer"><div class="sidebar-account" id="sidebar-account" hidden></div><div class="project-meta" id="project-meta">Rev loading...</div></div>
 
       <main class="main-content">
         <section class="hero-panel" aria-labelledby="page-title">
           <div class="page-heading-copy">
-            <h2 id="page-title">Sign In</h2>
+            <h2 id="page-title">Dashboard</h2>
             <p id="page-subtitle" class="muted" hidden></p>
           </div>
           <div id="page-actions" class="page-actions"></div>
@@ -39,7 +49,7 @@ Modified Date: 2026-07-17 9:03 AM ET
       </main>
     </div>
 
-    <script src="public/assets/js/app.js?v=1.11.3" defer></script>
+    <script src="public/assets/js/app.js?v=1.24.14" defer></script>
   </body>
 </html>
 

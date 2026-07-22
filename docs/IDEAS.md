@@ -1,8 +1,8 @@
 <!--
 Filename: IDEAS.md
-Revision: 1.0.0
+Revision: 1.0.1
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-15 00:13 ET
+Modified Date: 2026-07-19 18:00 ET
 -->
 
 # HumidorHQ Ideas
@@ -48,14 +48,14 @@ This document is a living backlog of ideas for HumidorHQ. It is not a roadmap or
 - Preserve vendor, manufacturer, purchase quantity, cost, MSRP, and savings history.
 - Complete a physical inventory after importing the historical purchases.
 - Treat the difference between historically purchased quantities and current quantities as historical consumption.
-- Do not require the user to reconstruct whether each historical cigar was smoked, gifted, or damaged.
+- Do not require the user to reconstruct whether each historical cigar was smoked, gifted, or discarded.
 - Establish useful lifetime history while arriving at an accurate current collection.
 
 ## Consumption
 
 - Smoked
 - Gifted / Shared
-- Damaged
+- Discarded
 - Lifetime consumption statistics
 
 ## Dashboard

@@ -1,14 +1,14 @@
 # Filename: audit-log.jsonl.placeholder
-# Revision: 1.0.0
-# Description: Tracked placeholder documenting an ignored runtime file.
-# Modified Date: 2026-07-15 00:13 ET
+# Revision: 1.2.0
+# Description: Marker documenting the ignored runtime audit log.
+# Modified Date: 2026-07-19 10:00 ET
 
-This placeholder marks the intentionally ignored runtime audit file:
+This placeholder documents the default runtime audit file:
 
   data/audit-log.jsonl
 
-The PHP API creates this file automatically as users sign in, view pages, and perform actions.
+The application creates and appends this file under the selected runtime data root.
 
-Do not commit the live audit log. It may contain usernames and activity history.
+Do not commit the live audit log. `HUMIDORHQ_DATA_ROOT` may optionally select another runtime directory.
 
 

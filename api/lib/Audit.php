@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: Audit.php
- * Revision: 1.1.0
+ * Revision: 1.2.0
  * Description: Audit logging helpers for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-15 11:18 ET
+ * Modified Date: 2026-07-17 17:30 ET
  */
 
 function audit_log_path(): string
@@ -44,6 +44,14 @@ function audit_record(string $page, string $action, array $details = []): void
         $record['details'] = $details;
     }
 
+    if (data_transaction_queue_audit($record)) {
+        return;
+    }
+    write_audit_record($record);
+}
+
+function write_audit_record(array $record): void
+{
     $json = json_encode($record, JSON_UNESCAPED_SLASHES);
     if (!is_string($json)) {
         throw new ApiError('AUDIT_WRITE_FAILED', 'Audit record could not be encoded.', 500);

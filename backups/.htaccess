@@ -1,0 +1,11 @@
+# Filename: .htaccess
+# Revision: 1.0.0
+# Description: Blocks direct browser access to HumidorHQ backup bundles.
+# Modified Date: 2026-07-19 13:30 ET
+
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>
