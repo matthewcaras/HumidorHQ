@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.17
+ * Revision: 1.24.18
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-22 10:00 ET
+ * Modified Date: 2026-07-22 12:00 ET
  */
 
 const API_BASE_URL = 'api'
@@ -5924,40 +5924,6 @@ function buyAgainInsights() {
     .filter((item) => !normalizeBuyAgainStatus(item.cigar.buyAgainStatus) && item.averageRating !== null && item.averageRating >= 8)
     .sort((left, right) => right.averageRating - left.averageRating || cigarName(left.cigar).localeCompare(cigarName(right.cigar)))
   return { counts, highlyRatedNotEvaluated }
-}
-
-function renderBuyAgainReport(view) {
-  const insights = buyAgainInsights()
-  const panel = document.createElement('section')
-  panel.className = 'dashboard-panel report-activity-panel'
-  panel.innerHTML = '<div class="section-heading report-title"><div><h3>Buy Again</h3><p class="muted">Track purchase decisions and identify highly rated cigars that still need evaluation.</p></div></div>'
-  const metrics = document.createElement('div')
-  metrics.className = 'metric-grid compact report-count-grid'
-  metrics.append(
-    metricCard('Yes', insights.counts.YES, ''),
-    metricCard('Maybe', insights.counts.MAYBE, ''),
-    metricCard('No', insights.counts.NO, ''),
-    metricCard('Not Evaluated', insights.counts.NOT_EVALUATED, ''),
-  )
-  panel.append(metrics)
-  if (insights.highlyRatedNotEvaluated.length) {
-    const tableWrap = document.createElement('div')
-    tableWrap.className = 'table-scroll compact-top-gap'
-    tableWrap.innerHTML = `<table class="data-table"><thead><tr><th>Highly Rated, Not Evaluated</th><th>Average Rating</th><th>Ratings</th><th>On Hand</th></tr></thead><tbody>${insights.highlyRatedNotEvaluated.map((item) => `<tr class="clickable-record-row" tabindex="0" data-buy-again-cigar-id="${Number(item.cigar.id)}"><td>${escapeHtml(cigarName(item.cigar))}</td><td>${item.averageRating.toFixed(1)}</td><td>${formatCount(item.ratingCount)}</td><td>${formatCount(onHandQuantityForCatalog(item.cigar.id))}</td></tr>`).join('')}</tbody></table>`
-    panel.append(tableWrap)
-    tableWrap.querySelectorAll('tr[data-buy-again-cigar-id]').forEach((rowElement) => {
-      const cigarId = Number(rowElement.dataset.buyAgainCigarId || 0)
-      if (cigarId <= 0) return
-      rowElement.addEventListener('click', () => openCatalogForBuyAgainCigar(cigarId))
-      rowElement.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          openCatalogForBuyAgainCigar(cigarId)
-        }
-      })
-    })
-  }
-  view.append(panel)
 }
 
 function renderRatingBreakdownReport(view) {
