@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.16.0
+ * Revision: 1.16.1
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-19 18:00 ET
+ * Modified Date: 2026-07-22 12:00 ET
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -1662,16 +1662,24 @@ try {
         json_success(list_runtime_backups());
     }
     if ($path === '/backups' && $method === 'POST') {
+        require_auth();
+        require_csrf();
         json_success(create_runtime_backup(), 201);
     }
     if ($path === '/backups/import' && $method === 'POST') {
+        require_auth();
+        require_csrf();
         json_success(import_runtime_backup(request_json()), 201);
     }
     if ($path === '/backups/preview' && $method === 'POST') {
+        require_auth();
+        require_csrf();
         $input = request_json();
         json_success(preview_runtime_restore(backup_safe_filename((string) ($input['filename'] ?? ''))));
     }
     if ($path === '/backups/restore' && $method === 'POST') {
+        require_auth();
+        require_csrf();
         $input = request_json();
         json_success(restore_runtime_backup(backup_safe_filename((string) ($input['filename'] ?? '')), $input));
     }

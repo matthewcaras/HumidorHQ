@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.22
+Revision: 1.30.23
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 10:00 ET
+Modified Date: 2026-07-22 12:00 ET
 -->
 
 # Changelog
@@ -28,6 +28,15 @@ Changed by: Matt and Jason
 - Added Collection drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
 - Added local-data/ Git ignore rules that keep the folder path visible through a committed `.placeholder` file while ignoring all machine-local contents.
 - Documented the local-data/.placeholder pattern in the README so empty local working folders can stay present without tracking runtime files.
+
+## 1.30.23 - 2026-07-22
+
+Changed by: Matt
+
+- Required authentication and CSRF protection on all direct backup create/import/preview/restore API routes.
+- Promoted lot cache and purchase-header integrity mismatches to nonzero integrity-check failures.
+- Made the smoke harness validate runnable PHP executables before use and invoke PHP through redirected subprocesses.
+- Removed the now-unused Buy Again report renderer from the browser app.
 
 ## 1.30.22 - 2026-07-22
 

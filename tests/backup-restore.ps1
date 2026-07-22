@@ -1,11 +1,11 @@
 # Filename: backup-restore.ps1
-# Revision : 1.0.0
+# Revision : 1.0.1
 # Description : Rehearses guarded runtime backup, import, preview, and restore in a temporary app copy.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-19
-# Modified Date : 2026-07-19
+# Modified Date : 2026-07-22
 # Changelog :
-# 1.0.0 initial release
+# 1.0.1 verify authenticated backup route access and exact route protection
 
 [CmdletBinding()]
 param()
@@ -16,6 +16,10 @@ $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('humidorhq-backup-test-
 $tempApp = Join-Path $tempRoot 'app'
 $tempData = Join-Path $tempApp 'data'
 $serverProcess = $null
+$php = (Get-Command php -ErrorAction SilentlyContinue).Source
+if ([string]::IsNullOrWhiteSpace($php)) {
+    throw 'php.exe was not found on PATH.'
+}
 
 function Get-SourceRuntimeHashes {
     $paths = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'data') -File -ErrorAction SilentlyContinue |
@@ -48,7 +52,19 @@ try {
             Copy-Item -LiteralPath $seed.FullName -Destination (Join-Path $tempData $seed.Name)
         }
     }
-    $passwordHash = & php -r "echo password_hash('backup-test-pass', PASSWORD_DEFAULT);"
+    $hashOut = Join-Path $tempRoot 'php-hash.out'
+    $hashErr = Join-Path $tempRoot 'php-hash.err'
+    try {
+        $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('backup-test-pass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
+        if ($hashProcess.ExitCode -ne 0) {
+            $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
+            throw "Could not generate backup test password hash. $hashErrorText"
+        }
+        $passwordHash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
+        if (-not $passwordHash) { throw 'Could not generate backup test password hash.' }
+    } finally {
+        Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+    }
     @([ordered]@{ username = 'backup-test'; passwordHash = $passwordHash; displayName = 'Backup Test'; isActive = $true }) |
         ConvertTo-Json -Depth 4 -AsArray |
         Set-Content -LiteralPath (Join-Path $tempData 'auth-users.json') -Encoding utf8NoBOM
@@ -56,8 +72,17 @@ try {
     Copy-Item -LiteralPath (Join-Path $repoRoot 'data/.htaccess') -Destination $tempData
 
     $env:HUMIDORHQ_DATA_ROOT = $tempData
-    & php (Join-Path $tempApp 'tests/backup-restore-harness.php')
-    if ($LASTEXITCODE -ne 0) { throw "Backup restore harness exited with code $LASTEXITCODE." }
+    $harnessOut = Join-Path $tempRoot 'backup-harness.out'
+    $harnessErr = Join-Path $tempRoot 'backup-harness.err'
+    try {
+        $harnessProcess = Start-Process -FilePath $php -ArgumentList @((Join-Path $tempApp 'tests/backup-restore-harness.php')) -WorkingDirectory $tempApp -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $harnessOut -RedirectStandardError $harnessErr
+        if ($harnessProcess.ExitCode -ne 0) {
+            $harnessErrorText = if (Test-Path -LiteralPath $harnessErr) { Get-Content -LiteralPath $harnessErr -Raw } else { '' }
+            throw "Backup restore harness exited with code $($harnessProcess.ExitCode). $harnessErrorText"
+        }
+    } finally {
+        Remove-Item -LiteralPath $harnessOut, $harnessErr -ErrorAction SilentlyContinue
+    }
 
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     $listener.Start()
@@ -65,12 +90,23 @@ try {
     $listener.Stop()
     $serverOut = Join-Path $tempRoot 'php.out.log'
     $serverError = Join-Path $tempRoot 'php.err.log'
-    $serverProcess = Start-Process -FilePath php -ArgumentList "-S 127.0.0.1:$port -t `"$tempApp`"" -WorkingDirectory $tempApp -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverError
+    $serverProcess = Start-Process -FilePath $php -ArgumentList "-S 127.0.0.1:$port -t `"$tempApp`"" -WorkingDirectory $tempApp -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverError
     Start-Sleep -Milliseconds 700
 
     $webSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $anonymous = Invoke-WebRequest "http://127.0.0.1:$port/api/backups" -WebSession $webSession -SkipHttpErrorCheck
     if ($anonymous.StatusCode -ne 401) { throw "Anonymous backup listing returned HTTP $($anonymous.StatusCode), expected 401." }
+    foreach ($anonymousPath in @(
+        '/api/backups',
+        '/api/backups/import',
+        '/api/backups/preview',
+        '/api/backups/restore'
+    )) {
+        $response = Invoke-WebRequest "http://127.0.0.1:$port$anonymousPath" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession -SkipHttpErrorCheck
+        if ($response.StatusCode -ne 401) {
+            throw "Anonymous request to $anonymousPath returned HTTP $($response.StatusCode), expected 401."
+        }
+    }
     $sessionState = Invoke-RestMethod "http://127.0.0.1:$port/api/session" -WebSession $webSession
     $webSession.Headers['X-CSRF-Token'] = [string]$sessionState.data.csrfToken
     $loginBody = @{ username = 'backup-test'; password = 'backup-test-pass' } | ConvertTo-Json

@@ -1,10 +1,11 @@
 # Filename: auth-security.ps1
-# Revision : 1.0.0
+# Revision : 1.0.1
 # Description : Verifies HumidorHQ throttling, audit, CSRF, session-expiry, cookie, and response-header controls.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-17
+# Modified Date : 2026-07-22
 # Changelog :
+# 1.0.1 verify backup route authentication and executable PHP discovery
 # 1.0.0 initial isolated authentication security regression coverage
 
 $ErrorActionPreference = 'Stop'
@@ -17,7 +18,6 @@ $server = $null
 
 function Get-PhpCommand {
     $command = Get-Command php -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.5_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
@@ -25,6 +25,9 @@ function Get-PhpCommand {
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.2_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
         'C:\php\php.exe'
     )
+    if ($command) {
+        return $command.Source
+    }
     $path = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $path) { throw 'php.exe was not found.' }
     return $path
@@ -86,7 +89,19 @@ try {
     New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
     Get-ChildItem -LiteralPath $seedRoot -Filter '*.json' -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dataRoot $_.Name) }
     $php = Get-PhpCommand
-    $hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
+    $hashOut = Join-Path $testRoot 'php-hash.out'
+    $hashErr = Join-Path $testRoot 'php-hash.err'
+    try {
+        $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('testpass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
+        if ($hashProcess.ExitCode -ne 0) {
+            $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
+            throw "Could not generate password hash for auth smoke test. $hashErrorText"
+        }
+        $hash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
+        if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
+    } finally {
+        Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+    }
     @([pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true }) | ConvertTo-Json -AsArray | Set-Content -LiteralPath (Join-Path $dataRoot 'auth-users.json') -Encoding UTF8
 
     $env:HUMIDORHQ_DATA_ROOT = $dataRoot
@@ -106,6 +121,10 @@ try {
     }
     $cookieHeader = [string]$anonymousResponse.Headers['Set-Cookie']
     if ($cookieHeader -notmatch 'HttpOnly' -or $cookieHeader -notmatch 'SameSite=Strict') { throw 'Session cookie is missing HttpOnly or SameSite=Strict.' }
+    foreach ($backupPath in @('/backups', '/backups/import', '/backups/preview', '/backups/restore')) {
+        $response = Invoke-WebRequest "$($server.BaseUrl)$backupPath" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $session -SkipHttpErrorCheck
+        if ($response.StatusCode -ne 401) { throw "Anonymous request to $backupPath returned HTTP $($response.StatusCode), expected 401." }
+    }
 
     Invoke-ExpectedError -Uri "$($server.BaseUrl)/login" -Method Post -Session $session -Body @{ username = 'testuser'; password = 'testpass' } -Status 403 -Code 'CSRF_INVALID'
     $session.Headers['X-CSRF-Token'] = [string]$anonymous.data.csrfToken

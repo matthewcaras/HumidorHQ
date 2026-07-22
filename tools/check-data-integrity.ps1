@@ -1,10 +1,11 @@
 # Filename: check-data-integrity.ps1
-# Revision : 1.4.0
+# Revision : 1.4.1
 # Description : Performs a read-only integrity review of HumidorHQ flat-file JSON data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-19 18:00 ET
+# Modified Date : 2026-07-22 12:00 ET
 # Changelog :
+# 1.4.1 treat critical lot cache and purchase-header reconciliation defects as errors
 # 1.4.0 reconcile and validate effective append-only inventory adjustments
 # 1.3.0 default to the repository data directory while retaining DataRoot and environment overrides
 # 1.2.0 validate compensating-event references and calculate inventory from effective unreversed events
@@ -231,7 +232,7 @@ foreach ($lot in $collections['lots']) {
     $lotId = [int]($lot.id ?? 0)
     $balanceQuantity = [int](($collections['lot-location-balances'] | Where-Object { [int]($_.lotId ?? 0) -eq $lotId -and [int]($_.quantity ?? 0) -gt 0 } | Measure-Object -Property quantity -Sum).Sum ?? 0)
     if ([int]($lot.currentQuantity ?? 0) -ne $balanceQuantity) {
-        Write-IntegrityMessage WARNING 'LOT_CURRENT_MISMATCH' "Lot id $lotId currentQuantity does not match its positive balance quantity."
+        Write-IntegrityMessage ERROR 'LOT_CURRENT_MISMATCH' "Lot id $lotId currentQuantity does not match its positive balance quantity."
     }
 }
 
@@ -267,17 +268,17 @@ foreach ($purchase in $collections['purchases']) {
         Write-IntegrityMessage ERROR 'MISSING_VENDOR' "Purchase id $($purchase.id) references missing Vendor id $vendorId."
     }
     if ($null -eq $purchase.subtotal -or [string]$purchase.subtotal -eq '') {
-        Write-IntegrityMessage WARNING 'MISSING_SUBTOTAL' "Purchase id $($purchase.id) has no stored subtotal."
+        Write-IntegrityMessage ERROR 'MISSING_SUBTOTAL' "Purchase id $($purchase.id) has no stored subtotal."
     }
     if ($null -ne $purchase.discount -and [string]$purchase.discount -ne '' -and [decimal]$purchase.discount -lt 0) {
-        Write-IntegrityMessage WARNING 'NEGATIVE_DISCOUNT' "Purchase id $($purchase.id) has a negative discount."
+        Write-IntegrityMessage ERROR 'NEGATIVE_DISCOUNT' "Purchase id $($purchase.id) has a negative discount."
     }
     if ($null -eq $purchase.totalPaid -or [string]$purchase.totalPaid -eq '') {
-        Write-IntegrityMessage WARNING 'PURCHASE_TOTAL_UNKNOWN' "Purchase id $($purchase.id) has no stored totalPaid value."
+        Write-IntegrityMessage ERROR 'PURCHASE_TOTAL_UNKNOWN' "Purchase id $($purchase.id) has no stored totalPaid value."
     } else {
         $expectedTotalCents = (Convert-ToCents $purchase.subtotal) + (Convert-ToCents $purchase.shipping) + (Convert-ToCents $purchase.exciseTax) + (Convert-ToCents $purchase.salesTax) - (Convert-ToCents $purchase.discount)
         if ((Convert-ToCents $purchase.totalPaid) -ne $expectedTotalCents) {
-            Write-IntegrityMessage WARNING 'PURCHASE_TOTAL_MISMATCH' "Purchase id $($purchase.id) totalPaid does not reconcile to subtotal + shipping + excise tax + sales tax - discount."
+            Write-IntegrityMessage ERROR 'PURCHASE_TOTAL_MISMATCH' "Purchase id $($purchase.id) totalPaid does not reconcile to subtotal + shipping + excise tax + sales tax - discount."
         }
     }
 }

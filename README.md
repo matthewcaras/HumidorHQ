@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.22
+Revision: 1.30.23
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 10:00 ET
+Modified Date: 2026-07-22 12:00 ET
 -->
 
 # HumidorHQ
@@ -19,7 +19,7 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - `Humidors` manages active and archived storage locations, current count, oldest inventory date, inline name/detail editing, protected deletion while linked records exist, and drawer/shelf/tray/zone setup. A Humidor cannot be archived while it contains inventory, and Humidor record counts omit internal runtime filenames.
 - `Humidor Sections` remains an internal linked collection for drawers, shelves, trays, and zones inside humidors, now managed inline from the Humidors page with archive/restore support and an inventory-empty archive requirement.
 - `Reports` provides collapsible purchase-history summaries by Vendor or cigar manufacturer with an optional Buy Again filter, collapsible Purchase Trend Analytics by year or month with vendor and manufacturer breakdowns, collapsible Rating Breakdown by strength, wrapper, origin, size, or manufacturer with average ratings and sample counts, collapsible Inventory Aging by received-date bucket with manufacturer/Humidor filters, reconciled quantity, distinct Lots, and quantity-weighted age, and collapsible Removal History plus Activity sections. Each report header uses a short summary line and a left-aligned collapsible header so the layout stays consistent across browsers, and report panels remember their open state after filter changes. Selecting a nonempty bucket expands its Lot/location cigar details, cost basis, MSRP, and Collection links in place; unknown dates and incomplete money remain explicit. Rating Breakdown rows drill through by opening Collection with a focused search for the selected characteristic, not by auto-selecting a cigar. Reports also include filterable smoked, gifted, and discarded removal history by period, custom date range, type, and search. Removal History search includes Smoking Journal ratings and notes, and cigar-name links open the matching Catalog Journal. Activity can be filtered by period, custom dates, event type, cigar or reference text, Lot, and Humidor; it shows source/destination location context and links original events to append-only reversals while retaining signed physical-count adjustments. Both purchase-summary views foot to stored purchase `totalPaid`; filtered shares use deterministic cent allocations from line weights without duplicating Purchases-page detail. Manufacturer breakdowns are sorted alphabetically and each trend row opens the Purchases page filtered to that slice. Inventory Aging rows open the matching Collection view, and Activity rows open the matching Purchase or Collection context directly. Collection, Purchase History, and Reports now support local saved views for their current filters, and those controls sit at the bottom of each page so they do not interrupt the primary workflow.
-- `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore.
+- `Backup & Restore` creates portable runtime JSON backups, downloads or imports validated bundles, previews restores, and creates a safety backup before a guarded transactional restore. The API backup routes are authenticated and CSRF-protected before they create, import, preview, or restore bundles.
 - `Audit`, `Changelog`, `TODO`, and internal `PO Lines` remain protected and routable, but are hidden from the left menu.
 - Browser refresh keeps the active page by storing page navigation in the URL hash, such as `#Purchases`.
 - Expanded records, edit panels, inventory actions, and reversal forms use a consistent bordered treatment so the active detail remains visually distinct from its surrounding table.
@@ -145,7 +145,7 @@ Lots, location balances, and inventory events are readable by the app for report
 - Archived records are excluded from new purchase, receiving, movement, and storage-selection workflows. Humidors and sections with positive balances must be emptied before archive, and a Humidor's active sections must be archived first.
 - Inventory Events are never edited or deleted by corrections. Supported events, including physical-count adjustments, may receive one append-only, idempotent full reversal; effective inventory, receipt status, Dashboard values, and reports exclude the reversed event's effect while Activity retains both records.
 - No existing runtime records are automatically migrated, repaired, cascaded, or reconstructed by these guardrails.
-- `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation—including signed effective adjustments—relationship, identifier, counter, move, journal, and purchase-total issues and never repairs data.
+- `tools/check-data-integrity.ps1` is read-only. It reports inventory reconciliation—including signed effective adjustments—relationship, identifier, counter, move, journal, and purchase-total issues, exits nonzero for critical defects, and never repairs data.
 
 ## Audit Trail
 

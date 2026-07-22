@@ -1,11 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.16
+# Revision : 1.32.17
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-22 10:00 ET
+# Modified Date : 2026-07-22 12:00 ET
 # Changelog :
-# 1.32.16 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown drill-through/sort
+# 1.32.17 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, rating breakdown drill-through/sort, backup auth, and checker severity
 # 1.32.14 verify Collection, Purchase History, Reports saved views, import staging safety, Pre Inventory reconciliation, and rating breakdown reports
 # 1.32.13 verify Collection, Purchase History, Reports saved views, import staging safety, and Pre Inventory reconciliation
 # 1.32.7 verify cigar home-screen icon wiring
@@ -146,9 +146,6 @@ $auditLogPath = Join-Path $testDataRoot 'audit-log.jsonl'
 
 function Get-PhpCommand {
     $phpCommand = Get-Command php -ErrorAction SilentlyContinue
-    if ($phpCommand) {
-        return $phpCommand.Source
-    }
 
     $candidatePaths = @(
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\PHP.PHP.8.5_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe'),
@@ -158,11 +155,25 @@ function Get-PhpCommand {
         'C:\php\php.exe'
     )
 
-    $phpPath = $candidatePaths | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
-    if (-not $phpPath) {
-        throw 'php.exe was not found on PATH or in the standard winget install locations.'
+    if ($phpCommand) {
+        $candidatePaths = @($phpCommand.Source) + $candidatePaths
     }
-    return $phpPath
+
+    foreach ($candidate in $candidatePaths | Where-Object { $_ -and (Test-Path -LiteralPath $_) }) {
+        $probeOut = Join-Path $testRoot 'php-probe.out'
+        $probeErr = Join-Path $testRoot 'php-probe.err'
+        try {
+            $probe = Start-Process -FilePath $candidate -ArgumentList @('-r', 'exit(0);') -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+            if ($probe.ExitCode -eq 0) {
+                return $candidate
+            }
+        } catch {
+            continue
+        } finally {
+            Remove-Item -LiteralPath $probeOut, $probeErr -ErrorAction SilentlyContinue
+        }
+    }
+    throw 'php.exe was not found or could not be executed from PATH or the standard winget install locations.'
 }
 
 function Invoke-ExpectedApiError {
@@ -328,9 +339,6 @@ if ($appJs -notmatch 'function renderRemovalHistory' -or $appJs -notmatch 'funct
 foreach ($trendReportHook in @('function renderPurchaseTrendReport', 'function purchaseTrendRows', 'function purchaseTrendVendorRows', 'function purchaseTrendManufacturerRows', 'function purchaseRecordsForDisplay', 'function setPurchaseRecordsFilter', 'function clearPurchaseRecordsFilter', 'purchaseTrendPeriod', 'purchaseRecordsFilterType', 'Purchase Trend Analytics', 'By Year', 'By Month', 'Vendor Breakdown', 'Manufacturer Breakdown', 'data-purchase-trend-key', 'data-purchase-trend-vendor-id', 'data-purchase-trend-manufacturer')) {
     if ($appJs -notmatch [regex]::Escape($trendReportHook)) { throw "Purchase trend analytics is missing hook: $trendReportHook" }
 }
-foreach ($buyAgainDrillHook in @('function openCatalogForBuyAgainCigar', 'data-buy-again-cigar-id')) {
-    if ($appJs -notmatch [regex]::Escape($buyAgainDrillHook)) { throw "Buy Again drill-through is missing hook: $buyAgainDrillHook" }
-}
 if ($appJs -match 'renderPurchaseHistoryReport\(view\)\s+renderBuyAgainReport\(view\)') { throw 'Reports page must not render the Buy Again report section.' }
 foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function allocatePurchasePaidCents', 'purchaseHistoryPaidAllocations', 'purchaseHistoryGroup', 'All Vendors', 'All Manufacturers', 'collectionStrengthFilter', 'collectionSearch', "value: 'strength'", 'collectionBuyAgainFilter', 'function catalogRecordsForDisplay', 'Search Catalog', 'function smokingJournalBuyAgainDefaults')) {
     if ($appJs -notmatch [regex]::Escape($reportingHook)) { throw "Purchase reporting or Collection filtering is missing hook: $reportingHook" }
@@ -454,8 +462,19 @@ foreach ($route in @('/sample-data', '/login', '/audit', '/changelog', '/todo', 
 }
 
 $php = Get-PhpCommand
-$hash = & $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);"
-if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
+$hashOut = Join-Path $testRoot 'php-hash.out'
+$hashErr = Join-Path $testRoot 'php-hash.err'
+try {
+    $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('testpass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
+    if ($hashProcess.ExitCode -ne 0) {
+        $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
+        throw "Could not generate password hash for auth smoke test. $hashErrorText"
+    }
+    $hash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
+    if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
+} finally {
+    Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+}
 
 @(
     [pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true }
