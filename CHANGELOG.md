@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.20
+Revision: 1.30.21
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 09:35 ET
+Modified Date: 2026-07-22 09:50 ET
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.21 - 2026-07-22
+
+Changed by: Matt and Jason
+
+- Added Catalog drill-through from Rating Breakdown rows as a search-only subset opener and sorted the breakdown by strength order, alphabetical wrapper/origin/manufacturer, and ascending size length.
+- Added local-data/ Git ignore rules that keep the folder path visible through a committed `.placeholder` file while ignoring all machine-local contents.
+- Documented the local-data/.placeholder pattern in the README so empty local working folders can stay present without tracking runtime files.
 
 ## 1.30.20 - 2026-07-22
 
@@ -56,7 +64,6 @@ Changed by: Matt
 Changed by: Matt
 
 - Added an explicit workbook-import staging mode that forces current inventory into `Pre Inventory / General` for manual reconciliation after import.
-
 ## 1.30.14 - 2026-07-21
 
 Changed by: Matt
@@ -851,3 +858,4 @@ Changed by: Matt, Jason, and Copilot
 - Matt created the original React/Vite project foundation, database design, Prisma setup, humidor management, catalog management, purchase workflows, collection browsing, dashboard reports, removal history, activity history, and smoking journal workflows.
 - Jason created the PHP/JSON migration branch baseline, smoking journal conversion foundation, branch test files, and later flat-file migration direction that became the 1.0.0+ changelog stream.
 - Copilot contributed an intermediate PHP/JSON conversion pass with PWA support, deployment notes, htaccess data protection clarification, promise-handling fixes, and code-review fixes before the current flat-file implementation path continued.
+
