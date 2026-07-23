@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.35
+Revision: 1.30.36
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 07:33 ET
+Modified Date: 2026-07-23 08:12 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.36 - 2026-07-23
+
+Changed by: Matt
+
+- Reordered the Collection filters and search below the summary boxes, removed the collection lot-count column, suppressed General drawer/section labels in Collection, removed the top intro copy from Catalog, Vendors, Purchases, and Humidors, moved archived toggles to the bottom of the managed pages and section panel, and closed purchases by default.
 
 ## 1.30.35 - 2026-07-23
 

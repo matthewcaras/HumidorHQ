@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.28
+ * Revision: 1.24.29
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-23 07:33 ET
+ * Modified Date: 2026-07-23 08:12 ET
  */
 
 const API_BASE_URL = 'api'
@@ -598,7 +598,7 @@ const managedPages = {
   Purchases: {
     collection: 'purchases',
     title: 'Purchase',
-    intro: 'Track purchase headers and manage line allocations, receipt lots, and current cost basis.',
+    intro: '',
     inlineEdit: true,
     dependencies: ['vendors'],
     fields: [
@@ -626,7 +626,7 @@ const managedPages = {
   Humidors: {
     collection: 'storage-locations',
     title: 'Humidor',
-    intro: 'Manage humidors and create drawers, shelves, trays, or zones for later inventory placement.',
+    intro: '',
     inlineEdit: true,
     dependencies: ['storage-sub-locations'],
     fields: [
@@ -637,7 +637,6 @@ const managedPages = {
     ],
     columns: [
       { label: 'Name', value: (row) => row.name || '' },
-      { label: 'Type', value: (row) => row.type || '' },
       { label: 'Current Count', value: (row) => formatCount(humidorCurrentCount(row.id)) },
       { label: 'Oldest Inside', value: (row) => displayDate(humidorOldestDate(row.id)) },
       { label: 'Capacity', value: (row) => row.capacity ?? '' },
@@ -796,6 +795,14 @@ function sectionLabel(section) {
     return ''
   }
   return section.synthetic ? 'General' : sectionName(section)
+}
+
+function collectionLocationLabel(humidor, section) {
+  const humidorLabel = humidor?.name || 'Unknown Humidor'
+  const sectionText = section && !section.synthetic && String(sectionName(section)).trim().toLowerCase() !== 'general'
+    ? sectionName(section)
+    : ''
+  return [humidorLabel, sectionText].filter(Boolean).join(' / ')
 }
 
 function humidorSectionCount(storageLocationId) {
@@ -1017,7 +1024,7 @@ function normalizeBalance(balance) {
   const humidorId = Number(balance.storageLocationId || line?.storageLocationId || 0)
   const humidor = recordById('storage-locations', humidorId)
   const section = lineSectionForHumidor(humidorId, balance.storageSubLocationId || line?.storageSubLocationId)
-  const locationLabel = [humidor?.name || 'Unknown Humidor', section && !section.synthetic ? sectionName(section) : null].filter(Boolean).join(' / ')
+  const locationLabel = collectionLocationLabel(humidor, section)
   return {
     balance,
     quantity: Number(balance.quantity || 0),
@@ -2551,14 +2558,6 @@ function renderCollectionPage(view) {
 
   const controls = document.createElement('div')
   controls.className = 'collection-toolbar'
-  controls.innerHTML = `
-    <div class="section-heading collection-heading">
-      <div>
-        <h3>Collection On Hand</h3>
-        <p class="muted">${formatCount(metrics.totalQuantity)} cigars across ${formatCount(metrics.uniqueCigarCount)} matching catalog entries.</p>
-      </div>
-    </div>
-  `
 
   const controlBar = document.createElement('div')
   controlBar.className = 'collection-controls'
@@ -2797,9 +2796,9 @@ function renderCollectionPage(view) {
       ? '<h3>No Matching Cigars</h3><p>No on-hand cigars match the current search and filters.</p>'
       : '<h3>No On-Hand Collection Yet</h3><p>Create a purchase and at least one purchase line to begin tracking on-hand inventory.</p>'
     if (preInventoryPanel) {
-      view.append(controls, summary, preInventoryPanel, empty, savedViewBar)
+      view.append(summary, preInventoryPanel, controls, savedViewBar, empty)
     } else {
-      view.append(controls, summary, empty, savedViewBar)
+      view.append(summary, controls, savedViewBar, empty)
     }
     return
   }
@@ -2813,7 +2812,6 @@ function renderCollectionPage(view) {
       <tr>
         <th>Cigar</th>
         <th>On Hand</th>
-        <th>Lots</th>
         <th>Oldest</th>
         <th>Avg Cost</th>
         <th>Avg MSRP</th>
@@ -2840,7 +2838,6 @@ function renderCollectionPage(view) {
         </div>
       </td>
       <td>${formatCount(item.totalQuantity)}</td>
-      <td>${formatCount(item.lotCount)}</td>
       <td>${escapeHtml(displayDate(item.oldestDate) || '—')}</td>
       <td>${escapeHtml(money(item.averageCostPerCigar))}</td>
       <td>${escapeHtml(money(item.averageMsrpPerCigar))}</td>
@@ -2870,7 +2867,7 @@ function renderCollectionPage(view) {
       const detailRow = document.createElement('tr')
       detailRow.className = 'collection-expanded-row'
       detailRow.innerHTML = `
-        <td colspan="7">
+        <td colspan="6">
           <div class="collection-expanded-card">
             <table class="data-table collection-detail-table">
               <thead>
@@ -3117,13 +3114,13 @@ function renderCollectionPage(view) {
     })
   })
 
-  view.append(controls, summary)
+  view.append(summary)
   if (preInventoryPanel) {
     view.append(preInventoryPanel)
   }
+  view.append(controls, savedViewBar)
   renderPendingSmokingJournal(view)
   view.append(tableWrap)
-  view.append(savedViewBar)
   const scrollTargetCigarId = Number(state.collectionScrollTargetCigarId || 0)
   state.collectionScrollTargetCigarId = null
   if (scrollTargetCigarId) {
@@ -3364,26 +3361,28 @@ function renderManagedTable(view, pageConfig) {
   const rows = collection === 'catalog-cigars' ? catalogRecordsForDisplay(visibleRows, state.catalogSearch) : visibleRows
   const inlineEdit = pageConfig.inlineEdit === true
   const hideRuntimeLocationCopy = ['catalog-cigars', 'vendors', 'storage-locations'].includes(collection)
+  let archiveToggle = null
   const heading = document.createElement('div')
   heading.className = 'section-heading'
-  heading.innerHTML = `
-    <div>
-      <h3>${escapeHtml(pageConfig.title)} Records</h3>
-      <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records${hideRuntimeLocationCopy ? '.' : ` in external runtime <code>${escapeHtml(collection)}.json</code>.`}</p>
-    </div>
-  `
+  heading.innerHTML = hideRuntimeLocationCopy
+    ? `<div><h3>${escapeHtml(pageConfig.title)} Records</h3></div>`
+    : `
+      <div>
+        <h3>${escapeHtml(pageConfig.title)} Records</h3>
+        <p class="muted">${formatCount(rows.length)} of ${formatCount(allRows.length)} records in external runtime <code>${escapeHtml(collection)}.json</code>.</p>
+      </div>
+    `
   if (supportsArchive) {
-    const toggleArchived = document.createElement('button')
-    toggleArchived.type = 'button'
-    toggleArchived.className = 'secondary-button'
-    toggleArchived.textContent = showArchived ? 'Hide Archived' : 'Show Archived'
-    toggleArchived.addEventListener('click', () => {
+    archiveToggle = document.createElement('button')
+    archiveToggle.type = 'button'
+    archiveToggle.className = 'secondary-button'
+    archiveToggle.textContent = showArchived ? 'Hide Archived' : 'Show Archived'
+    archiveToggle.addEventListener('click', () => {
       state.showArchivedRecords[collection] = !showArchived
       state.editing[collection] = null
       if (collection === 'catalog-cigars') state.selectedCatalogHistoryCigarId = null
       render()
     })
-    heading.append(toggleArchived)
   }
 
   let catalogSearchForm = null
@@ -3419,6 +3418,12 @@ function renderManagedTable(view, pageConfig) {
     view.append(heading)
     if (catalogSearchForm) view.append(catalogSearchForm)
     view.append(empty)
+    if (archiveToggle) {
+      const archiveFooter = document.createElement('div')
+      archiveFooter.className = 'report-actions'
+      archiveFooter.append(archiveToggle)
+      view.append(archiveFooter)
+    }
     return
   }
 
@@ -3592,6 +3597,12 @@ function renderManagedTable(view, pageConfig) {
   view.append(heading)
   if (catalogSearchForm) view.append(catalogSearchForm)
   view.append(tableWrap)
+  if (archiveToggle) {
+    const archiveFooter = document.createElement('div')
+    archiveFooter.className = 'report-actions'
+    archiveFooter.append(archiveToggle)
+    view.append(archiveFooter)
+  }
 }
 
 async function refreshCollections(collections) {
@@ -4356,10 +4367,8 @@ function renderPurchaseOverview(view) {
   const pageActions = document.querySelector('#page-actions')
   hero.classList.add('purchase-hero')
   const purchaseFilterLabelText = purchaseRecordsFilterLabel()
-  subtitle.textContent = purchaseFilterLabelText
-    ? `Filtered to ${purchaseFilterLabelText}. Track vendor history, purchase costs, and line-level receiving.`
-    : 'Track vendor history, purchase costs, and line-level receiving.'
-  subtitle.hidden = false
+  subtitle.textContent = ''
+  subtitle.hidden = true
   const addPurchase = document.createElement('button')
   addPurchase.type = 'button'
   addPurchase.className = 'primary-button purchase-add-button'
@@ -4709,7 +4718,7 @@ function renderHumidorSectionsPanel(view) {
     state.editingHumidorSectionId = null
     render()
   })
-  header.append(humidorSelect, toggleArchived)
+  header.append(humidorSelect)
   panel.append(header)
 
   if (!state.selectedHumidorId) {
@@ -4728,7 +4737,6 @@ function renderHumidorSectionsPanel(view) {
     <thead>
       <tr>
         <th>Section</th>
-        <th>Type</th>
         <th>Current Count</th>
         <th>Capacity</th>
         <th>Actions</th>
@@ -4744,7 +4752,6 @@ function renderHumidorSectionsPanel(view) {
     const row = document.createElement('tr')
     row.innerHTML = `
       <td>${escapeHtml(sectionName(section))}${recordIsActive(section) ? '' : ' — Archived'}</td>
-      <td>${escapeHtml(section.type || '')}</td>
       <td>${formatCount(count)}</td>
       <td>${escapeHtml(String(section.capacity || ''))}</td>
       <td class="row-actions"></td>
@@ -4818,6 +4825,10 @@ function renderHumidorSectionsPanel(view) {
 
   panel.append(table)
   renderHumidorSectionForm(panel, state.selectedHumidorId)
+  const footer = document.createElement('div')
+  footer.className = 'report-actions'
+  footer.append(toggleArchived)
+  panel.append(footer)
   view.append(panel)
 }
 
@@ -5340,7 +5351,7 @@ function ensureSelectedPurchaseVisible(purchases) {
   const selectedId = Number(state.selectedPurchaseId || 0)
   const selectedVisible = selectedId > 0 && purchases.some((purchase) => Number(purchase.id) === selectedId)
   if (!selectedVisible) {
-    state.selectedPurchaseId = Number(purchases[0].id)
+    state.selectedPurchaseId = null
   }
   return recordById('purchases', state.selectedPurchaseId)
 }
