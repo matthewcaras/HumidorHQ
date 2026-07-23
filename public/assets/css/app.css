@@ -670,6 +670,10 @@ h3 {
   margin-top: 12px;
 }
 
+.collection-footer-actions {
+  margin-top: 22px;
+}
+
 .collection-saved-view-bar select,
 .collection-saved-view-bar input {
   background: #17100d;
@@ -1401,6 +1405,10 @@ code {
 
   .collection-saved-view-bar {
     grid-template-columns: 1fr;
+  }
+
+  .collection-footer-actions {
+    margin-top: 18px;
   }
 
   .inline-move-form.is-open {

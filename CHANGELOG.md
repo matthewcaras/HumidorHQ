@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.37
+Revision: 1.30.38
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 09:00 ET
+Modified Date: 2026-07-23 09:25 ET
 -->
 
 # Changelog
@@ -26,6 +26,12 @@ Author convention:
 Changed by: Matt
 
 - Moved the Collection saved views bar to the bottom of the Collection page.
+
+## 1.30.38 - 2026-07-23
+
+Changed by: Matt
+
+- Reworked the Collection saved views section into a footer block so it stays below the cigar table.
 
 ## 1.30.36 - 2026-07-23
 

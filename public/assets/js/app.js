@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.30
+ * Revision: 1.24.31
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-23 09:00 ET
+ * Modified Date: 2026-07-23 09:25 ET
  */
 
 const API_BASE_URL = 'api'
@@ -2795,10 +2795,13 @@ function renderCollectionPage(view) {
     empty.innerHTML = hasOnHandInventory
       ? '<h3>No Matching Cigars</h3><p>No on-hand cigars match the current search and filters.</p>'
       : '<h3>No On-Hand Collection Yet</h3><p>Create a purchase and at least one purchase line to begin tracking on-hand inventory.</p>'
+    const footer = document.createElement('div')
+    footer.className = 'collection-footer-actions'
+    footer.append(savedViewBar)
     if (preInventoryPanel) {
-      view.append(summary, preInventoryPanel, controls, empty, savedViewBar)
+      view.append(summary, preInventoryPanel, controls, empty, footer)
     } else {
-      view.append(summary, controls, empty, savedViewBar)
+      view.append(summary, controls, empty, footer)
     }
     return
   }
@@ -3121,7 +3124,10 @@ function renderCollectionPage(view) {
   view.append(controls)
   renderPendingSmokingJournal(view)
   view.append(tableWrap)
-  view.append(savedViewBar)
+  const footer = document.createElement('div')
+  footer.className = 'collection-footer-actions'
+  footer.append(savedViewBar)
+  view.append(footer)
   const scrollTargetCigarId = Number(state.collectionScrollTargetCigarId || 0)
   state.collectionScrollTargetCigarId = null
   if (scrollTargetCigarId) {
