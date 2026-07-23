@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.38
+Revision: 1.30.39
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 09:25 ET
+Modified Date: 2026-07-23 09:45 ET
 -->
 
 # Changelog
@@ -32,6 +32,12 @@ Changed by: Matt
 Changed by: Matt
 
 - Reworked the Collection saved views section into a footer block so it stays below the cigar table.
+
+## 1.30.39 - 2026-07-23
+
+Changed by: Matt
+
+- Updated the Collection app cache-bust pin to load the footer placement fix in live browsers.
 
 ## 1.30.36 - 2026-07-23
 
