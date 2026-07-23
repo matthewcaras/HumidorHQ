@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.24
+ * Revision: 1.24.25
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-22 17:46 ET
+ * Modified Date: 2026-07-23 00:52 ET
  */
 
 const API_BASE_URL = 'api'
@@ -1031,6 +1031,7 @@ function normalizeBalance(balance) {
     costPerCigar: lotCostPerCigar(lot, line),
     msrpPerCigar: lotMsrpPerCigar(lot, line, cigar),
     oldestDate: lotDate(lot, purchase),
+    purchaseDate: purchase?.purchaseDate || line?.purchaseDate || lot?.purchaseDateSnapshot || lot?.purchaseDate || null,
   }
 }
 
@@ -2887,7 +2888,12 @@ function renderCollectionPage(view) {
                   <tr>
                     <td>${escapeHtml(balance.locationLabel)}</td>
                     <td>${formatCount(balance.quantity)}</td>
-                    <td>${escapeHtml(String(balance.lot?.id || ''))}</td>
+                    <td>
+                      <div class="collection-lot-cell">
+                        <strong>${escapeHtml(String(balance.lot?.id || ''))}</strong>
+                        <small>${escapeHtml(balance.purchaseDate ? `Purchased ${displayDate(balance.purchaseDate)}` : 'Purchase date unknown')}</small>
+                      </div>
+                    </td>
                     <td>${escapeHtml(money(balance.costPerCigar))}</td>
                     <td>${escapeHtml(money(balance.msrpPerCigar))}</td>
                     <td>

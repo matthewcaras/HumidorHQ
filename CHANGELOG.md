@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.31
+Revision: 1.30.32
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-22 13:45 ET
+Modified Date: 2026-07-23 00:52 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.32 - 2026-07-23
+
+Changed by: Matt
+
+- Added the purchase date beside each lot number in the expanded Collection cigar detail so smoke-date validation is easier during historical entry.
 
 ## 1.30.27 - 2026-07-22
 
