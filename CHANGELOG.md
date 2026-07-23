@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.36
+Revision: 1.30.37
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 08:12 ET
+Modified Date: 2026-07-23 09:00 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.37 - 2026-07-23
+
+Changed by: Matt
+
+- Moved the Collection saved views bar to the bottom of the Collection page.
 
 ## 1.30.36 - 2026-07-23
 
