@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.27
+ * Revision: 1.24.28
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-23 00:59 ET
+ * Modified Date: 2026-07-23 07:33 ET
  */
 
 const API_BASE_URL = 'api'
@@ -6095,9 +6095,7 @@ function renderRatingBreakdownReport(view) {
   metrics.append(
     metricCard('Average Rating', averageRating === null ? null : averageRating.toFixed(2), 'Rated smoked cigars'),
     metricCard('Total Smokes', totalSmokes, 'Smoked removals included in the breakdown'),
-    metricCard('Rated Entries', totalRatings, 'Smoking Journal entries with valid ratings'),
     metricCard('Distinct Cigars', uniqueCigars, 'Cigars represented in the selected breakdown'),
-    metricCard('Breakdown Rows', rows.length, 'Characteristic groups in the current view'),
   )
   body.append(metrics)
 
@@ -6197,10 +6195,10 @@ function renderActivityReference(cell, event) {
 }
 
 function renderReportsPage(view) {
+  renderInventoryAgingReport(view)
+  renderRatingBreakdownReport(view)
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)
-  renderRatingBreakdownReport(view)
-  renderInventoryAgingReport(view)
   renderRemovalHistory(view)
 
   const matchingActivity = filteredActivityEvents()

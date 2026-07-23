@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.34
+Revision: 1.30.35
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 00:59 ET
+Modified Date: 2026-07-23 07:33 ET
 -->
 
 # Changelog
@@ -20,6 +20,12 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.35 - 2026-07-23
+
+Changed by: Matt
+
+- Reordered the Reports page so Inventory Aging appears first, followed by Rating Breakdown, Purchase Trend Analytics, Purchase History, Removal History, and Activity. Removed the Rated Entries and Breakdown Rows summary cards from Rating Breakdown.
 
 ## 1.30.34 - 2026-07-23
 
