@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.25
+ * Revision: 1.24.26
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-23 00:52 ET
+ * Modified Date: 2026-07-23 00:57 ET
  */
 
 const API_BASE_URL = 'api'
@@ -2891,7 +2891,7 @@ function renderCollectionPage(view) {
                     <td>
                       <div class="collection-lot-cell">
                         <strong>${escapeHtml(String(balance.lot?.id || ''))}</strong>
-                        <small>${escapeHtml(balance.purchaseDate ? `Purchased ${displayDate(balance.purchaseDate)}` : 'Purchase date unknown')}</small>
+                        <small>${escapeHtml(balance.purchaseDate ? `${String(balance.lot?.id || '')} - ${displayDate(balance.purchaseDate)}` : `${String(balance.lot?.id || '')} - Unknown` )}</small>
                       </div>
                     </td>
                     <td>${escapeHtml(money(balance.costPerCigar))}</td>
