@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: BackupRestoreService.php
- * Revision: 1.0.1
+ * Revision: 1.0.2
  * Description: Authenticated runtime backup export, validation, and transactional restore service.
- * Modified Date: 2026-07-24 09:40 ET
+ * Modified Date: 2026-07-24 10:00 ET
  */
 
 const HUMIDORHQ_BACKUP_FORMAT = 'humidorhq-runtime-backup';
@@ -27,6 +27,22 @@ function backup_daily_backup_kind(string $username): string
     return $slug !== '' ? 'daily-' . $slug : 'daily';
 }
 
+function backup_daily_backup_slug(string $username): string
+{
+    $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower(trim($username)));
+    return trim((string) $slug, '-');
+}
+
+function backup_daily_backup_marker_path(string $username, ?string $localDate = null): string
+{
+    $slug = backup_daily_backup_slug($username);
+    if ($slug === '') {
+        return backup_directory() . DIRECTORY_SEPARATOR . '.daily-backup-unknown.marker';
+    }
+    $date = preg_replace('/[^0-9\-]/', '', $localDate ?? today_local_date());
+    return backup_directory() . DIRECTORY_SEPARATOR . '.daily-backup-' . $slug . '-' . $date . '.marker';
+}
+
 function backup_directory(): string
 {
     $path = APP_ROOT . DIRECTORY_SEPARATOR . 'backups';
@@ -41,14 +57,7 @@ function backup_directory(): string
 
 function backup_daily_backup_exists(string $username, ?string $localDate = null): bool
 {
-    $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower(trim($username)));
-    $slug = trim((string) $slug, '-');
-    if ($slug === '') {
-        return false;
-    }
-    $date = $localDate ?? today_local_date();
-    $pattern = backup_directory() . DIRECTORY_SEPARATOR . 'humidorhq-daily-' . $slug . '-' . $date . '-*.json';
-    return (glob($pattern) ?: []) !== [];
+    return is_file(backup_daily_backup_marker_path($username, $localDate));
 }
 
 function backup_daily_backup_in_progress(): bool
@@ -145,10 +154,6 @@ function maybe_create_daily_backup_for_user(array $user): ?array
     }
 
     $localDate = today_local_date();
-    if (backup_daily_backup_exists($username, $localDate)) {
-        return null;
-    }
-
     $lockPath = backup_directory() . DIRECTORY_SEPARATOR . '.daily-backup.lock';
     $lock = fopen($lockPath, 'c');
     if ($lock === false) {
@@ -164,7 +169,20 @@ function maybe_create_daily_backup_for_user(array $user): ?array
         }
         $GLOBALS['humidorhq_daily_backup_in_progress'] = true;
         try {
-            return create_runtime_backup(backup_daily_backup_kind($username));
+            $result = create_runtime_backup(backup_daily_backup_kind($username));
+            $marker = backup_daily_backup_marker_path($username, $localDate);
+            $markerTmp = $marker . '.tmp.' . bin2hex(random_bytes(4));
+            $markerJson = json_encode([
+                'username' => $username,
+                'date' => $localDate,
+                'filename' => $result['filename'] ?? '',
+                'createdAtUtc' => $result['createdAtUtc'] ?? now_iso(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            if (!is_string($markerJson) || file_put_contents($markerTmp, $markerJson . PHP_EOL, LOCK_EX) === false || !rename($markerTmp, $marker)) {
+                @unlink($markerTmp);
+                throw new ApiError('BACKUP_WRITE_FAILED', 'The daily backup marker could not be written.', 500);
+            }
+            return $result;
         } finally {
             unset($GLOBALS['humidorhq_daily_backup_in_progress']);
         }

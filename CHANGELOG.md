@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.43
+Revision: 1.30.44
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 09:40 ET
+Modified Date: 2026-07-24 10:00 ET
 -->
 
 # Changelog
@@ -62,6 +62,12 @@ Changed by: Matt
 Changed by: Matt
 
 - Added automatic first-auth-use daily backups tied to the authenticated account and verified same-day dedupe.
+
+## 1.30.44 - 2026-07-24
+
+Changed by: Matt
+
+- Hardened automatic daily backups so repeat logins and refreshes on the same day do not create duplicate daily bundles.
 
 ## 1.30.36 - 2026-07-23
 

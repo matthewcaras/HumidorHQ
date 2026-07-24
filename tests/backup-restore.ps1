@@ -1,10 +1,11 @@
 # Filename: backup-restore.ps1
-# Revision : 1.0.2
+# Revision : 1.0.3
 # Description : Rehearses guarded runtime backup, import, preview, and restore in a temporary app copy.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-19
 # Modified Date : 2026-07-24
 # Changelog :
+# 1.0.3 verify daily backup dedupe across repeated authenticated sessions
 # 1.0.2 verify first-auth-use daily backup creation and same-day dedupe
 # 1.0.1 verify authenticated backup route access and exact route protection
 
@@ -119,6 +120,13 @@ try {
     if (-not $sessionRefresh.data.authenticated) { throw 'Authenticated session was not retained after the daily backup trigger.' }
     $dailyBackupsAfterRefresh = @(Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-daily-backup-test-*.json' -File)
     if ($dailyBackupsAfterRefresh.Count -ne 1) { throw 'Repeated authenticated use created more than one daily backup for the same day.' }
+    $secondSession = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $secondSessionState = Invoke-RestMethod "http://127.0.0.1:$port/api/session" -WebSession $secondSession
+    $secondSession.Headers['X-CSRF-Token'] = [string]$secondSessionState.data.csrfToken
+    $secondLogin = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $secondSession
+    $secondSession.Headers['X-CSRF-Token'] = [string]$secondLogin.data.csrfToken
+    $dailyBackupsAfterSecondLogin = @(Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-daily-backup-test-*.json' -File)
+    if ($dailyBackupsAfterSecondLogin.Count -ne 1) { throw 'A second authenticated session created an additional daily backup for the same day.' }
     $apiBackup = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
     $apiList = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -WebSession $webSession
     if ($apiList.data.backups.filename -notcontains $apiBackup.data.filename) { throw 'Authenticated API backup was not listed.' }
