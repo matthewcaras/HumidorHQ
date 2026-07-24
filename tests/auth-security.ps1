@@ -1,10 +1,12 @@
 # Filename: auth-security.ps1
-# Revision : 1.0.1
+# Revision : 1.0.3
 # Description : Verifies HumidorHQ throttling, audit, CSRF, session-expiry, cookie, and response-header controls.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-22
+# Modified Date : 2026-07-24
 # Changelog :
+# 1.0.3 verify Matt receives a persistent session cookie
+# 1.0.2 exempt Matt from automatic session timeout and verify retained sessions
 # 1.0.1 verify backup route authentication and executable PHP discovery
 # 1.0.0 initial isolated authentication security regression coverage
 
@@ -80,6 +82,21 @@ function New-AuthenticatedSession {
     return $session
 }
 
+function New-MattAuthenticatedSession {
+    param([string]$BaseUrl)
+    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+    $anonymous = Invoke-RestMethod "$BaseUrl/session" -WebSession $session
+    $session.Headers['X-CSRF-Token'] = [string]$anonymous.data.csrfToken
+    $loginResponse = Invoke-WebRequest "$BaseUrl/login" -Method Post -ContentType 'application/json' -Body (@{ username = 'matt'; password = 'testpass' } | ConvertTo-Json) -WebSession $session
+    $login = $loginResponse.Content | ConvertFrom-Json
+    $setCookie = [string]($loginResponse.Headers['Set-Cookie'] | Select-Object -First 1)
+    if ($setCookie -notmatch 'Expires=' -and $setCookie -notmatch 'Max-Age=') {
+        throw 'Matt login did not issue a persistent session cookie.'
+    }
+    $session.Headers['X-CSRF-Token'] = [string]$login.data.csrfToken
+    return $session
+}
+
 $savedEnvironment = @{}
 foreach ($name in @('HUMIDORHQ_DATA_ROOT','HUMIDORHQ_TEST_MODE','HUMIDORHQ_LOGIN_USERNAME_LIMIT','HUMIDORHQ_LOGIN_CLIENT_LIMIT','HUMIDORHQ_LOGIN_WINDOW_SECONDS','HUMIDORHQ_LOGIN_LOCK_SECONDS','HUMIDORHQ_SESSION_IDLE_SECONDS','HUMIDORHQ_SESSION_ABSOLUTE_SECONDS')) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -102,7 +119,10 @@ try {
     } finally {
         Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
     }
-    @([pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true }) | ConvertTo-Json -AsArray | Set-Content -LiteralPath (Join-Path $dataRoot 'auth-users.json') -Encoding UTF8
+    @(
+        [pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true },
+        [pscustomobject]@{ username = 'matt'; passwordHash = $hash; displayName = 'Matt'; isActive = $true }
+    ) | ConvertTo-Json -AsArray | Set-Content -LiteralPath (Join-Path $dataRoot 'auth-users.json') -Encoding UTF8
 
     $env:HUMIDORHQ_DATA_ROOT = $dataRoot
     $env:HUMIDORHQ_TEST_MODE = '1'
@@ -151,6 +171,13 @@ try {
     $expired = Invoke-RestMethod "$($server.BaseUrl)/session" -WebSession $session
     if ($expired.data.authenticated) { throw 'Idle session timeout did not expire the session.' }
     Write-Output '[PASS] IdleSessionExpired'
+
+    $mattIdleSession = New-MattAuthenticatedSession -BaseUrl $server.BaseUrl
+    Start-Sleep -Seconds 3
+    $mattIdle = Invoke-RestMethod "$($server.BaseUrl)/session" -WebSession $mattIdleSession
+    if (-not $mattIdle.data.authenticated) { throw 'Matt session should not expire on idle timeout.' }
+    Write-Output '[PASS] MattIdleSessionRetained'
+
     Stop-AuthServer -Server $server
     $server = $null
 
@@ -160,6 +187,12 @@ try {
     $absoluteExpired = Invoke-RestMethod "$($server.BaseUrl)/session" -WebSession $absoluteSession
     if ($absoluteExpired.data.authenticated) { throw 'Absolute session timeout did not expire the session.' }
     Write-Output '[PASS] AbsoluteSessionExpired'
+
+    $mattAbsoluteSession = New-MattAuthenticatedSession -BaseUrl $server.BaseUrl
+    Start-Sleep -Seconds 3
+    $mattAbsolute = Invoke-RestMethod "$($server.BaseUrl)/session" -WebSession $mattAbsoluteSession
+    if (-not $mattAbsolute.data.authenticated) { throw 'Matt session should not expire on absolute timeout.' }
+    Write-Output '[PASS] MattAbsoluteSessionRetained'
 
     $authSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'api\lib\Auth.php')
     foreach ($hook in @('HUMIDORHQ_FORCE_SECURE_COOKIES','HUMIDORHQ_TRUST_PROXY_HEADERS','HTTP_X_FORWARDED_PROTO','session.use_strict_mode')) {

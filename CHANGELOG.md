@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.39
+Revision: 1.30.42
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 09:45 ET
+Modified Date: 2026-07-24 09:20 ET
 -->
 
 # Changelog
@@ -38,6 +38,24 @@ Changed by: Matt
 Changed by: Matt
 
 - Updated the Collection app cache-bust pin to load the footer placement fix in live browsers.
+
+## 1.30.40 - 2026-07-24
+
+Changed by: Matt
+
+- Exempted the Matt account from automatic session idle and absolute timeouts so it remains signed in until explicit logout.
+
+## 1.30.41 - 2026-07-24
+
+Changed by: Matt
+
+- Added auth-security regression coverage for Matt’s no-timeout session behavior.
+
+## 1.30.42 - 2026-07-24
+
+Changed by: Matt
+
+- Made Matt’s session cookie persistent so the login remains available across browser restarts until explicit logout.
 
 ## 1.30.36 - 2026-07-23
 

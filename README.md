@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.32
+Revision: 1.30.34
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-23 09:45 ET
+Modified Date: 2026-07-24 09:20 ET
 -->
 
 # HumidorHQ
@@ -83,7 +83,7 @@ Public deployments require sign-in before data routes can be read or changed. Th
 
 Runtime credentials are never read from the repository. Do not commit real usernames or password hashes.
 
-Authentication applies shared username and client-address throttles, audits failed and rate-limited attempts without passwords, and uses a constant-work dummy verification for unknown usernames. Authenticated sessions expire after 30 minutes of inactivity or 12 hours total by default. Login and every authenticated state-changing request require a session CSRF token. Session cookies are HttpOnly, SameSite Strict, and Secure whenever HTTPS is detected or forced by production configuration.
+Authentication applies shared username and client-address throttles, audits failed and rate-limited attempts without passwords, and uses a constant-work dummy verification for unknown usernames. Authenticated sessions expire after 30 minutes of inactivity or 12 hours total by default, except for the Matt account, which remains signed in until explicit logout and receives a persistent session cookie. Login and every authenticated state-changing request require a session CSRF token. Session cookies are HttpOnly, SameSite Strict, and Secure whenever HTTPS is detected or forced by production configuration.
 
 Production deployments should set `HUMIDORHQ_FORCE_SECURE_COOKIES=1`. Set `HUMIDORHQ_TRUST_PROXY_HEADERS=1` only when the hosting proxy reliably overwrites forwarded headers. Session and throttle defaults can be adjusted with the documented `HUMIDORHQ_SESSION_*` and `HUMIDORHQ_LOGIN_*` environment variables in [Runtime Data Setup](docs/RUNTIME_DATA.md).
 

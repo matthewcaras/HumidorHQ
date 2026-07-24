@@ -2,12 +2,13 @@
 declare(strict_types=1);
 /*
  * Filename: Auth.php
- * Revision: 1.1.0
+ * Revision: 1.1.2
  * Description: Authentication, session lifetime, CSRF, and login-throttling controls for HumidorHQ.
- * Modified Date: 2026-07-17 18:00 ET
+ * Modified Date: 2026-07-24 09:20 ET
  */
 
 const HUMIDORHQ_INVALID_LOGIN_HASH = '$2y$12$zykFIVqUfkp33ZpHOEV0/u89G3ATZDaTdJs9r7t/djV0Q1zUa.YRO';
+const HUMIDORHQ_MATT_SESSION_COOKIE_SECONDS = 31536000;
 
 function auth_env_bool(string $name, bool $default = false): bool
 {
@@ -70,6 +71,34 @@ function auth_user_public(array $user): array
     ];
 }
 
+function auth_user_is_matts_account(array $user): bool
+{
+    $username = strtolower(trim((string) ($user['username'] ?? '')));
+    $displayName = strtolower(trim((string) ($user['displayName'] ?? '')));
+    return in_array($username, ['matt', 'matthewcaras'], true) || $displayName === 'matt';
+}
+
+function refresh_session_cookie_for_user(array $user): void
+{
+    if (!auth_user_is_matts_account($user)) {
+        return;
+    }
+
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $params = session_get_cookie_params();
+    setcookie(session_name(), session_id(), [
+        'expires' => time() + HUMIDORHQ_MATT_SESSION_COOKIE_SECONDS,
+        'path' => (string) ($params['path'] ?? '/'),
+        'domain' => (string) ($params['domain'] ?? ''),
+        'secure' => (bool) ($params['secure'] ?? false),
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+}
+
 function expire_authenticated_session(): void
 {
     unset(
@@ -91,10 +120,21 @@ function current_auth_user(): ?array
     $now = time();
     $createdAt = (int) ($_SESSION['humidor_session_created_at'] ?? 0);
     $lastActivity = (int) ($_SESSION['humidor_session_last_activity'] ?? 0);
+    if ($createdAt < 1 || $lastActivity < 1) {
+        expire_authenticated_session();
+        return null;
+    }
+
+    if (auth_user_is_matts_account($user)) {
+        $_SESSION['humidor_session_last_activity'] = $now;
+        refresh_session_cookie_for_user($user);
+        return $user;
+    }
+
     $testMode = auth_env_bool('HUMIDORHQ_TEST_MODE');
     $idleTimeout = auth_env_int('HUMIDORHQ_SESSION_IDLE_SECONDS', 1800, $testMode ? 1 : 60, 86400);
     $absoluteTimeout = auth_env_int('HUMIDORHQ_SESSION_ABSOLUTE_SECONDS', 43200, $testMode ? 1 : 300, 604800);
-    if ($createdAt < 1 || $lastActivity < 1 || ($now - $lastActivity) > $idleTimeout || ($now - $createdAt) > $absoluteTimeout) {
+    if (($now - $lastActivity) > $idleTimeout || ($now - $createdAt) > $absoluteTimeout) {
         expire_authenticated_session();
         return null;
     }
@@ -303,6 +343,7 @@ function login_with_credentials(array $input): array
     $_SESSION['humidor_session_created_at'] = $now;
     $_SESSION['humidor_session_last_activity'] = $now;
     $_SESSION['humidor_csrf_token'] = bin2hex(random_bytes(32));
+    refresh_session_cookie_for_user($_SESSION['humidor_user']);
 
     return session_payload();
 }
