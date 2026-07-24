@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.31
+ * Revision: 1.24.32
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-23 09:25 ET
+ * Modified Date: 2026-07-24 10:20 ET
  */
 
 const API_BASE_URL = 'api'
@@ -1643,7 +1643,7 @@ function renderBackupPage(view) {
   panel.className = 'data-form'
   panel.innerHTML = `
     <h3>Protected Runtime Backup</h3>
-    <p class="muted">Create an authenticated backup of runtime JSON, including user password hashes. The audit log is not included. Store downloaded copies securely.</p>
+    <p class="muted">Create an authenticated backup of runtime JSON, including user password hashes. The audit log is not included. Store downloaded copies securely. Only the four most recent backup bundles are retained; older bundles are deleted automatically.</p>
     <div class="form-actions">
       <button type="button" class="primary-button" data-action="create-backup">Create Backup</button>
       <button type="button" class="secondary-button" data-action="open-production-import">Open Production Import</button>

@@ -1,8 +1,8 @@
 <!--
 Filename: RUNTIME_DATA.md
-Revision: 1.6.0
+Revision: 1.6.1
 Description: Windows and Hostinger setup for HumidorHQ runtime JSON storage.
-Modified Date: 2026-07-22 13:45 ET
+Modified Date: 2026-07-24 10:20 ET
 -->
 
 # Runtime Data Setup
@@ -15,7 +15,7 @@ Startup creates the selected directory when it is missing, then runs transaction
 
 Runtime JSON, credentials, and audit logs under `data/` are ignored by Git. Tracked `data/.htaccess` denies direct Apache browser access, while application data routes remain protected by PHP session authentication.
 
-Authenticated users can create, download, import, preview, and restore portable bundles from the `Backup & Restore` page. Server-side bundles are stored under ignored `backups/`, where a separate tracked `.htaccess` denies direct HTTP access. Downloaded bundles contain password hashes and should be stored securely outside the deployment account. The append-only audit log is intentionally not included in restore bundles.
+Authenticated users can create, download, import, preview, and restore portable bundles from the `Backup & Restore` page. Server-side bundles are stored under ignored `backups/`, where a separate tracked `.htaccess` denies direct HTTP access. The first authenticated use of each local day automatically creates one backup for that account, and only the four most recent backup bundles are retained automatically. Downloaded bundles contain password hashes and should be stored securely outside the deployment account. The append-only audit log is intentionally not included in restore bundles.
 
 All listed bundles pass format, SHA-256, and JSON-shape checks. Backup creation and download remain available to preserve parseable legacy data even when the integrity checker reports existing defects. Import and restore also require valid IDs, counters, relationships, and Lot/balance reconciliation; those defects must be corrected before restore. Restore requires an exact confirmation phrase and a current-state fingerprint from a fresh preview. It creates a pre-restore safety bundle and uses the existing transaction journal before replacing any runtime collections. Existing runtime data is never changed merely by creating, listing, downloading, importing, or previewing a backup.
 
@@ -101,3 +101,4 @@ Collection templates use JSON arrays. `counters.json` uses an object containing 
 - `AUTH_USERS_SETUP_REQUIRED`: non-auth collections are ready, but credentials must be provisioned separately.
 - `AUDIT_FILE_NOT_WRITABLE`: the existing audit log cannot be safely accessed.
 - `DATA_TRANSACTION_RECOVERY_FAILED`: an interrupted transaction could not be safely recovered.
+- `BACKUP_PRUNE_FAILED`: automatic backup retention could not remove an old bundle.

@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: BackupRestoreService.php
- * Revision: 1.0.2
+ * Revision: 1.0.3
  * Description: Authenticated runtime backup export, validation, and transactional restore service.
- * Modified Date: 2026-07-24 10:00 ET
+ * Modified Date: 2026-07-24 10:20 ET
  */
 
 const HUMIDORHQ_BACKUP_FORMAT = 'humidorhq-runtime-backup';
@@ -63,6 +63,63 @@ function backup_daily_backup_exists(string $username, ?string $localDate = null)
 function backup_daily_backup_in_progress(): bool
 {
     return ($GLOBALS['humidorhq_daily_backup_in_progress'] ?? false) === true;
+}
+
+function backup_collect_bundle_rows(): array
+{
+    $rows = [];
+    foreach (glob(backup_directory() . DIRECTORY_SEPARATOR . 'humidorhq-*.json') ?: [] as $path) {
+        try {
+            $bundle = backup_load_bundle(basename($path));
+            $validated = backup_validate_bundle($bundle, false);
+            $rows[] = [
+                'filename' => basename($path),
+                'path' => $path,
+                'createdAtUtc' => (string) ($bundle['createdAtUtc'] ?? ''),
+                'mtime' => (int) (@filemtime($path) ?: 0),
+                'kind' => (string) ($bundle['kind'] ?? ''),
+                'sourceFingerprint' => (string) ($bundle['sourceFingerprint'] ?? ''),
+                'counts' => $validated['counts'],
+                'bytes' => (int) (@filesize($path) ?: 0),
+            ];
+        } catch (Throwable) {
+            continue;
+        }
+    }
+    usort($rows, static function (array $left, array $right): int {
+        $createdCompare = strcmp((string) $left['createdAtUtc'], (string) $right['createdAtUtc']);
+        if ($createdCompare !== 0) {
+            return $createdCompare;
+        }
+        $mtimeCompare = ((int) $left['mtime']) <=> ((int) $right['mtime']);
+        if ($mtimeCompare !== 0) {
+            return $mtimeCompare;
+        }
+        return strcmp((string) $left['filename'], (string) $right['filename']);
+    });
+    return $rows;
+}
+
+function backup_prune_old_backups(int $retain = 4): array
+{
+    $retain = max(0, $retain);
+    $rows = backup_collect_bundle_rows();
+    $removed = [];
+    while (count($rows) > $retain) {
+        $entry = array_shift($rows);
+        if (!is_array($entry)) {
+            break;
+        }
+        $path = (string) ($entry['path'] ?? '');
+        if ($path === '' || !is_file($path)) {
+            continue;
+        }
+        if (!unlink($path)) {
+            throw new ApiError('BACKUP_PRUNE_FAILED', 'An old backup bundle could not be removed.', 500);
+        }
+        $removed[] = (string) ($entry['filename'] ?? basename($path));
+    }
+    return ['removed' => $removed, 'kept' => count($rows)];
 }
 
 function backup_current_manifest(): array
@@ -138,6 +195,7 @@ function backup_write_bundle(array $bundle): array
 function create_runtime_backup(string $kind = 'manual'): array
 {
     $result = backup_write_bundle(backup_build_bundle($kind));
+    backup_prune_old_backups();
     audit_record('Backup & Restore', 'create backup', ['filename' => $result['filename'], 'kind' => $kind]);
     return $result;
 }
@@ -375,6 +433,7 @@ function import_runtime_backup(array $input): array
     $validated = backup_validate_bundle($bundle);
     $bundle['kind'] = 'manual';
     $result = backup_write_bundle($bundle);
+    backup_prune_old_backups();
     $result['counts'] = $validated['counts'];
     audit_record('Backup & Restore', 'import backup', ['filename' => $result['filename']]);
     return $result;
@@ -382,24 +441,18 @@ function import_runtime_backup(array $input): array
 
 function list_runtime_backups(): array
 {
+    backup_prune_old_backups();
     $rows = [];
-    foreach (glob(backup_directory() . DIRECTORY_SEPARATOR . 'humidorhq-*.json') ?: [] as $path) {
-        try {
-            $bundle = backup_load_bundle(basename($path));
-            $validated = backup_validate_bundle($bundle, false);
-            $rows[] = [
-                'filename' => basename($path),
-                'createdAtUtc' => (string) ($bundle['createdAtUtc'] ?? ''),
-                'kind' => (string) ($bundle['kind'] ?? ''),
-                'sourceFingerprint' => (string) ($bundle['sourceFingerprint'] ?? ''),
-                'counts' => $validated['counts'],
-                'bytes' => filesize($path),
-            ];
-        } catch (Throwable) {
-            continue;
-        }
+    foreach (array_reverse(backup_collect_bundle_rows()) as $row) {
+        $rows[] = [
+            'filename' => $row['filename'],
+            'createdAtUtc' => $row['createdAtUtc'],
+            'kind' => $row['kind'],
+            'sourceFingerprint' => $row['sourceFingerprint'],
+            'counts' => $row['counts'],
+            'bytes' => $row['bytes'],
+        ];
     }
-    usort($rows, static fn (array $a, array $b): int => strcmp($b['createdAtUtc'], $a['createdAtUtc']));
     return ['backups' => $rows, 'currentManifest' => backup_current_manifest()];
 }
 
@@ -426,7 +479,7 @@ function restore_runtime_backup(string $filename, array $input): array
     }
     $bundle = backup_load_bundle($filename);
     $validated = backup_validate_bundle($bundle);
-    return with_data_transaction(static function () use ($filename, $expectedFingerprint, $validated): array {
+    $result = with_data_transaction(static function () use ($filename, $expectedFingerprint, $validated): array {
         if (!hash_equals($expectedFingerprint, backup_current_manifest()['fingerprint'])) {
             throw new ApiError('RESTORE_STATE_CHANGED', 'Runtime data changed after preview. Preview the restore again.', 409);
         }
@@ -440,4 +493,6 @@ function restore_runtime_backup(string $filename, array $input): array
         ]);
         return ['restoredFrom' => $filename, 'safetyBackup' => $safetyBackup['filename'], 'counts' => $validated['counts']];
     });
+    backup_prune_old_backups();
+    return $result;
 }

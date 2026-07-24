@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.44
+Revision: 1.30.45
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 10:00 ET
+Modified Date: 2026-07-24 10:20 ET
 -->
 
 # Changelog
@@ -68,6 +68,12 @@ Changed by: Matt
 Changed by: Matt
 
 - Hardened automatic daily backups so repeat logins and refreshes on the same day do not create duplicate daily bundles.
+
+## 1.30.45 - 2026-07-24
+
+Changed by: Matt
+
+- Added automatic backup retention so only the four newest backup bundles remain and the oldest bundles are pruned first.
 
 ## 1.30.36 - 2026-07-23
 

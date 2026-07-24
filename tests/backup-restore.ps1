@@ -1,10 +1,11 @@
 # Filename: backup-restore.ps1
-# Revision : 1.0.3
+# Revision : 1.0.4
 # Description : Rehearses guarded runtime backup, import, preview, and restore in a temporary app copy.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-19
 # Modified Date : 2026-07-24
 # Changelog :
+# 1.0.4 verify backup retention keeps only the four newest bundles and deletes oldest first
 # 1.0.3 verify daily backup dedupe across repeated authenticated sessions
 # 1.0.2 verify first-auth-use daily backup creation and same-day dedupe
 # 1.0.1 verify authenticated backup route access and exact route protection
@@ -54,6 +55,8 @@ try {
             Copy-Item -LiteralPath $seed.FullName -Destination (Join-Path $tempData $seed.Name)
         }
     }
+    Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-*.json' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
     $hashOut = Join-Path $tempRoot 'php-hash.out'
     $hashErr = Join-Path $tempRoot 'php-hash.err'
     try {
@@ -128,8 +131,18 @@ try {
     $dailyBackupsAfterSecondLogin = @(Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-daily-backup-test-*.json' -File)
     if ($dailyBackupsAfterSecondLogin.Count -ne 1) { throw 'A second authenticated session created an additional daily backup for the same day.' }
     $apiBackup = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
+    Start-Sleep -Milliseconds 1100
+    $manualBackupTwo = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
+    Start-Sleep -Milliseconds 1100
+    $manualBackupThree = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
+    Start-Sleep -Milliseconds 1100
+    $manualBackupFour = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
     $apiList = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -WebSession $webSession
-    if ($apiList.data.backups.filename -notcontains $apiBackup.data.filename) { throw 'Authenticated API backup was not listed.' }
+    if ($apiList.data.backups.Count -ne 4) { throw "Backup retention should keep exactly four bundles, found $($apiList.data.backups.Count)." }
+    if ($apiList.data.backups.filename -contains $dailyBackups[0].Name) { throw 'Backup retention did not remove the oldest daily backup first.' }
+    foreach ($manual in @($apiBackup, $manualBackupTwo, $manualBackupThree, $manualBackupFour)) {
+        if ($apiList.data.backups.filename -notcontains $manual.data.filename) { throw "Expected retained backup $($manual.data.filename) was missing." }
+    }
     $previewBody = @{ filename = $apiBackup.data.filename } | ConvertTo-Json
     $apiPreview = Invoke-RestMethod "http://127.0.0.1:$port/api/backups/preview" -Method Post -ContentType 'application/json' -Body $previewBody -WebSession $webSession
     $restoreBody = @{
