@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.32
+ * Revision: 1.24.34
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-24 10:20 ET
+ * Modified Date: 2026-07-24 11:26 ET
  */
 
 const API_BASE_URL = 'api'
@@ -570,6 +570,7 @@ const managedPages = {
       { label: 'Cigar', value: (row) => cigarName(row) },
       { label: 'Vitola', value: (row) => row.vitola || '' },
       { label: 'Wrapper', value: (row) => row.wrapper || '' },
+      { label: 'Avg Rating', value: (row) => averageRatingDisplay(smokingJournalAverageRatingForCatalogCigar(row.id)) },
       { label: 'Purchased', value: (row) => formatCount(purchasedQuantityForCatalog(row.id)) },
       { label: 'On Hand', value: (row) => formatCount(onHandQuantityForCatalog(row.id)) },
       { label: 'Buy Again', value: (row) => buyAgainLabel(row.buyAgainStatus) },
@@ -724,6 +725,10 @@ function displayDate(value) {
   }
   const text = String(value)
   return text.includes('T') ? text.slice(0, 10) : text
+}
+
+function averageRatingDisplay(value) {
+  return value === null || value === undefined ? 'N/A' : Number(value).toFixed(2)
 }
 
 function normalizeEventType(value) {
@@ -1127,6 +1132,7 @@ function buildCollectionItems() {
       totalSavings: costComplete && msrpComplete ? item.totalMsrpValue - item.totalCostBasis : null,
       averageCostPerCigar: costComplete ? averageCostPerCigar : null,
       averageMsrpPerCigar: msrpComplete ? averageMsrpPerCigar : null,
+      averageRating: smokingJournalAverageRatingForCatalogCigar(item.cigar.id),
       costComplete,
       msrpComplete,
     }
@@ -2104,6 +2110,10 @@ function smokingJournalHistoryMetrics(rows) {
   }
 }
 
+function smokingJournalAverageRatingForCatalogCigar(catalogCigarId) {
+  return smokingJournalHistoryMetrics(smokingJournalHistoryRows(catalogCigarId)).averageRating
+}
+
 function cigarOriginLabel(cigar) {
   return String(cigar?.country || cigar?.origin || '').trim() || 'Unknown Origin'
 }
@@ -2872,6 +2882,9 @@ function renderCollectionPage(view) {
       detailRow.innerHTML = `
         <td colspan="6">
           <div class="collection-expanded-card">
+            <div class="collection-expanded-summary">
+              <strong>Average Rating:</strong> ${escapeHtml(averageRatingDisplay(item.averageRating))}
+            </div>
             <table class="data-table collection-detail-table">
               <thead>
                 <tr>

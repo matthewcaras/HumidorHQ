@@ -1,11 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.28
+# Revision : 1.32.30
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-24 10:20 ET
+# Modified Date : 2026-07-24 11:26 ET
 # Changelog :
-# 1.32.28 align smoke test cache-bust pin with app.js 1.24.32 and verify backup retention
+# 1.32.30 align smoke test cache-bust pin with app.js 1.24.34 and verify catalog average rating rendering
 # 1.32.27 align smoke test cache-bust pin with app.js 1.24.31
 # 1.32.23 align smoke test cache-bust pin with app.js 1.24.28
 # 1.32.22 align smoke test cache-bust pin with app.js 1.24.27

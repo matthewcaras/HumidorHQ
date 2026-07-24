@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.45
+Revision: 1.30.47
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 10:20 ET
+Modified Date: 2026-07-24 11:26 ET
 -->
 
 # Changelog
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.47 - 2026-07-24
+
+Changed by: Matt
+
+- Added the average smoked rating to the main Catalog table with an `N/A` fallback when no rating exists.
+
+## 1.30.46 - 2026-07-24
+
+Changed by: Matt
+
+- Added the average smoked rating to the expanded Collection cigar detail with an `N/A` fallback when no rating exists.
 
 ## 1.30.37 - 2026-07-23
 
