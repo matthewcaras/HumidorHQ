@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: BackupRestoreService.php
- * Revision: 1.0.0
+ * Revision: 1.0.1
  * Description: Authenticated runtime backup export, validation, and transactional restore service.
- * Modified Date: 2026-07-19 15:00 ET
+ * Modified Date: 2026-07-24 09:40 ET
  */
 
 const HUMIDORHQ_BACKUP_FORMAT = 'humidorhq-runtime-backup';
@@ -20,6 +20,13 @@ function backup_collection_names(): array
     ];
 }
 
+function backup_daily_backup_kind(string $username): string
+{
+    $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower(trim($username)));
+    $slug = trim((string) $slug, '-');
+    return $slug !== '' ? 'daily-' . $slug : 'daily';
+}
+
 function backup_directory(): string
 {
     $path = APP_ROOT . DIRECTORY_SEPARATOR . 'backups';
@@ -30,6 +37,23 @@ function backup_directory(): string
         throw new ApiError('BACKUP_DIRECTORY_FAILED', 'The backup directory must be readable and writable by PHP.', 500);
     }
     return $path;
+}
+
+function backup_daily_backup_exists(string $username, ?string $localDate = null): bool
+{
+    $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower(trim($username)));
+    $slug = trim((string) $slug, '-');
+    if ($slug === '') {
+        return false;
+    }
+    $date = $localDate ?? today_local_date();
+    $pattern = backup_directory() . DIRECTORY_SEPARATOR . 'humidorhq-daily-' . $slug . '-' . $date . '-*.json';
+    return (glob($pattern) ?: []) !== [];
+}
+
+function backup_daily_backup_in_progress(): bool
+{
+    return ($GLOBALS['humidorhq_daily_backup_in_progress'] ?? false) === true;
 }
 
 function backup_current_manifest(): array
@@ -88,7 +112,10 @@ function backup_write_bundle(array $bundle): array
 {
     $directory = backup_directory();
     $kind = preg_replace('/[^a-z0-9\-]/', '', strtolower((string) ($bundle['kind'] ?? 'manual'))) ?: 'manual';
-    $filename = 'humidorhq-' . $kind . '-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.json';
+    $timestamp = str_starts_with($kind, 'daily-')
+        ? (new DateTimeImmutable('now', application_timezone()))->format('Ymd-His')
+        : gmdate('Ymd-His');
+    $filename = 'humidorhq-' . $kind . '-' . $timestamp . '-' . bin2hex(random_bytes(4)) . '.json';
     $target = $directory . DIRECTORY_SEPARATOR . $filename;
     $temporary = $target . '.tmp.' . bin2hex(random_bytes(4));
     $json = json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -106,9 +133,50 @@ function create_runtime_backup(string $kind = 'manual'): array
     return $result;
 }
 
+function maybe_create_daily_backup_for_user(array $user): ?array
+{
+    if (backup_daily_backup_in_progress()) {
+        return null;
+    }
+
+    $username = trim((string) ($user['username'] ?? ''));
+    if ($username === '') {
+        return null;
+    }
+
+    $localDate = today_local_date();
+    if (backup_daily_backup_exists($username, $localDate)) {
+        return null;
+    }
+
+    $lockPath = backup_directory() . DIRECTORY_SEPARATOR . '.daily-backup.lock';
+    $lock = fopen($lockPath, 'c');
+    if ($lock === false) {
+        throw new ApiError('BACKUP_DIRECTORY_FAILED', 'The daily backup lock could not be created.', 500);
+    }
+
+    try {
+        if (!flock($lock, LOCK_EX)) {
+            throw new ApiError('BACKUP_DIRECTORY_FAILED', 'The daily backup lock could not be acquired.', 500);
+        }
+        if (backup_daily_backup_exists($username, $localDate)) {
+            return null;
+        }
+        $GLOBALS['humidorhq_daily_backup_in_progress'] = true;
+        try {
+            return create_runtime_backup(backup_daily_backup_kind($username));
+        } finally {
+            unset($GLOBALS['humidorhq_daily_backup_in_progress']);
+        }
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
 function backup_safe_filename(string $filename): string
 {
-    if (!preg_match('/^humidorhq\-(?:manual|pre\-restore)\-\d{8}\-\d{6}\-[a-f0-9]{8}\.json$/', $filename)) {
+    if (!preg_match('/^humidorhq\-(?:manual|pre\-restore|daily(?:\-[a-z0-9]+)*)\-\d{8}\-\d{6}\-[a-f0-9]{8}\.json$/', $filename)) {
         throw new ApiError('BACKUP_INVALID_FILENAME', 'The backup filename is invalid.', 400);
     }
     return $filename;

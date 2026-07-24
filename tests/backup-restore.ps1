@@ -1,10 +1,11 @@
 # Filename: backup-restore.ps1
-# Revision : 1.0.1
+# Revision : 1.0.2
 # Description : Rehearses guarded runtime backup, import, preview, and restore in a temporary app copy.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-19
-# Modified Date : 2026-07-22
+# Modified Date : 2026-07-24
 # Changelog :
+# 1.0.2 verify first-auth-use daily backup creation and same-day dedupe
 # 1.0.1 verify authenticated backup route access and exact route protection
 
 [CmdletBinding()]
@@ -112,6 +113,12 @@ try {
     $loginBody = @{ username = 'backup-test'; password = 'backup-test-pass' } | ConvertTo-Json
     $login = Invoke-RestMethod "http://127.0.0.1:$port/api/login" -Method Post -ContentType 'application/json' -Body $loginBody -WebSession $webSession
     $webSession.Headers['X-CSRF-Token'] = [string]$login.data.csrfToken
+    $dailyBackups = @(Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-daily-backup-test-*.json' -File)
+    if ($dailyBackups.Count -ne 1) { throw "Expected one automatic daily backup after first authenticated use, found $($dailyBackups.Count)." }
+    $sessionRefresh = Invoke-RestMethod "http://127.0.0.1:$port/api/session" -WebSession $webSession
+    if (-not $sessionRefresh.data.authenticated) { throw 'Authenticated session was not retained after the daily backup trigger.' }
+    $dailyBackupsAfterRefresh = @(Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-daily-backup-test-*.json' -File)
+    if ($dailyBackupsAfterRefresh.Count -ne 1) { throw 'Repeated authenticated use created more than one daily backup for the same day.' }
     $apiBackup = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -Method Post -ContentType 'application/json' -Body '{}' -WebSession $webSession
     $apiList = Invoke-RestMethod "http://127.0.0.1:$port/api/backups" -WebSession $webSession
     if ($apiList.data.backups.filename -notcontains $apiBackup.data.filename) { throw 'Authenticated API backup was not listed.' }

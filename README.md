@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.34
+Revision: 1.30.35
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 09:20 ET
+Modified Date: 2026-07-24 09:40 ET
 -->
 
 # HumidorHQ
@@ -157,7 +157,7 @@ The audit log, lock files, temporary writes, credentials, and backups remain out
 
 ## Backup And Restore
 
-The authenticated `Backup & Restore` page creates portable JSON bundles under `backups/`. Bundle files are ignored by Git, and tracked `backups/.htaccess` denies direct HTTP access. Use the authenticated Download action to keep an off-server copy; bundles contain `auth-users.json` password hashes and must be stored securely.
+The authenticated `Backup & Restore` page creates portable JSON bundles under `backups/`. Bundle files are ignored by Git, and tracked `backups/.htaccess` denies direct HTTP access. The first authenticated use of each local day also creates an automatic daily backup for that signed-in account. Use the authenticated Download action to keep an off-server copy; bundles contain `auth-users.json` password hashes and must be stored securely.
 
 A bundle contains all twelve runtime JSON collections but deliberately excludes `audit-log.jsonl`. Creation and download remain available for preserving parseable legacy data. Import and restore additionally validate IDs, counters, required relationships, and Lot/balance reconciliation without changing runtime data; an integrity failure must be corrected before that bundle can be restored. Restore requires a fresh preview, the exact phrase `RESTORE-HUMIDORHQ-BACKUP`, and an unchanged current-state fingerprint. It creates a timestamped pre-restore safety bundle before replacing collections through the existing journaled multi-file transaction. Existing audit history is never replaced by restore.
 

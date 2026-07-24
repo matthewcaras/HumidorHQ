@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.42
+Revision: 1.30.43
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 09:20 ET
+Modified Date: 2026-07-24 09:40 ET
 -->
 
 # Changelog
@@ -56,6 +56,12 @@ Changed by: Matt
 Changed by: Matt
 
 - Made Matt’s session cookie persistent so the login remains available across browser restarts until explicit logout.
+
+## 1.30.43 - 2026-07-24
+
+Changed by: Matt
+
+- Added automatic first-auth-use daily backups tied to the authenticated account and verified same-day dedupe.
 
 ## 1.30.36 - 2026-07-23
 

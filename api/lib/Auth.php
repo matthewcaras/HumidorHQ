@@ -128,6 +128,9 @@ function current_auth_user(): ?array
     if (auth_user_is_matts_account($user)) {
         $_SESSION['humidor_session_last_activity'] = $now;
         refresh_session_cookie_for_user($user);
+        if (function_exists('maybe_create_daily_backup_for_user')) {
+            maybe_create_daily_backup_for_user($user);
+        }
         return $user;
     }
 
@@ -139,6 +142,9 @@ function current_auth_user(): ?array
         return null;
     }
     $_SESSION['humidor_session_last_activity'] = $now;
+    if (function_exists('maybe_create_daily_backup_for_user')) {
+        maybe_create_daily_backup_for_user($user);
+    }
     return $user;
 }
 
