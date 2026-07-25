@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.32.0
+Revision: 1.33.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.33.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added All Purchases and Exceptions Only views to Accounting Reconciliation.
+- Added Vendor, purchase-status, and purchase-date filters with a single clear action.
+- Added prominent exception counts for allocation, quantity, cost, incomplete-money, and missing-line issues.
+- Added a formula-safe CSV export containing the currently filtered reconciliation workpaper.
+- Included the new reconciliation filters and open state in locally saved Reports views.
 
 ## 1.32.0 - 2026-07-25
 

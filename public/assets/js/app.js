@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.26.0
+ * Revision: 1.27.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -63,6 +63,11 @@ const state = {
   reportSearch: '',
   reportCustomStart: '',
   reportCustomEnd: '',
+  accountingReconciliationScope: 'all',
+  accountingReconciliationVendorId: '',
+  accountingReconciliationStatus: '',
+  accountingReconciliationStart: '',
+  accountingReconciliationEnd: '',
   purchaseHistoryGroup: 'vendor',
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
@@ -355,6 +360,11 @@ function reportsViewSnapshot() {
     reportPeriod: state.reportPeriod,
     reportRemovalType: state.reportRemovalType,
     reportSearch: String(state.reportSearch || ''),
+    accountingReconciliationScope: state.accountingReconciliationScope,
+    accountingReconciliationVendorId: String(state.accountingReconciliationVendorId || ''),
+    accountingReconciliationStatus: String(state.accountingReconciliationStatus || ''),
+    accountingReconciliationStart: String(state.accountingReconciliationStart || ''),
+    accountingReconciliationEnd: String(state.accountingReconciliationEnd || ''),
     agingManufacturer: String(state.agingManufacturer || ''),
     agingHumidorId: String(state.agingHumidorId || ''),
     selectedAgingBucketKey: state.selectedAgingBucketKey || null,
@@ -398,6 +408,11 @@ function normalizeReportsViewRecord(entry) {
       reportPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.reportPeriod) ? snapshot.reportPeriod : 'lifetime',
       reportRemovalType: ['all', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(snapshot.reportRemovalType) ? snapshot.reportRemovalType : 'all',
       reportSearch: String(snapshot.reportSearch || ''),
+      accountingReconciliationScope: snapshot.accountingReconciliationScope === 'exceptions' ? 'exceptions' : 'all',
+      accountingReconciliationVendorId: String(snapshot.accountingReconciliationVendorId || ''),
+      accountingReconciliationStatus: ['pending', 'partially-received', 'received'].includes(snapshot.accountingReconciliationStatus) ? snapshot.accountingReconciliationStatus : '',
+      accountingReconciliationStart: String(snapshot.accountingReconciliationStart || ''),
+      accountingReconciliationEnd: String(snapshot.accountingReconciliationEnd || ''),
       agingManufacturer: String(snapshot.agingManufacturer || ''),
       agingHumidorId: String(snapshot.agingHumidorId || ''),
       selectedAgingBucketKey: String(snapshot.selectedAgingBucketKey || '') || null,
@@ -465,6 +480,11 @@ function applyReportsView(name) {
   state.reportPeriod = view.snapshot.reportPeriod
   state.reportRemovalType = view.snapshot.reportRemovalType
   state.reportSearch = view.snapshot.reportSearch
+  state.accountingReconciliationScope = view.snapshot.accountingReconciliationScope
+  state.accountingReconciliationVendorId = view.snapshot.accountingReconciliationVendorId
+  state.accountingReconciliationStatus = view.snapshot.accountingReconciliationStatus
+  state.accountingReconciliationStart = view.snapshot.accountingReconciliationStart
+  state.accountingReconciliationEnd = view.snapshot.accountingReconciliationEnd
   state.agingManufacturer = view.snapshot.agingManufacturer
   state.agingHumidorId = view.snapshot.agingHumidorId
   state.selectedAgingBucketKey = view.snapshot.selectedAgingBucketKey
@@ -1473,6 +1493,104 @@ function accountingReconciliationSummary(rows = accountingReconciliationRows()) 
     costVariance: totalPaid === null || accountedCost === null ? null : roundMoney(totalPaid - accountedCost),
     quantityVariance: rows.reduce((sum, row) => sum + Number(row.quantityVariance || 0), 0),
   }
+}
+
+function filteredAccountingReconciliationRows(rows = accountingReconciliationRows()) {
+  const startDate = String(state.accountingReconciliationStart || '')
+  const endDate = String(state.accountingReconciliationEnd || '')
+  return rows
+    .filter((row) => state.accountingReconciliationScope !== 'exceptions' || row.status !== 'Reconciled')
+    .filter((row) => !state.accountingReconciliationVendorId || Number(row.purchase.vendorId || 0) === Number(state.accountingReconciliationVendorId))
+    .filter((row) => !state.accountingReconciliationStatus || normalizePurchaseStatus(row.purchase.status) === state.accountingReconciliationStatus)
+    .filter((row) => !startDate || String(row.purchase.purchaseDate || '') >= startDate)
+    .filter((row) => !endDate || String(row.purchase.purchaseDate || '') <= endDate)
+}
+
+function accountingReconciliationExceptionSummary(rows = accountingReconciliationRows()) {
+  return {
+    total: rows.filter((row) => row.status !== 'Reconciled').length,
+    allocation: rows.filter((row) => row.moneyComplete && row.allocationVariance !== 0).length,
+    quantity: rows.filter((row) => row.quantityVariance !== 0).length,
+    cost: rows.filter((row) => row.moneyComplete && row.costVariance !== 0).length,
+    incompleteMoney: rows.filter((row) => row.status === 'Money incomplete').length,
+    missingLines: rows.filter((row) => row.status === 'No purchase lines').length,
+  }
+}
+
+function accountingCsvCell(value) {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  let text = String(value)
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) return text
+  if (/^[=+@-]/.test(text)) text = `'${text}`
+  return `"${text.replaceAll('"', '""')}"`
+}
+
+function accountingCsvMoney(value) {
+  return hasKnownMoney(value) ? Number(value).toFixed(2) : ''
+}
+
+function accountingReconciliationCsv(rows) {
+  const headings = [
+    'Purchase ID',
+    'Purchase Date',
+    'Purchase Status',
+    'Vendor',
+    'Ordered Quantity',
+    'Received Quantity',
+    'On-Hand Quantity',
+    'Removed Quantity',
+    'Net Adjustment Quantity',
+    'Unreceived Quantity',
+    'Quantity Variance',
+    'Total Paid',
+    'On-Hand Basis',
+    'Removed Basis',
+    'Net Adjustment Basis',
+    'Unreceived Basis',
+    'Precision Rounding',
+    'Accounted Basis',
+    'Cost Variance',
+    'Reconciliation Status',
+  ]
+  const dataRows = rows.map((row) => [
+    Number(row.purchase.id),
+    displayDate(row.purchase.purchaseDate),
+    normalizePurchaseStatus(row.purchase.status),
+    row.vendor?.name || 'Unknown Vendor',
+    row.orderedQuantity,
+    row.receivedQuantity,
+    row.onHandQuantity,
+    row.removedQuantity,
+    row.adjustmentQuantity,
+    row.unreceivedQuantity,
+    row.quantityVariance,
+    accountingCsvMoney(row.totalPaid),
+    accountingCsvMoney(row.onHandCost),
+    accountingCsvMoney(row.removedCost),
+    accountingCsvMoney(row.adjustmentCost),
+    accountingCsvMoney(row.unreceivedCost),
+    accountingCsvMoney(row.precisionRounding),
+    accountingCsvMoney(row.accountedCost),
+    accountingCsvMoney(row.costVariance),
+    row.status,
+  ])
+  return [headings, ...dataRows]
+    .map((row) => row.map(accountingCsvCell).join(','))
+    .join('\r\n')
+}
+
+function downloadAccountingReconciliationCsv(rows) {
+  const csv = accountingReconciliationCsv(rows)
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `humidorhq-accounting-reconciliation-${todayIsoDate()}.csv`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function buildHumidorSummaries() {
@@ -6285,14 +6403,93 @@ function openAccountingReconciliationPurchase(purchaseId) {
 }
 
 function renderAccountingReconciliationReport(view) {
-  const rows = accountingReconciliationRows()
+  const allRows = accountingReconciliationRows()
+  const rows = filteredAccountingReconciliationRows(allRows)
   const summary = accountingReconciliationSummary(rows)
+  const exceptions = accountingReconciliationExceptionSummary(rows)
+  const vendors = [...records('vendors')]
+    .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), undefined, { sensitivity: 'base' }))
   const { panel, body } = createCollapsibleReportSection({
     className: 'accounting-reconciliation-panel',
     title: 'Accounting Reconciliation',
     description: 'Reconciles stored totalPaid to on-hand, removed, adjusted, and unreceived inventory costs.',
     stateKey: 'accountingReconciliation',
   })
+
+  const scope = document.createElement('fieldset')
+  scope.className = 'report-filter-group accounting-reconciliation-scope'
+  scope.innerHTML = '<legend>View</legend>'
+  const scopeButtons = document.createElement('div')
+  scopeButtons.className = 'report-filter-buttons'
+  scopeButtons.append(
+    reportFilterButton('All Purchases', 'all', 'accountingReconciliationScope'),
+    reportFilterButton('Exceptions Only', 'exceptions', 'accountingReconciliationScope'),
+  )
+  scope.append(scopeButtons)
+  body.append(scope)
+
+  const filters = document.createElement('form')
+  filters.className = 'accounting-reconciliation-filter-form'
+  filters.innerHTML = `
+    <label class="form-field"><span>Vendor</span><select class="report-select" name="accountingVendorId">
+      <option value="">All Vendors</option>
+      ${vendors.map((vendor) => `<option value="${Number(vendor.id)}">${escapeHtml(vendor.name || `Vendor ${vendor.id}`)}${recordIsActive(vendor) ? '' : ' — Archived'}</option>`).join('')}
+    </select></label>
+    <label class="form-field"><span>Purchase Status</span><select class="report-select" name="accountingStatus">
+      <option value="">All Statuses</option>
+      ${purchaseStatusOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('')}
+    </select></label>
+    <label class="form-field"><span>Start Date</span><input type="date" name="accountingStart" value="${escapeHtml(state.accountingReconciliationStart)}"></label>
+    <label class="form-field"><span>End Date</span><input type="date" name="accountingEnd" value="${escapeHtml(state.accountingReconciliationEnd)}"></label>
+    <button type="button" class="primary-button" data-export-accounting ${rows.length === 0 ? 'disabled' : ''}>Export CSV</button>
+    <button type="button" class="secondary-button" data-clear-accounting>Clear Filters</button>
+  `
+  const vendorSelect = filters.querySelector('[name="accountingVendorId"]')
+  const statusSelect = filters.querySelector('[name="accountingStatus"]')
+  const startInput = filters.querySelector('[name="accountingStart"]')
+  const endInput = filters.querySelector('[name="accountingEnd"]')
+  vendorSelect.value = String(state.accountingReconciliationVendorId || '')
+  statusSelect.value = state.accountingReconciliationStatus
+  vendorSelect.addEventListener('change', () => {
+    state.accountingReconciliationVendorId = vendorSelect.value
+    render()
+  })
+  statusSelect.addEventListener('change', () => {
+    state.accountingReconciliationStatus = statusSelect.value
+    render()
+  })
+  startInput.addEventListener('change', () => {
+    state.accountingReconciliationStart = startInput.value
+    render()
+  })
+  endInput.addEventListener('change', () => {
+    state.accountingReconciliationEnd = endInput.value
+    render()
+  })
+  filters.querySelector('[data-export-accounting]').addEventListener('click', () => {
+    downloadAccountingReconciliationCsv(rows)
+  })
+  filters.querySelector('[data-clear-accounting]').addEventListener('click', () => {
+    state.accountingReconciliationScope = 'all'
+    state.accountingReconciliationVendorId = ''
+    state.accountingReconciliationStatus = ''
+    state.accountingReconciliationStart = ''
+    state.accountingReconciliationEnd = ''
+    render()
+  })
+  body.append(filters)
+
+  const exceptionMetrics = document.createElement('div')
+  exceptionMetrics.className = 'metric-grid compact report-count-grid accounting-exception-metrics'
+  exceptionMetrics.append(
+    metricCard('Matching Exceptions', exceptions.total, `${formatCount(rows.length)} purchases in current view`),
+    metricCard('Allocation Variances', exceptions.allocation, 'Line allocations do not equal total paid'),
+    metricCard('Quantity Variances', exceptions.quantity, 'Receipts and adjustments do not foot'),
+    metricCard('Cost Variances', exceptions.cost, 'Accounted basis does not equal total paid'),
+    metricCard('Incomplete Money', exceptions.incompleteMoney, 'Required money values are unavailable'),
+    metricCard('Missing Lines', exceptions.missingLines, 'Purchase has no purchase lines'),
+  )
+  body.append(exceptionMetrics)
 
   const metrics = document.createElement('div')
   metrics.className = 'metric-grid compact report-count-grid'
@@ -6317,7 +6514,7 @@ function renderAccountingReconciliationReport(view) {
   if (rows.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty-state'
-    empty.innerHTML = '<p>No purchases are available to reconcile.</p>'
+    empty.innerHTML = `<p>${allRows.length === 0 ? 'No purchases are available to reconcile.' : 'No purchases match the current reconciliation filters.'}</p>`
     body.append(empty)
     view.append(panel)
     return

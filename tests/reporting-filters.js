@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.12.0
+ * Revision: 1.13.0
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -213,6 +213,11 @@ state.ratingBreakdownDimension = 'wrapper'
 state.reportPeriod = 'custom'
 state.reportRemovalType = 'SMOKED'
 state.reportSearch = 'pepper'
+state.accountingReconciliationScope = 'exceptions'
+state.accountingReconciliationVendorId = '2'
+state.accountingReconciliationStatus = 'received'
+state.accountingReconciliationStart = '2026-01-01'
+state.accountingReconciliationEnd = '2026-06-30'
 state.agingManufacturer = 'Bravo'
 state.agingHumidorId = '2'
 state.selectedAgingBucketKey = '91-180'
@@ -247,6 +252,11 @@ state.ratingBreakdownDimension = 'strength'
 state.reportPeriod = 'lifetime'
 state.reportRemovalType = 'all'
 state.reportSearch = ''
+state.accountingReconciliationScope = 'all'
+state.accountingReconciliationVendorId = ''
+state.accountingReconciliationStatus = ''
+state.accountingReconciliationStart = ''
+state.accountingReconciliationEnd = ''
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -268,7 +278,7 @@ state.reportSectionState = {
   activity: false,
 }
 testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
-testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
+testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.accountingReconciliationScope === 'exceptions' && state.accountingReconciliationVendorId === '2' && state.accountingReconciliationStatus === 'received' && state.accountingReconciliationStart === '2026-01-01' && state.accountingReconciliationEnd === '2026-06-30' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
 testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
 testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
 testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
@@ -283,6 +293,11 @@ state.purchaseHistoryBuyAgainFilter = ''
 state.reportPeriod = 'lifetime'
 state.reportRemovalType = 'all'
 state.reportSearch = ''
+state.accountingReconciliationScope = 'all'
+state.accountingReconciliationVendorId = ''
+state.accountingReconciliationStatus = ''
+state.accountingReconciliationStart = ''
+state.accountingReconciliationEnd = ''
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -438,10 +453,10 @@ testAssert(completeMoneyTotal([null, '1.00']) === null, 'Unknown money was incor
 const recordsBeforeAccountingReconciliation = state.records
 state.records = {
   'catalog-cigars': [{ id: 1, manufacturer: 'Accounting', series: 'Fixture' }],
-  vendors: [{ id: 1, name: 'Fixture Vendor' }],
+  vendors: [{ id: 1, name: 'Fixture Vendor' }, { id: 2, name: '=Formula Vendor' }],
   purchases: [
     { id: 1, vendorId: 1, purchaseDate: '2026-01-01', status: 'received', totalPaid: '1.00' },
-    { id: 2, vendorId: 1, purchaseDate: '2026-01-02', status: 'partially-received', totalPaid: '2.00' },
+    { id: 2, vendorId: 2, purchaseDate: '2026-01-02', status: 'partially-received', totalPaid: '2.00' },
   ],
   'purchase-lines': [
     { id: 1, purchaseId: 1, catalogCigarId: 1, quantity: 3, purchasePrice: '1.00', trueCostBasis: '1.00', trueCostPerCigar: '0.333333' },
@@ -474,10 +489,29 @@ testAssert(fullyReceivedAccountingRow.receivedQuantity === 3 && fullyReceivedAcc
 testAssert(partiallyReceivedAccountingRow.unreceivedQuantity === 2 && partiallyReceivedAccountingRow.unreceivedCost === 1 && partiallyReceivedAccountingRow.accountedCost === 2, 'Accounting Reconciliation did not include unreceived purchase basis.')
 testAssert(fullyReceivedAccountingRow.precisionRounding === 0.01 && fullyReceivedAccountingRow.onHandCost + fullyReceivedAccountingRow.removedCost - fullyReceivedAccountingRow.adjustmentCost + fullyReceivedAccountingRow.unreceivedCost + fullyReceivedAccountingRow.precisionRounding === fullyReceivedAccountingRow.accountedCost, 'Accounting Reconciliation displayed cent components do not foot after precision rounding.')
 testAssert(accountingSummary.totalPaid === 3 && accountingSummary.accountedCost === 3 && accountingSummary.costVariance === 0 && accountingSummary.reconciledPurchaseCount === 2 && accountingSummary.onHandCost + accountingSummary.removedCost - accountingSummary.adjustmentCost + accountingSummary.unreceivedCost + accountingSummary.precisionRounding === accountingSummary.accountedCost, 'Accounting Reconciliation did not preserve high-precision unit costs through a cent-level purchase proof.')
+state.accountingReconciliationVendorId = '2'
+testAssert(filteredAccountingReconciliationRows(accountingRows).length === 1 && filteredAccountingReconciliationRows(accountingRows)[0].purchase.id === 2, 'Accounting Reconciliation vendor filtering is incorrect.')
+state.accountingReconciliationVendorId = ''
+state.accountingReconciliationStatus = 'received'
+testAssert(filteredAccountingReconciliationRows(accountingRows).length === 1 && filteredAccountingReconciliationRows(accountingRows)[0].purchase.id === 1, 'Accounting Reconciliation purchase-status filtering is incorrect.')
+state.accountingReconciliationStatus = ''
+state.accountingReconciliationStart = '2026-01-02'
+state.accountingReconciliationEnd = '2026-01-02'
+testAssert(filteredAccountingReconciliationRows(accountingRows).length === 1 && filteredAccountingReconciliationRows(accountingRows)[0].purchase.id === 2, 'Accounting Reconciliation date filtering is incorrect.')
+state.accountingReconciliationStart = ''
+state.accountingReconciliationEnd = ''
+const accountingCsv = accountingReconciliationCsv(accountingRows)
+testAssert(accountingCsv.includes('"Purchase ID","Purchase Date"') && accountingCsv.includes('Precision Rounding') && accountingCsv.includes('\r\n'), 'Accounting Reconciliation CSV is missing expected headings or rows.')
+testAssert(accountingCsv.includes('"\'=Formula Vendor"'), 'Accounting Reconciliation CSV did not neutralize a spreadsheet-formula vendor value.')
 state.records['lot-location-balances'][0].quantity = 2
 accountingRows = accountingReconciliationRows()
 const variedAccountingRow = accountingRows.find((row) => row.purchase.id === 1)
 testAssert(variedAccountingRow.status === 'Quantity variance' && variedAccountingRow.quantityVariance === -1 && variedAccountingRow.costVariance === -0.33, 'Accounting Reconciliation did not identify a quantity and cost variance.')
+const variedExceptions = accountingReconciliationExceptionSummary(accountingRows)
+testAssert(variedExceptions.total === 1 && variedExceptions.quantity === 1 && variedExceptions.cost === 1, 'Accounting Reconciliation exception summary is incorrect.')
+state.accountingReconciliationScope = 'exceptions'
+testAssert(filteredAccountingReconciliationRows(accountingRows).length === 1 && filteredAccountingReconciliationRows(accountingRows)[0].purchase.id === 1, 'Accounting Reconciliation Exceptions Only filtering is incorrect.')
+state.accountingReconciliationScope = 'all'
 state.records = recordsBeforeAccountingReconciliation
 
 function mockClassList() {

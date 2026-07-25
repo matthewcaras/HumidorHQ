@@ -1,8 +1,8 @@
 /*
  * Filename: app.css
- * Revision: 1.8.3
+ * Revision: 1.8.4
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
- * Modified Date: 2026-07-23 00:52 ET
+ * Modified Date: 2026-07-25
  */
 
 :root {
@@ -602,6 +602,18 @@ h3 {
   gap: 10px;
   grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
   margin: 16px 0 18px;
+}
+
+.accounting-reconciliation-scope {
+  margin-top: 16px;
+}
+
+.accounting-reconciliation-filter-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(145px, 1fr)) auto auto;
+  margin: 14px 0 18px;
 }
 
 .inventory-aging-metrics {
@@ -1619,12 +1631,14 @@ code {
   .report-search-form,
   .activity-search-form,
   .activity-selectors,
+  .accounting-reconciliation-filter-form,
   .aging-filter-form {
     grid-template-columns: 1fr;
   }
 
   .report-search-form button,
   .activity-search-form button,
+  .accounting-reconciliation-filter-form button,
   .aging-filter-form button {
     width: 100%;
   }
