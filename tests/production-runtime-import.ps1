@@ -1,10 +1,11 @@
 # Filename: production-runtime-import.ps1
-# Revision : 1.0.0
+# Revision : 1.0.1
 # Description : Rehearses the authenticated production runtime import workflow in isolated temporary data roots.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-22
-# Modified Date : 2026-07-22
+# Modified Date : 2026-07-25
 # Changelog :
+# 1.0.1 use a generated isolated import fixture and bind HTTP clients to their test servers
 # 1.0.0 initial release
 
 [CmdletBinding()]
@@ -16,8 +17,22 @@ $php = (Get-Command php -ErrorAction SilentlyContinue).Source
 if ([string]::IsNullOrWhiteSpace($php)) {
     throw 'php.exe was not found on PATH.'
 }
+$phpServerOptions = @()
+$zipAvailable = (& $php -r "echo class_exists('ZipArchive') ? 'yes' : 'no';" 2>$null) -eq 'yes'
+if (-not $zipAvailable) {
+    $phpExtensionDir = Join-Path (Split-Path -Parent $php) 'ext'
+    $zipExtension = Join-Path $phpExtensionDir 'php_zip.dll'
+    if (-not (Test-Path -LiteralPath $zipExtension -PathType Leaf)) {
+        throw 'The production import test requires PHP ZipArchive, and php_zip.dll was not found.'
+    }
+    $phpServerOptions = @('-n', '-d', "extension_dir=$phpExtensionDir", '-d', 'extension=zip')
+    $zipAvailable = (& $php @phpServerOptions -r "echo class_exists('ZipArchive') ? 'yes' : 'no';" 2>$null) -eq 'yes'
+    if (-not $zipAvailable) {
+        throw 'The production import test requires PHP ZipArchive, and the local extension could not be loaded.'
+    }
+}
 
-$sourceDataRoot = Join-Path $repoRoot 'data'
+$repositoryDataRoot = Join-Path $repoRoot 'data'
 $allowedRuntimeFiles = @(
     'catalog-cigars.json',
     'counters.json',
@@ -63,6 +78,17 @@ function Get-RuntimeJsonHashes {
     return $map
 }
 
+function Get-RuntimeCollectionState {
+    param([string]$Root)
+    $map = [ordered]@{}
+    foreach ($filename in $allowedRuntimeFiles) {
+        $path = Join-Path $Root $filename
+        $map[$filename] = (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json) |
+            ConvertTo-Json -Depth 16 -Compress
+    }
+    return $map
+}
+
 function Get-PhpPasswordHash {
     param([string]$Password)
     $result = & $php -r "echo password_hash('$Password', PASSWORD_DEFAULT);"
@@ -100,6 +126,169 @@ function New-TestRuntimeRoot {
     ) | ConvertTo-Json -Depth 4 -AsArray | Set-Content -LiteralPath (Join-Path $Root 'auth-users.json') -Encoding utf8NoBOM
 }
 
+function Set-JsonFile {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object]$Value
+    )
+    $json = ConvertTo-Json -InputObject $Value -Depth 10
+    Set-Content -LiteralPath $Path -Value $json -Encoding utf8NoBOM
+}
+
+function New-ProductionSourceFixture {
+    param([string]$Root)
+
+    New-Item -ItemType Directory -Path $Root -Force | Out-Null
+    $now = '2026-07-22T16:44:43Z'
+    $catalog = @(
+        [ordered]@{
+            id = 1
+            manufacturer = 'Fixture Manufacturer'
+            series = 'Fixture Series'
+            vitola = 'Toro'
+            isActive = $true
+            createdAt = $now
+            updatedAt = $now
+        }
+    )
+    $vendors = @(
+        [ordered]@{
+            id = 1
+            name = 'Fixture Vendor'
+            isActive = $true
+            createdAt = $now
+            updatedAt = $now
+        }
+    )
+    $locations = @(
+        [ordered]@{
+            id = 1
+            name = 'Fixture Humidor'
+            isActive = $true
+            createdAt = $now
+            updatedAt = $now
+        }
+    )
+    $purchases = @(
+        [ordered]@{
+            id = 1
+            vendorId = 1
+            purchaseDate = '2026-07-22'
+            receivedDate = '2026-07-22'
+            status = 'received'
+            subtotal = '911.00'
+            shipping = '0.00'
+            exciseTax = '0.00'
+            salesTax = '0.00'
+            discount = '0.00'
+            totalPaid = '911.00'
+            createdAt = $now
+            updatedAt = $now
+        }
+    )
+
+    $purchaseLines = @()
+    $lots = @()
+    $balances = @()
+    $events = @()
+    foreach ($id in 1..88) {
+        $quantity = if ($id -eq 88) { 41 } else { 10 }
+        $lineTotal = '{0:0.00}' -f $quantity
+        $purchaseLines += [ordered]@{
+            id = $id
+            purchaseId = 1
+            catalogCigarId = 1
+            storageLocationId = 1
+            storageSubLocationId = $null
+            quantity = $quantity
+            unitCost = '1.00'
+            purchasePrice = $lineTotal
+            lineSubtotal = $lineTotal
+            allocatedShipping = '0.00'
+            allocatedExciseTax = '0.00'
+            allocatedSalesTax = '0.00'
+            allocatedDiscount = '0.00'
+            trueCostBasis = $lineTotal
+            trueCostPerCigar = '1.00'
+            msrpPerCigar = '2.00'
+            msrpPerCigarResolved = '2.00'
+            createdAt = $now
+            updatedAt = $now
+        }
+        $lots += [ordered]@{
+            id = $id
+            purchaseLineId = $id
+            purchaseId = 1
+            catalogCigarId = 1
+            initialQuantity = $quantity
+            currentQuantity = $quantity
+            purchaseDateSnapshot = '2026-07-22'
+            receivedDateSnapshot = '2026-07-22'
+            costPerCigarSnapshot = '1.00'
+            msrpPerCigarSnapshot = '2.00'
+            createdAt = $now
+            updatedAt = $now
+        }
+        $balances += [ordered]@{
+            id = $id
+            lotId = $id
+            purchaseLineId = $id
+            purchaseId = 1
+            catalogCigarId = 1
+            storageLocationId = 1
+            storageSubLocationId = $null
+            quantity = $quantity
+            createdAt = $now
+            updatedAt = $now
+        }
+        $events += [ordered]@{
+            id = $id
+            eventType = 'purchase-receipt'
+            lotId = $id
+            purchaseLineId = $id
+            purchaseId = 1
+            catalogCigarId = 1
+            storageLocationId = 1
+            storageSubLocationId = $null
+            quantity = $quantity
+            eventDate = '2026-07-22'
+            occurredAt = $now
+            costPerCigarAtEvent = '1.00'
+            msrpPerCigarAtEvent = '2.00'
+            createdAt = $now
+            updatedAt = $now
+        }
+    }
+
+    $counters = [ordered]@{
+        'catalog-cigars' = 2
+        'vendors' = 2
+        'storage-locations' = 2
+        'storage-sub-locations' = 1
+        'purchases' = 2
+        'purchase-lines' = 89
+        'lots' = 89
+        'lot-location-balances' = 89
+        'inventory-events' = 89
+        'smoking-journal-entries' = 1
+    }
+
+    Set-JsonFile -Path (Join-Path $Root 'catalog-cigars.json') -Value $catalog
+    Set-JsonFile -Path (Join-Path $Root 'counters.json') -Value $counters
+    Set-JsonFile -Path (Join-Path $Root 'inventory-events.json') -Value $events
+    Set-JsonFile -Path (Join-Path $Root 'lot-location-balances.json') -Value $balances
+    Set-JsonFile -Path (Join-Path $Root 'lots.json') -Value $lots
+    Set-JsonFile -Path (Join-Path $Root 'purchase-lines.json') -Value $purchaseLines
+    Set-JsonFile -Path (Join-Path $Root 'purchases.json') -Value $purchases
+    Set-JsonFile -Path (Join-Path $Root 'smoking-journal-entries.json') -Value @()
+    Set-JsonFile -Path (Join-Path $Root 'storage-locations.json') -Value $locations
+    Set-JsonFile -Path (Join-Path $Root 'storage-sub-locations.json') -Value @()
+    Set-JsonFile -Path (Join-Path $Root 'vendors.json') -Value $vendors
+}
+
 function New-TestAppRoot {
     param([string]$Root)
     New-Item -ItemType Directory -Path $Root -Force | Out-Null
@@ -125,7 +314,8 @@ function Start-TestServer {
     }
     $serverOut = Join-Path $DataRoot 'php.out.log'
     $serverErr = Join-Path $DataRoot 'php.err.log'
-    $process = Start-Process -FilePath $php -ArgumentList @('-S', "127.0.0.1:$port", '-t', $AppRoot) -WorkingDirectory $AppRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+    $serverArguments = @($phpServerOptions) + @('-S', "127.0.0.1:$port", '-t', $AppRoot)
+    $process = Start-Process -FilePath $php -ArgumentList $serverArguments -WorkingDirectory $AppRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $baseUrl = "http://127.0.0.1:$port"
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
         try {
@@ -141,9 +331,14 @@ function Start-TestServer {
 }
 
 function New-HttpClient {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BaseUrl
+    )
     $handler = [System.Net.Http.HttpClientHandler]::new()
     $handler.CookieContainer = [System.Net.CookieContainer]::new()
     $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.BaseAddress = [uri]($BaseUrl.TrimEnd('/') + '/')
     $client.Timeout = [TimeSpan]::FromSeconds(30)
     return [pscustomobject]@{
         Client = $client
@@ -216,7 +411,7 @@ function Invoke-ExpectedError {
         [string]$ContentType = 'application/json'
     )
     $result = Invoke-ApiRequest -Client $Client -Method $Method -Path $Path -Body $Body -Headers $Headers -ContentType $ContentType
-    Assert-Equal $ExpectedStatus $result.StatusCode "Unexpected HTTP status for $Method $Path."
+    Assert-Equal $ExpectedStatus $result.StatusCode "Unexpected HTTP status for $Method $Path. Response=$($result.Raw)"
     Assert-True ($null -ne $result.Body.error) "Expected an error response for $Method $Path."
     Assert-Equal $ExpectedCode $result.Body.error.code "Unexpected error code for $Method $Path."
     return $result
@@ -275,14 +470,16 @@ function Copy-ZipVariant {
     }
 }
 
-$repoHashesBefore = Get-RuntimeJsonHashes -Root $sourceDataRoot
+$repoHashesBefore = Get-RuntimeJsonHashes -Root $repositoryDataRoot
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('humidorhq-production-import-test-' + [guid]::NewGuid().ToString('N'))
+$sourceDataRoot = Join-Path $tempRoot 'source-data'
 $tempApp = Join-Path $tempRoot 'app'
 $tempData = Join-Path $tempApp 'data'
 $server = $null
 $rollbackServer = $null
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    New-ProductionSourceFixture -Root $sourceDataRoot
     New-TestAppRoot -Root $tempApp
     New-TestRuntimeRoot -Root $tempData
 
@@ -299,7 +496,7 @@ try {
     }
 
     $server = Start-TestServer -AppRoot $tempApp -DataRoot $tempData
-    $clientHolder = New-HttpClient
+    $clientHolder = New-HttpClient -BaseUrl $server.BaseUrl
     $client = $clientHolder.Client
 
     Invoke-ExpectedError -Client $client -Method 'GET' -Path '/api/production-import' -ExpectedStatus 401 -ExpectedCode 'AUTH_REQUIRED' | Out-Null
@@ -395,8 +592,10 @@ try {
     Assert-Equal $authHashBeforeImport $authHashAfterImport 'auth-users.json changed during the production import.'
     Assert-Equal $auditHashBeforeImport $auditHashAfterImport 'audit-log.jsonl changed during the production import.'
 
-    $tempDataHashesAfterImport = Get-RuntimeJsonHashes -Root $tempData -ExcludeNames @('.production-import-complete.json')
-    Assert-Equal ($allowedRuntimeFiles.Count + 1) $tempDataHashesAfterImport.Count 'The imported runtime data did not include the expected JSON collections.'
+    foreach ($filename in $allowedRuntimeFiles) {
+        Assert-True (Test-Path -LiteralPath (Join-Path $tempData $filename) -PathType Leaf) "The imported runtime data is missing $filename."
+    }
+    Assert-True (Test-Path -LiteralPath (Join-Path $tempData 'auth-users.json') -PathType Leaf) 'The imported runtime data is missing auth-users.json.'
 
     $duplicateUpload = New-MultipartUpload -ZipPath $packagePath -Confirmation 'APPLY-HUMIDORHQ-PRODUCTION-IMPORT'
     try {
@@ -412,7 +611,7 @@ try {
     New-TestAppRoot -Root $rollbackApp
     New-TestRuntimeRoot -Root $rollbackData
     $rollbackServer = Start-TestServer -AppRoot $rollbackApp -DataRoot $rollbackData -TestMode $true
-    $rollbackClientHolder = New-HttpClient
+    $rollbackClientHolder = New-HttpClient -BaseUrl $rollbackServer.BaseUrl
     $rollbackClient = $rollbackClientHolder.Client
     $rollbackSession = Invoke-ApiRequest -Client $rollbackClient -Method 'GET' -Path '/api/session'
     $rollbackCsrf = [string]$rollbackSession.Body.data.csrfToken
@@ -422,7 +621,7 @@ try {
 
     $rollbackAuthBefore = (Get-FileHash -LiteralPath (Join-Path $rollbackData 'auth-users.json') -Algorithm SHA256).Hash
     $rollbackAuditBefore = (Get-FileHash -LiteralPath (Join-Path $rollbackData 'audit-log.jsonl') -Algorithm SHA256).Hash
-    $rollbackRuntimeBefore = Get-RuntimeJsonHashes -Root $rollbackData -ExcludeNames @('.production-import-complete.json')
+    $rollbackRuntimeBefore = Get-RuntimeCollectionState -Root $rollbackData
 
     $failureUpload = New-MultipartUpload -ZipPath $packagePath -Confirmation 'APPLY-HUMIDORHQ-PRODUCTION-IMPORT' -SimulateFailure 'after-commit'
     try {
@@ -432,8 +631,8 @@ try {
         $failureUpload.Stream.Dispose()
     }
 
-    $rollbackRuntimeAfter = Get-RuntimeJsonHashes -Root $rollbackData -ExcludeNames @('.production-import-complete.json')
-    Assert-Equal ($rollbackRuntimeBefore | ConvertTo-Json -Compress) ($rollbackRuntimeAfter | ConvertTo-Json -Compress) 'Runtime JSON changed after the simulated-failure rollback rehearsal.'
+    $rollbackRuntimeAfter = Get-RuntimeCollectionState -Root $rollbackData
+    Assert-Equal ($rollbackRuntimeBefore | ConvertTo-Json -Compress) ($rollbackRuntimeAfter | ConvertTo-Json -Compress) 'Runtime JSON content changed after the simulated-failure rollback rehearsal.'
     Assert-Equal $rollbackAuthBefore (Get-FileHash -LiteralPath (Join-Path $rollbackData 'auth-users.json') -Algorithm SHA256).Hash 'auth-users.json changed during the rollback rehearsal.'
     Assert-Equal $rollbackAuditBefore (Get-FileHash -LiteralPath (Join-Path $rollbackData 'audit-log.jsonl') -Algorithm SHA256).Hash 'audit-log.jsonl changed during the rollback rehearsal.'
 
@@ -450,7 +649,7 @@ try {
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force
     }
-    $repoHashesAfter = Get-RuntimeJsonHashes -Root $sourceDataRoot
+    $repoHashesAfter = Get-RuntimeJsonHashes -Root $repositoryDataRoot
     if (($repoHashesBefore | ConvertTo-Json -Compress) -ne ($repoHashesAfter | ConvertTo-Json -Compress)) {
         throw 'Repository runtime JSON changed during production import rehearsal.'
     }

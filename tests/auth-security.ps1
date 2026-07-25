@@ -1,10 +1,11 @@
 # Filename: auth-security.ps1
-# Revision : 1.0.3
+# Revision : 1.0.4
 # Description : Verifies HumidorHQ throttling, audit, CSRF, session-expiry, cookie, and response-header controls.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-24
+# Modified Date : 2026-07-25
 # Changelog :
+# 1.0.4 use direct PHP invocation for portable password-hash generation
 # 1.0.3 verify Matt receives a persistent session cookie
 # 1.0.2 exempt Matt from automatic session timeout and verify retained sessions
 # 1.0.1 verify backup route authentication and executable PHP discovery
@@ -89,8 +90,10 @@ function New-MattAuthenticatedSession {
     $session.Headers['X-CSRF-Token'] = [string]$anonymous.data.csrfToken
     $loginResponse = Invoke-WebRequest "$BaseUrl/login" -Method Post -ContentType 'application/json' -Body (@{ username = 'matt'; password = 'testpass' } | ConvertTo-Json) -WebSession $session
     $login = $loginResponse.Content | ConvertFrom-Json
-    $setCookie = [string]($loginResponse.Headers['Set-Cookie'] | Select-Object -First 1)
-    if ($setCookie -notmatch 'Expires=' -and $setCookie -notmatch 'Max-Age=') {
+    $sessionCookie = $session.Cookies.GetCookies([uri]$BaseUrl) |
+        Where-Object { $_.Name -eq 'humidorhq_session' } |
+        Select-Object -First 1
+    if ($null -eq $sessionCookie -or $sessionCookie.Expires -le [DateTime]::UtcNow) {
         throw 'Matt login did not issue a persistent session cookie.'
     }
     $session.Headers['X-CSRF-Token'] = [string]$login.data.csrfToken
@@ -106,19 +109,12 @@ try {
     New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
     Get-ChildItem -LiteralPath $seedRoot -Filter '*.json' -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dataRoot $_.Name) }
     $php = Get-PhpCommand
-    $hashOut = Join-Path $testRoot 'php-hash.out'
-    $hashErr = Join-Path $testRoot 'php-hash.err'
-    try {
-        $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('testpass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
-        if ($hashProcess.ExitCode -ne 0) {
-            $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
-            throw "Could not generate password hash for auth smoke test. $hashErrorText"
-        }
-        $hash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
-        if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
-    } finally {
-        Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+    $hashOutput = @(& $php -r "echo password_hash('testpass', PASSWORD_DEFAULT);" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not generate password hash for auth smoke test. $($hashOutput -join ' ')"
     }
+    $hash = ($hashOutput -join '').Trim()
+    if (-not $hash) { throw 'Could not generate password hash for auth smoke test.' }
     @(
         [pscustomobject]@{ username = 'testuser'; passwordHash = $hash; displayName = 'Test User'; isActive = $true },
         [pscustomobject]@{ username = 'matt'; passwordHash = $hash; displayName = 'Matt'; isActive = $true }

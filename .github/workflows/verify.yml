@@ -1,0 +1,127 @@
+# Filename: verify.yml
+# Revision: 1.0.0
+# Description: Runs HumidorHQ syntax checks and isolated regression tests on GitHub.
+# Modified Date: 2026-07-25
+
+name: Verify HumidorHQ
+
+on:
+  pull_request:
+    branches:
+      - main
+      - Matt-Functional-Updates
+      - Jason-Bug-Fixes
+  push:
+    branches:
+      - main
+      - Matt-Functional-Updates
+      - Jason-Bug-Fixes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: zip
+          coverage: none
+        env:
+          fail-fast: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Validate PHP syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(git ls-files '*.php')
+          foreach ($file in $files) {
+            php -l $file
+            if ($LASTEXITCODE -ne 0) {
+              throw "PHP syntax validation failed for $file."
+            }
+          }
+          Write-Host "PHP syntax: PASS ($($files.Count) files)"
+
+      - name: Validate JavaScript syntax and report filters
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --check .\public\assets\js\app.js
+          if ($LASTEXITCODE -ne 0) { throw 'JavaScript syntax validation failed.' }
+          node .\tests\reporting-filters.js
+          if ($LASTEXITCODE -ne 0) { throw 'Reporting filter tests failed.' }
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(git ls-files '*.ps1')
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path -LiteralPath $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              throw "PowerShell syntax validation failed for $file`: $($errors -join '; ')"
+            }
+          }
+          Write-Host "PowerShell syntax: PASS ($($files.Count) files)"
+
+      - name: Validate tracked JSON
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(git ls-files '*.json')
+          foreach ($file in $files) {
+            $null = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+          }
+          Write-Host "Tracked JSON parsing: PASS ($($files.Count) files)"
+
+      - name: Run isolated regression suite
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tests = @(
+            '.\tests\flat-file-smoke.ps1',
+            '.\tests\runtime-data-separation.ps1',
+            '.\tests\flat-file-transaction.ps1',
+            '.\tests\auth-security.ps1',
+            '.\tests\backup-restore.ps1',
+            '.\tests\production-runtime-import.ps1'
+          )
+          foreach ($test in $tests) {
+            pwsh -NoProfile -File $test
+            if ($LASTEXITCODE -ne 0) {
+              throw "Regression test failed: $test"
+            }
+          }
+
+      - name: Confirm clean tracked checkout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed.' }
+          $status = git status --short --untracked-files=no
+          if ($status) {
+            $status
+            throw 'Verification changed tracked files.'
+          }

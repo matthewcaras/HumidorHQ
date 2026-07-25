@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.30
+# Revision : 1.32.31
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-24 11:26 ET
+# Modified Date : 2026-07-25
 # Changelog :
+# 1.32.31 derive JavaScript and CSS cache-bust expectations from source metadata
 # 1.32.30 align smoke test cache-bust pin with app.js 1.24.34 and verify catalog average rating rendering
 # 1.32.27 align smoke test cache-bust pin with app.js 1.24.31
 # 1.32.23 align smoke test cache-bust pin with app.js 1.24.28
@@ -264,11 +265,17 @@ foreach ($removedMobileHook in @('Full Web View - 1200 x 800', 'data-mode="full"
 }
 if ($mobilePage -notmatch [regex]::Escape('<p class="size-readout" id="size-readout">iPhone 16 Pro - 402 x 874</p>')) { throw 'Visible Mobile preview should default to iPhone 16 Pro readout.' }
 $index = Get-Content -LiteralPath $indexPath -Raw
+$appJs = Get-Content -LiteralPath $appJsPath -Raw
+$appCss = Get-Content -LiteralPath $appCssPath -Raw
+$appJsRevisionMatch = [regex]::Match($appJs, '(?m)^\s*\*\s*Revision:\s*(\d+\.\d+\.\d+)\s*$')
+$appCssRevisionMatch = [regex]::Match($appCss, '(?m)^\s*\*\s*Revision:\s*(\d+\.\d+\.\d+)\s*$')
+if (-not $appJsRevisionMatch.Success) { throw 'app.js is missing a valid Revision metadata value.' }
+if (-not $appCssRevisionMatch.Success) { throw 'app.css is missing a valid Revision metadata value.' }
 if ($index -match 'src/main\.tsx|\.tsx|vite|react') { throw 'index.html still references React, TypeScript, or Vite assets.' }
 if ($index -match 'PHP / JSON / JavaScript|api-status|status-pill') { throw 'Header should not show technology label or API status pill.' }
 if ($index -notmatch 'sidebar-account' -or $index -notmatch 'sidebar-footer') { throw 'Sidebar account/footer containers are missing from index.html.' }
-if ($index -notmatch 'public/assets/js/app\.js\?v=1\.24\.32') { throw 'index.html does not load cache-busted public/assets/js/app.js.' }
-if ($index -notmatch 'public/assets/css/app\.css\?v=1\.8\.3') { throw 'index.html does not load cache-busted public/assets/css/app.css.' }
+if ($index -notmatch [regex]::Escape("public/assets/js/app.js?v=$($appJsRevisionMatch.Groups[1].Value)")) { throw 'index.html does not load app.js with its current source revision cache key.' }
+if ($index -notmatch [regex]::Escape("public/assets/css/app.css?v=$($appCssRevisionMatch.Groups[1].Value)")) { throw 'index.html does not load app.css with its current source revision cache key.' }
 if ($index -notmatch 'public/favicon\.svg\?v=1\.1\.1') { throw 'index.html does not load the cache-busted cigar favicon.' }
 if ($index -notmatch 'public/apple-touch-icon\.png\?v=1\.0\.0') { throw 'index.html does not load the cigar Apple touch icon.' }
 
@@ -276,8 +283,6 @@ foreach ($path in @($appJsPath, $appCssPath, $authPlaceholderPath, $auditPlaceho
     if (-not (Test-Path -LiteralPath $path)) { throw "Required flat-file artifact is missing: $path" }
 }
 
-$appJs = Get-Content -LiteralPath $appJsPath -Raw
-$appCss = Get-Content -LiteralPath $appCssPath -Raw
 foreach ($responsiveUiHook in @('id="sidebar-toggle"', 'aria-controls="app-nav"')) {
     if ($index -notmatch [regex]::Escape($responsiveUiHook)) { throw "Collapsible navigation markup is missing hook: $responsiveUiHook" }
 }

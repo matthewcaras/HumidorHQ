@@ -1,10 +1,11 @@
 # Filename: backup-restore.ps1
-# Revision : 1.0.4
+# Revision : 1.0.5
 # Description : Rehearses guarded runtime backup, import, preview, and restore in a temporary app copy.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-19
-# Modified Date : 2026-07-24
+# Modified Date : 2026-07-25
 # Changelog :
+# 1.0.5 use portable password-hash generation and retention-aware download sequencing
 # 1.0.4 verify backup retention keeps only the four newest bundles and deletes oldest first
 # 1.0.3 verify daily backup dedupe across repeated authenticated sessions
 # 1.0.2 verify first-auth-use daily backup creation and same-day dedupe
@@ -57,19 +58,12 @@ try {
     }
     Get-ChildItem -LiteralPath (Join-Path $tempApp 'backups') -Filter 'humidorhq-*.json' -File -ErrorAction SilentlyContinue |
         Remove-Item -Force -ErrorAction SilentlyContinue
-    $hashOut = Join-Path $tempRoot 'php-hash.out'
-    $hashErr = Join-Path $tempRoot 'php-hash.err'
-    try {
-        $hashProcess = Start-Process -FilePath $php -ArgumentList @('-r', "echo password_hash('backup-test-pass', PASSWORD_DEFAULT);") -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $hashOut -RedirectStandardError $hashErr
-        if ($hashProcess.ExitCode -ne 0) {
-            $hashErrorText = if (Test-Path -LiteralPath $hashErr) { Get-Content -LiteralPath $hashErr -Raw } else { '' }
-            throw "Could not generate backup test password hash. $hashErrorText"
-        }
-        $passwordHash = (Get-Content -LiteralPath $hashOut -Raw).Trim()
-        if (-not $passwordHash) { throw 'Could not generate backup test password hash.' }
-    } finally {
-        Remove-Item -LiteralPath $hashOut, $hashErr -ErrorAction SilentlyContinue
+    $hashOutput = @(& $php -r "echo password_hash('backup-test-pass', PASSWORD_DEFAULT);" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not generate backup test password hash. $($hashOutput -join ' ')"
     }
+    $passwordHash = ($hashOutput -join '').Trim()
+    if (-not $passwordHash) { throw 'Could not generate backup test password hash.' }
     @([ordered]@{ username = 'backup-test'; passwordHash = $passwordHash; displayName = 'Backup Test'; isActive = $true }) |
         ConvertTo-Json -Depth 4 -AsArray |
         Set-Content -LiteralPath (Join-Path $tempData 'auth-users.json') -Encoding utf8NoBOM
@@ -145,6 +139,9 @@ try {
     }
     $previewBody = @{ filename = $apiBackup.data.filename } | ConvertTo-Json
     $apiPreview = Invoke-RestMethod "http://127.0.0.1:$port/api/backups/preview" -Method Post -ContentType 'application/json' -Body $previewBody -WebSession $webSession
+    $download = Invoke-WebRequest "http://127.0.0.1:$port/api/backups/download?filename=$([uri]::EscapeDataString($apiBackup.data.filename))" -WebSession $webSession
+    $downloadBundle = $download.Content | ConvertFrom-Json
+    if ($downloadBundle.format -ne 'humidorhq-runtime-backup') { throw 'Authenticated backup download was invalid.' }
     $restoreBody = @{
         filename = $apiBackup.data.filename
         confirmation = 'RESTORE-HUMIDORHQ-BACKUP'
@@ -152,9 +149,6 @@ try {
     } | ConvertTo-Json
     $apiRestore = Invoke-RestMethod "http://127.0.0.1:$port/api/backups/restore" -Method Post -ContentType 'application/json' -Body $restoreBody -WebSession $webSession
     if (-not $apiRestore.data.safetyBackup) { throw 'Authenticated API restore did not create a safety backup.' }
-    $download = Invoke-WebRequest "http://127.0.0.1:$port/api/backups/download?filename=$([uri]::EscapeDataString($apiBackup.data.filename))" -WebSession $webSession
-    $downloadBundle = $download.Content | ConvertFrom-Json
-    if ($downloadBundle.format -ne 'humidorhq-runtime-backup') { throw 'Authenticated backup download was invalid.' }
     Stop-Process -Id $serverProcess.Id -Force
     $serverProcess.WaitForExit()
     $serverProcess = $null

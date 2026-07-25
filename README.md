@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.30.47
+Revision: 1.30.48
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 11:26 ET
+Modified Date: 2026-07-25
 -->
 
 # HumidorHQ
@@ -214,7 +214,7 @@ Run the read-only integrity checker with:
 
 `tools/repair-purchase-headers.ps1` is a separately guarded offline migration for the approved Purchases 1-40 subtotal population and negative-discount normalization. Stored `totalPaid` remains authoritative. The script is dry-run by default, requires exact header preconditions and an external verified backup, and changes only `subtotal` and negative `discount` fields in `purchases.json`. It does not resynchronize purchase lines or modify allocations, inventory, history, counters, quantities, IDs, or snapshots.
 
-The automated smoke, runtime-location, transaction, and authentication-security tests create and remove isolated temporary data roots from tracked seed data; they do not use or overwrite current local runtime JSON. Run them with:
+The automated smoke, runtime-location, transaction, authentication-security, backup/restore, and production-import tests create and remove isolated temporary data roots; they do not use or overwrite current local runtime JSON. The production-import test generates its own 911-receipt/88-Lot fixture instead of reading ignored runtime data. Run them with PowerShell 7:
 
 ```powershell
 .\tests\flat-file-smoke.ps1
@@ -222,8 +222,11 @@ The automated smoke, runtime-location, transaction, and authentication-security 
 .\tests\flat-file-transaction.ps1
 .\tests\auth-security.ps1
 .\tests\backup-restore.ps1
+.\tests\production-runtime-import.ps1
 node .\tests\reporting-filters.js
 ```
+
+The same syntax checks and isolated regression suite run automatically through `.github/workflows/verify.yml` for supported branch pushes, pull requests, and manual workflow runs.
 
 If the workbook does not yet contain rows in `Current Inventory`, the importer places remaining on-hand lots into the placeholder humidor and section `Imported Inventory / General` so the collection can still be reviewed and moved locally. When you want every current-inventory balance to start in the staging workflow instead of its workbook location, add `-StageCurrentInventoryToPreInventory`; that forces the imported balances into `Pre Inventory / General` so the manual count and location moves happen in the app after import.
 

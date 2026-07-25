@@ -1,8 +1,8 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.47
+Revision: 1.30.48
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-24 11:26 ET
+Modified Date: 2026-07-25
 -->
 
 # Changelog
@@ -20,6 +20,14 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.30.48 - 2026-07-25
+
+Changed by: Matt
+
+- Restored reliable isolated regression coverage for authentication, backups, the production import, and frontend cache-bust validation.
+- Made the production-import test self-contained instead of relying on ignored local runtime data.
+- Added GitHub verification for PHP, JavaScript, PowerShell, tracked JSON, and the complete isolated regression suite.
 
 ## 1.30.47 - 2026-07-24
 
