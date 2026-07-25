@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.13.0
+ * Revision: 1.14.0
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -218,6 +218,7 @@ state.accountingReconciliationVendorId = '2'
 state.accountingReconciliationStatus = 'received'
 state.accountingReconciliationStart = '2026-01-01'
 state.accountingReconciliationEnd = '2026-06-30'
+state.collectionValuationDimension = 'humidor'
 state.agingManufacturer = 'Bravo'
 state.agingHumidorId = '2'
 state.selectedAgingBucketKey = '91-180'
@@ -235,6 +236,7 @@ state.reportSectionState = {
   ratingBreakdown: true,
   inventoryAging: true,
   accountingReconciliation: true,
+  collectionValuation: true,
   removalHistory: false,
   activity: true,
 }
@@ -257,6 +259,7 @@ state.accountingReconciliationVendorId = ''
 state.accountingReconciliationStatus = ''
 state.accountingReconciliationStart = ''
 state.accountingReconciliationEnd = ''
+state.collectionValuationDimension = 'manufacturer'
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -274,12 +277,13 @@ state.reportSectionState = {
   ratingBreakdown: false,
   inventoryAging: false,
   accountingReconciliation: false,
+  collectionValuation: false,
   removalHistory: false,
   activity: false,
 }
 testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
-testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.accountingReconciliationScope === 'exceptions' && state.accountingReconciliationVendorId === '2' && state.accountingReconciliationStatus === 'received' && state.accountingReconciliationStart === '2026-01-01' && state.accountingReconciliationEnd === '2026-06-30' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
-testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
+testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.accountingReconciliationScope === 'exceptions' && state.accountingReconciliationVendorId === '2' && state.accountingReconciliationStatus === 'received' && state.accountingReconciliationStart === '2026-01-01' && state.accountingReconciliationEnd === '2026-06-30' && state.collectionValuationDimension === 'humidor' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
+testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.collectionValuation === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
 testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
 testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
 state.purchaseTrendPeriod = 'year'
@@ -298,6 +302,7 @@ state.accountingReconciliationVendorId = ''
 state.accountingReconciliationStatus = ''
 state.accountingReconciliationStart = ''
 state.accountingReconciliationEnd = ''
+state.collectionValuationDimension = 'manufacturer'
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -314,6 +319,7 @@ state.reportSectionState = {
   purchaseHistory: false,
   inventoryAging: false,
   accountingReconciliation: false,
+  collectionValuation: false,
   removalHistory: false,
   activity: false,
 }
@@ -449,6 +455,37 @@ testAssert(lotCostPerCigar(state.records.lots[1], state.records['purchase-lines'
 testAssert(/11\.67$/.test(money(11.666667)), 'High-precision internal cost did not display as dollars and cents.')
 testAssert(completeMoneyTotal([0, '0.00']) === 0, 'Known zero money was not preserved.')
 testAssert(completeMoneyTotal([null, '1.00']) === null, 'Unknown money was incorrectly converted to zero.')
+
+state.collectionValuationDimension = 'manufacturer'
+let valuationRows = collectionValuationRows()
+let valuationSummary = collectionValuationSummary(valuationRows)
+testAssert(valuationRows.map((row) => row.label).join(',') === 'Alpha,Bravo' && valuationRows[0].quantity === 2 && valuationRows[1].quantity === 3, 'Collection Valuation manufacturer grouping or sorting is incorrect.')
+testAssert(valuationSummary.quantity === 5 && valuationSummary.cigarCount === 2 && valuationSummary.lotCount === 2 && valuationSummary.totalCostBasis === 55 && valuationSummary.totalMsrp === 78 && valuationSummary.potentialSavings === 23, 'Collection Valuation summary does not reconcile to on-hand inventory.')
+testAssert(valuationRows.reduce((sum, row) => sum + row.totalCostBasis, 0) === valuationSummary.totalCostBasis && valuationRows.reduce((sum, row) => sum + row.totalMsrp, 0) === valuationSummary.totalMsrp, 'Collection Valuation displayed group values do not foot to the summary.')
+state.collectionValuationDimension = 'strength'
+valuationRows = collectionValuationRows()
+testAssert(valuationRows.map((row) => row.label).join(',') === 'Mild,Full', 'Collection Valuation strength groups are not in business order.')
+openCollectionForValuationRow(valuationRows.find((row) => row.label === 'Full'))
+testAssert(state.activePage === 'Collection' && state.collectionStrengthFilter === 'Full' && state.collectionSearch === '' && state.collectionHumidorFilterId === null, 'Collection Valuation strength drill-through is incorrect.')
+state.collectionValuationDimension = 'manufacturer'
+valuationRows = collectionValuationRows()
+openCollectionForValuationRow(valuationRows.find((row) => row.label === 'Alpha'))
+testAssert(state.activePage === 'Collection' && state.collectionSearch === 'Alpha' && state.collectionStrengthFilter === '' && state.collectionHumidorFilterId === null, 'Collection Valuation manufacturer drill-through is incorrect.')
+state.collectionValuationDimension = 'humidor'
+valuationRows = collectionValuationRows()
+valuationSummary = collectionValuationSummary(valuationRows)
+testAssert(valuationRows.map((row) => row.label).join(',') === 'Main Humidor,Pre Inventory' && valuationSummary.totalCostBasis === 55 && valuationSummary.totalMsrp === 78, 'Collection Valuation Humidor grouping does not foot.')
+openCollectionForValuationRow(valuationRows.find((row) => row.label === 'Pre Inventory'))
+testAssert(state.activePage === 'Collection' && state.collectionHumidorFilterId === 2 && state.collectionSearch === '' && state.collectionStrengthFilter === '', 'Collection Valuation Humidor drill-through is incorrect.')
+const valuationCsv = collectionValuationCsv(valuationRows)
+testAssert(valuationCsv.includes('"Group By","Humidor"') && valuationCsv.includes('"Pre Inventory"') && valuationCsv.includes('\r\n'), 'Collection Valuation CSV is missing expected headings or rows.')
+state.activePage = 'Dashboard'
+state.collectionValuationDimension = 'manufacturer'
+state.collectionHumidorFilterId = null
+state.collectionSectionFilterId = null
+state.collectionStrengthFilter = ''
+state.collectionBuyAgainFilter = ''
+state.collectionSearch = ''
 
 const recordsBeforeAccountingReconciliation = state.records
 state.records = {

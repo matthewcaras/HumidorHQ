@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.27.0
+ * Revision: 1.28.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -68,6 +68,7 @@ const state = {
   accountingReconciliationStatus: '',
   accountingReconciliationStart: '',
   accountingReconciliationEnd: '',
+  collectionValuationDimension: 'manufacturer',
   purchaseHistoryGroup: 'vendor',
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
@@ -82,6 +83,7 @@ const state = {
     ratingBreakdown: false,
     inventoryAging: false,
     accountingReconciliation: false,
+    collectionValuation: false,
     removalHistory: false,
     activity: false,
   },
@@ -365,6 +367,7 @@ function reportsViewSnapshot() {
     accountingReconciliationStatus: String(state.accountingReconciliationStatus || ''),
     accountingReconciliationStart: String(state.accountingReconciliationStart || ''),
     accountingReconciliationEnd: String(state.accountingReconciliationEnd || ''),
+    collectionValuationDimension: state.collectionValuationDimension,
     agingManufacturer: String(state.agingManufacturer || ''),
     agingHumidorId: String(state.agingHumidorId || ''),
     selectedAgingBucketKey: state.selectedAgingBucketKey || null,
@@ -382,6 +385,7 @@ function reportsViewSnapshot() {
       ratingBreakdown: Boolean(state.reportSectionState?.ratingBreakdown),
       inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
       accountingReconciliation: Boolean(state.reportSectionState?.accountingReconciliation),
+      collectionValuation: Boolean(state.reportSectionState?.collectionValuation),
       removalHistory: Boolean(state.reportSectionState?.removalHistory),
       activity: Boolean(state.reportSectionState?.activity),
     },
@@ -413,6 +417,7 @@ function normalizeReportsViewRecord(entry) {
       accountingReconciliationStatus: ['pending', 'partially-received', 'received'].includes(snapshot.accountingReconciliationStatus) ? snapshot.accountingReconciliationStatus : '',
       accountingReconciliationStart: String(snapshot.accountingReconciliationStart || ''),
       accountingReconciliationEnd: String(snapshot.accountingReconciliationEnd || ''),
+      collectionValuationDimension: ['manufacturer', 'strength', 'wrapper', 'vitola', 'humidor'].includes(snapshot.collectionValuationDimension) ? snapshot.collectionValuationDimension : 'manufacturer',
       agingManufacturer: String(snapshot.agingManufacturer || ''),
       agingHumidorId: String(snapshot.agingHumidorId || ''),
       selectedAgingBucketKey: String(snapshot.selectedAgingBucketKey || '') || null,
@@ -430,6 +435,7 @@ function normalizeReportsViewRecord(entry) {
         ratingBreakdown: Boolean(snapshot.reportSectionState?.ratingBreakdown),
         inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
         accountingReconciliation: Boolean(snapshot.reportSectionState?.accountingReconciliation),
+        collectionValuation: Boolean(snapshot.reportSectionState?.collectionValuation),
         removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
         activity: Boolean(snapshot.reportSectionState?.activity),
       },
@@ -485,6 +491,7 @@ function applyReportsView(name) {
   state.accountingReconciliationStatus = view.snapshot.accountingReconciliationStatus
   state.accountingReconciliationStart = view.snapshot.accountingReconciliationStart
   state.accountingReconciliationEnd = view.snapshot.accountingReconciliationEnd
+  state.collectionValuationDimension = view.snapshot.collectionValuationDimension
   state.agingManufacturer = view.snapshot.agingManufacturer
   state.agingHumidorId = view.snapshot.agingHumidorId
   state.selectedAgingBucketKey = view.snapshot.selectedAgingBucketKey
@@ -1587,6 +1594,187 @@ function downloadAccountingReconciliationCsv(rows) {
   const link = document.createElement('a')
   link.href = url
   link.download = `humidorhq-accounting-reconciliation-${todayIsoDate()}.csv`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function collectionValuationDimensionLabel(value = state.collectionValuationDimension) {
+  return {
+    manufacturer: 'Manufacturer',
+    strength: 'Strength',
+    wrapper: 'Wrapper',
+    vitola: 'Vitola',
+    humidor: 'Humidor',
+  }[value] || 'Manufacturer'
+}
+
+function collectionValuationGroup(entry, dimension) {
+  if (dimension === 'humidor') {
+    const id = Number(entry.humidor?.id || 0)
+    return {
+      key: String(id),
+      label: entry.humidor?.name || 'Unknown Humidor',
+      searchTerm: '',
+      humidorId: id || null,
+      drillable: id > 0,
+    }
+  }
+  const field = dimension === 'manufacturer' ? 'manufacturer' : dimension
+  const fallback = `Unknown ${collectionValuationDimensionLabel(dimension)}`
+  const label = String(entry.cigar?.[field] || '').trim() || fallback
+  return {
+    key: label.toLowerCase(),
+    label,
+    searchTerm: label === fallback ? '' : label,
+    humidorId: null,
+    drillable: label !== fallback,
+  }
+}
+
+function reconcileCollectionValuationGroupMoney(rows, rawField, completeField, outputField) {
+  if (!rows.every((row) => row[completeField])) {
+    rows.forEach((row) => {
+      row[outputField] = row[completeField] ? roundMoney(row[rawField]) : null
+    })
+    return
+  }
+  const totalCents = Math.round(rows.reduce((sum, row) => sum + row[rawField], 0) * 100)
+  const allocations = rows.map((row, index) => {
+    const exactCents = row[rawField] * 100
+    const cents = Math.floor(exactCents + Number.EPSILON)
+    return { row, index, cents, remainder: exactCents - cents }
+  })
+  let remaining = totalCents - allocations.reduce((sum, item) => sum + item.cents, 0)
+  const order = [...allocations].sort((left, right) => (
+    right.remainder - left.remainder
+    || left.row.label.localeCompare(right.row.label, undefined, { sensitivity: 'base' })
+    || left.index - right.index
+  ))
+  for (let index = 0; index < remaining; index += 1) {
+    order[index % order.length].cents += 1
+  }
+  allocations.forEach((item) => {
+    item.row[outputField] = item.cents / 100
+  })
+}
+
+function collectionValuationRows(dimension = state.collectionValuationDimension) {
+  const groups = new Map()
+  positiveBalances().forEach((entry) => {
+    const group = collectionValuationGroup(entry, dimension)
+    if (!groups.has(group.key)) {
+      groups.set(group.key, {
+        ...group,
+        dimension,
+        quantity: 0,
+        knownCostQuantity: 0,
+        knownMsrpQuantity: 0,
+        rawCostBasis: 0,
+        rawMsrp: 0,
+        cigarIds: new Set(),
+        lotIds: new Set(),
+      })
+    }
+    const row = groups.get(group.key)
+    row.quantity += Number(entry.quantity || 0)
+    if (entry.cigar?.id) row.cigarIds.add(Number(entry.cigar.id))
+    if (entry.lot?.id) row.lotIds.add(Number(entry.lot.id))
+    if (hasKnownMoney(entry.costPerCigar)) {
+      row.rawCostBasis += Number(entry.quantity || 0) * Number(entry.costPerCigar)
+      row.knownCostQuantity += Number(entry.quantity || 0)
+    }
+    if (hasKnownMoney(entry.msrpPerCigar)) {
+      row.rawMsrp += Number(entry.quantity || 0) * Number(entry.msrpPerCigar)
+      row.knownMsrpQuantity += Number(entry.quantity || 0)
+    }
+  })
+
+  const rows = Array.from(groups.values()).map((row) => ({
+    ...row,
+    cigarCount: row.cigarIds.size,
+    lotCount: row.lotIds.size,
+    costComplete: row.knownCostQuantity === row.quantity,
+    msrpComplete: row.knownMsrpQuantity === row.quantity,
+    totalCostBasis: null,
+    totalMsrp: null,
+  }))
+  reconcileCollectionValuationGroupMoney(rows, 'rawCostBasis', 'costComplete', 'totalCostBasis')
+  reconcileCollectionValuationGroupMoney(rows, 'rawMsrp', 'msrpComplete', 'totalMsrp')
+  rows.forEach((row) => {
+    row.potentialSavings = row.totalCostBasis === null || row.totalMsrp === null ? null : roundMoney(row.totalMsrp - row.totalCostBasis)
+    row.averageCostPerCigar = row.totalCostBasis === null || row.quantity <= 0 ? null : row.totalCostBasis / row.quantity
+    row.averageMsrpPerCigar = row.totalMsrp === null || row.quantity <= 0 ? null : row.totalMsrp / row.quantity
+  })
+  return rows.sort((left, right) => {
+    if (dimension === 'strength') {
+      const rankDifference = strengthSortRank(left.label) - strengthSortRank(right.label)
+      if (rankDifference !== 0) return rankDifference
+    }
+    return left.label.localeCompare(right.label, undefined, { sensitivity: 'base' })
+  })
+}
+
+function collectionValuationSummary(rows = collectionValuationRows()) {
+  const cigarIds = new Set()
+  const lotIds = new Set()
+  rows.forEach((row) => {
+    row.cigarIds.forEach((id) => cigarIds.add(id))
+    row.lotIds.forEach((id) => lotIds.add(id))
+  })
+  const quantity = rows.reduce((sum, row) => sum + row.quantity, 0)
+  const totalCostBasis = sumMoneyValues(rows.map((row) => row.totalCostBasis))
+  const totalMsrp = sumMoneyValues(rows.map((row) => row.totalMsrp))
+  return {
+    quantity,
+    cigarCount: cigarIds.size,
+    lotCount: lotIds.size,
+    totalCostBasis,
+    totalMsrp,
+    potentialSavings: totalCostBasis === null || totalMsrp === null ? null : roundMoney(totalMsrp - totalCostBasis),
+    averageCostPerCigar: totalCostBasis === null || quantity <= 0 ? null : totalCostBasis / quantity,
+    averageMsrpPerCigar: totalMsrp === null || quantity <= 0 ? null : totalMsrp / quantity,
+  }
+}
+
+function collectionValuationCsv(rows, dimension = state.collectionValuationDimension) {
+  const headings = [
+    'Group By',
+    collectionValuationDimensionLabel(dimension),
+    'On-Hand Quantity',
+    'Distinct Cigars',
+    'Distinct Lots',
+    'Cost Basis',
+    'MSRP',
+    'Potential Savings',
+    'Average Cost Per Cigar',
+    'Average MSRP Per Cigar',
+  ]
+  const dataRows = rows.map((row) => [
+    collectionValuationDimensionLabel(dimension),
+    row.label,
+    row.quantity,
+    row.cigarCount,
+    row.lotCount,
+    accountingCsvMoney(row.totalCostBasis),
+    accountingCsvMoney(row.totalMsrp),
+    accountingCsvMoney(row.potentialSavings),
+    accountingCsvMoney(row.averageCostPerCigar),
+    accountingCsvMoney(row.averageMsrpPerCigar),
+  ])
+  return [headings, ...dataRows]
+    .map((row) => row.map(accountingCsvCell).join(','))
+    .join('\r\n')
+}
+
+function downloadCollectionValuationCsv(rows) {
+  const csv = collectionValuationCsv(rows)
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `humidorhq-collection-valuation-${state.collectionValuationDimension}-${todayIsoDate()}.csv`
   document.body.append(link)
   link.click()
   link.remove()
@@ -6568,6 +6756,135 @@ function renderAccountingReconciliationReport(view) {
   view.append(panel)
 }
 
+function openCollectionForValuationRow(row) {
+  if (!row?.drillable) return
+  state.collectionHumidorFilterId = row.dimension === 'humidor' ? row.humidorId : null
+  state.collectionSectionFilterId = null
+  state.collectionStrengthFilter = row.dimension === 'strength' ? row.label : ''
+  state.collectionBuyAgainFilter = ''
+  state.collectionSearch = ['manufacturer', 'wrapper', 'vitola'].includes(row.dimension) ? row.searchTerm : ''
+  state.selectedCollectionCigarId = null
+  state.collectionScrollTargetCigarId = null
+  navigateToPage('Collection')
+}
+
+function renderCollectionValuationReport(view) {
+  const rows = collectionValuationRows()
+  const summary = collectionValuationSummary(rows)
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'collection-valuation-panel',
+    title: 'Collection Valuation',
+    description: 'Current on-hand quantity and value by cigar characteristic or Humidor.',
+    stateKey: 'collectionValuation',
+  })
+
+  const controls = document.createElement('div')
+  controls.className = 'report-filter-grid'
+  const group = document.createElement('fieldset')
+  group.className = 'report-filter-group'
+  group.innerHTML = '<legend>Group By</legend>'
+  const groupButtons = document.createElement('div')
+  groupButtons.className = 'report-filter-buttons'
+  groupButtons.append(
+    reportFilterButton('Manufacturer', 'manufacturer', 'collectionValuationDimension'),
+    reportFilterButton('Strength', 'strength', 'collectionValuationDimension'),
+    reportFilterButton('Wrapper', 'wrapper', 'collectionValuationDimension'),
+    reportFilterButton('Vitola', 'vitola', 'collectionValuationDimension'),
+    reportFilterButton('Humidor', 'humidor', 'collectionValuationDimension'),
+  )
+  group.append(groupButtons)
+  const actions = document.createElement('fieldset')
+  actions.className = 'report-filter-group'
+  actions.innerHTML = '<legend>Workpaper</legend>'
+  const exportButton = document.createElement('button')
+  exportButton.type = 'button'
+  exportButton.className = 'primary-button'
+  exportButton.textContent = 'Export CSV'
+  exportButton.disabled = rows.length === 0
+  exportButton.addEventListener('click', () => downloadCollectionValuationCsv(rows))
+  actions.append(exportButton)
+  controls.append(group, actions)
+  body.append(controls)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
+  metrics.append(
+    metricCard('On Hand', summary.quantity, 'Positive location balances'),
+    metricCard('Distinct Cigars', summary.cigarCount, 'Catalog cigars represented'),
+    metricCard('Distinct Lots', summary.lotCount, 'Split Lots counted once'),
+    metricCard('Cost Basis', summary.totalCostBasis, 'Current acquisition basis', true),
+    metricCard('MSRP', summary.totalMsrp, 'Current suggested retail value', true),
+    metricCard('Potential Savings', summary.potentialSavings, 'MSRP less cost basis', true),
+    metricCard('Average Cost / Cigar', summary.averageCostPerCigar, 'Quantity weighted', true),
+    metricCard('Average MSRP / Cigar', summary.averageMsrpPerCigar, 'Quantity weighted', true),
+  )
+  body.append(metrics)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No on-hand inventory is available to value.</p>'
+    body.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll compact-top-gap'
+  tableWrap.innerHTML = `
+    <table class="data-table collection-valuation-table">
+      <thead>
+        <tr>
+          <th>${escapeHtml(collectionValuationDimensionLabel())}</th>
+          <th>On Hand</th>
+          <th>Distinct Cigars</th>
+          <th>Distinct Lots</th>
+          <th>Cost Basis</th>
+          <th>MSRP</th>
+          <th>Potential Savings</th>
+          <th>Avg Cost / Cigar</th>
+          <th>Avg MSRP / Cigar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr${row.drillable ? ` class="clickable-record-row" tabindex="0" data-valuation-key="${escapeHtml(row.key)}"` : ''}>
+            <td>${row.drillable ? `<button type="button" class="linkish-button" data-valuation-key="${escapeHtml(row.key)}">${escapeHtml(row.label)}</button>` : escapeHtml(row.label)}</td>
+            <td>${formatCount(row.quantity)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${formatCount(row.lotCount)}</td>
+            <td>${escapeHtml(money(row.totalCostBasis))}</td>
+            <td>${escapeHtml(money(row.totalMsrp))}</td>
+            <td>${escapeHtml(money(row.potentialSavings))}</td>
+            <td>${escapeHtml(money(row.averageCostPerCigar))}</td>
+            <td>${escapeHtml(money(row.averageMsrpPerCigar))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  tableWrap.querySelectorAll('[data-valuation-key]').forEach((element) => {
+    const row = rows.find((item) => item.key === element.dataset.valuationKey)
+    if (!row) return
+    const open = (event) => {
+      if (element.tagName === 'TR' && event.target.closest('button')) return
+      openCollectionForValuationRow(row)
+    }
+    element.addEventListener('click', open)
+    if (element.tagName === 'TR') {
+      element.setAttribute('aria-label', `Open Collection for ${row.label}`)
+      element.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          openCollectionForValuationRow(row)
+        }
+      })
+    }
+  })
+  body.append(tableWrap)
+  view.append(panel)
+}
+
 function buyAgainInsights() {
   const journalByEventId = new Map(records('smoking-journal-entries').map((entry) => [Number(entry.inventoryEventId), entry]))
   const ratingsByCatalogId = new Map()
@@ -6737,6 +7054,7 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderInventoryAgingReport(view)
   renderAccountingReconciliationReport(view)
+  renderCollectionValuationReport(view)
   renderRatingBreakdownReport(view)
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)

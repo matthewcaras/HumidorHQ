@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.33.0
+Revision: 1.34.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.34.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added a read-only Collection Valuation report grouped by Manufacturer, Strength, Wrapper, Vitola, or Humidor.
+- Added on-hand quantity, distinct cigar and Lot counts, cost basis, MSRP, potential savings, and quantity-weighted average values.
+- Made displayed group values deterministically foot to the report totals while retaining higher-precision per-cigar calculations.
+- Added direct Collection drill-through and formula-safe CSV export for the selected grouping.
+- Included the valuation grouping and report open state in locally saved Reports views.
 
 ## 1.33.0 - 2026-07-25
 
