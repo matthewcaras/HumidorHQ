@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.25.0
+ * Revision: 1.26.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -76,6 +76,7 @@ const state = {
     purchaseHistory: false,
     ratingBreakdown: false,
     inventoryAging: false,
+    accountingReconciliation: false,
     removalHistory: false,
     activity: false,
   },
@@ -370,6 +371,7 @@ function reportsViewSnapshot() {
       purchaseHistory: Boolean(state.reportSectionState?.purchaseHistory),
       ratingBreakdown: Boolean(state.reportSectionState?.ratingBreakdown),
       inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
+      accountingReconciliation: Boolean(state.reportSectionState?.accountingReconciliation),
       removalHistory: Boolean(state.reportSectionState?.removalHistory),
       activity: Boolean(state.reportSectionState?.activity),
     },
@@ -412,6 +414,7 @@ function normalizeReportsViewRecord(entry) {
         purchaseHistory: Boolean(snapshot.reportSectionState?.purchaseHistory),
         ratingBreakdown: Boolean(snapshot.reportSectionState?.ratingBreakdown),
         inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
+        accountingReconciliation: Boolean(snapshot.reportSectionState?.accountingReconciliation),
         removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
         activity: Boolean(snapshot.reportSectionState?.activity),
       },
@@ -1308,6 +1311,167 @@ function removalMetrics(type) {
     knownMsrpQuantity,
     costComplete,
     msrpComplete,
+  }
+}
+
+function inventoryRecordPurchaseLineId(record) {
+  const directId = Number(record?.purchaseLineId || 0)
+  if (directId > 0) return directId
+  return Number(recordById('lots', record?.lotId)?.purchaseLineId || 0)
+}
+
+function accountingReconciliationQuantitiesByLine() {
+  const quantities = new Map(records('purchase-lines').map((line) => [Number(line.id), {
+    received: 0,
+    onHand: 0,
+    removed: 0,
+    adjustment: 0,
+  }]))
+  const addQuantity = (lineId, field, value) => {
+    const id = Number(lineId || 0)
+    if (!quantities.has(id)) return
+    quantities.get(id)[field] += Number(value || 0)
+  }
+
+  records('lot-location-balances')
+    .filter((balance) => Number(balance.quantity || 0) > 0)
+    .forEach((balance) => {
+      addQuantity(inventoryRecordPurchaseLineId(balance), 'onHand', balance.quantity)
+    })
+
+  effectiveInventoryEvents().forEach((event) => {
+    const lineId = inventoryRecordPurchaseLineId(event)
+    const type = normalizeEventType(event.eventType)
+    if (type === 'PURCHASE_RECEIPT') {
+      addQuantity(lineId, 'received', event.quantity)
+    } else if (['SMOKED', 'GIFTED', 'DISCARDED'].includes(type)) {
+      addQuantity(lineId, 'removed', event.quantity)
+    } else if (type === 'INVENTORY_ADJUSTMENT') {
+      addQuantity(lineId, 'adjustment', event.quantityChange)
+    }
+  })
+  return quantities
+}
+
+function accountingReconciliationRows() {
+  const quantitiesByLine = accountingReconciliationQuantitiesByLine()
+  return [...records('purchases')]
+    .sort((left, right) => String(right.purchaseDate || '').localeCompare(String(left.purchaseDate || '')) || Number(right.id || 0) - Number(left.id || 0))
+    .map((purchase) => {
+      const lines = records('purchase-lines').filter((line) => Number(line.purchaseId || 0) === Number(purchase.id || 0))
+      const totalPaid = hasKnownMoney(purchase.totalPaid) ? Number(purchase.totalPaid) : null
+      let orderedQuantity = 0
+      let receivedQuantity = 0
+      let onHandQuantity = 0
+      let removedQuantity = 0
+      let adjustmentQuantity = 0
+      let allocatedCost = 0
+      let onHandCost = 0
+      let removedCost = 0
+      let adjustmentCost = 0
+      let unreceivedCost = 0
+      let moneyComplete = totalPaid !== null && lines.length > 0
+
+      lines.forEach((line) => {
+        const ordered = Number(line.quantity || 0)
+        const quantities = quantitiesByLine.get(Number(line.id)) || {
+          received: 0,
+          onHand: 0,
+          removed: 0,
+          adjustment: 0,
+        }
+        orderedQuantity += ordered
+        receivedQuantity += quantities.received
+        onHandQuantity += quantities.onHand
+        removedQuantity += quantities.removed
+        adjustmentQuantity += quantities.adjustment
+
+        const lineCost = authoritativePurchaseLineCostBasis(line)
+        if (!hasKnownMoney(lineCost) || ordered <= 0) {
+          moneyComplete = false
+          return
+        }
+        const unitCost = Number(lineCost) / ordered
+        allocatedCost += Number(lineCost)
+        onHandCost += quantities.onHand * unitCost
+        removedCost += quantities.removed * unitCost
+        adjustmentCost += quantities.adjustment * unitCost
+        unreceivedCost += (ordered - quantities.received) * unitCost
+      })
+
+      const unreceivedQuantity = orderedQuantity - receivedQuantity
+      const quantityVariance = receivedQuantity + adjustmentQuantity - onHandQuantity - removedQuantity
+      const rawAccountedCost = moneyComplete
+        ? onHandCost + removedCost - adjustmentCost + unreceivedCost
+        : null
+      const displayedOnHandCost = moneyComplete ? roundMoney(onHandCost) : null
+      const displayedRemovedCost = moneyComplete ? roundMoney(removedCost) : null
+      const displayedAdjustmentCost = moneyComplete ? roundMoney(adjustmentCost) : null
+      const displayedUnreceivedCost = moneyComplete ? roundMoney(unreceivedCost) : null
+      const accountedCost = moneyComplete ? roundMoney(rawAccountedCost) : null
+      const precisionRounding = moneyComplete
+        ? roundMoney(accountedCost - (displayedOnHandCost + displayedRemovedCost - displayedAdjustmentCost + displayedUnreceivedCost))
+        : null
+      const allocationVariance = moneyComplete ? roundMoney(totalPaid - allocatedCost) : null
+      const costVariance = moneyComplete ? roundMoney(totalPaid - accountedCost) : null
+      let status = 'Reconciled'
+      if (!moneyComplete) {
+        status = lines.length === 0 ? 'No purchase lines' : 'Money incomplete'
+      } else if (allocationVariance !== 0) {
+        status = 'Allocation variance'
+      } else if (quantityVariance !== 0) {
+        status = 'Quantity variance'
+      } else if (costVariance !== 0) {
+        status = 'Cost variance'
+      }
+
+      return {
+        purchase,
+        vendor: recordById('vendors', purchase.vendorId),
+        totalPaid,
+        orderedQuantity,
+        receivedQuantity,
+        onHandQuantity,
+        removedQuantity,
+        adjustmentQuantity,
+        unreceivedQuantity,
+        onHandCost: displayedOnHandCost,
+        removedCost: displayedRemovedCost,
+        adjustmentCost: displayedAdjustmentCost,
+        unreceivedCost: displayedUnreceivedCost,
+        precisionRounding,
+        accountedCost,
+        allocationVariance,
+        costVariance,
+        quantityVariance,
+        moneyComplete,
+        status,
+      }
+    })
+}
+
+function accountingReconciliationSummary(rows = accountingReconciliationRows()) {
+  const totalPaid = sumMoneyValues(rows.map((row) => row.totalPaid))
+  const onHandCost = sumMoneyValues(rows.map((row) => row.onHandCost))
+  const removedCost = sumMoneyValues(rows.map((row) => row.removedCost))
+  const adjustmentCost = sumMoneyValues(rows.map((row) => row.adjustmentCost))
+  const unreceivedCost = sumMoneyValues(rows.map((row) => row.unreceivedCost))
+  const precisionRounding = sumMoneyValues(rows.map((row) => row.precisionRounding))
+  const accountedCost = [onHandCost, removedCost, adjustmentCost, unreceivedCost, precisionRounding].every(hasKnownMoney)
+    ? roundMoney(onHandCost + removedCost - adjustmentCost + unreceivedCost + precisionRounding)
+    : null
+  return {
+    purchaseCount: rows.length,
+    reconciledPurchaseCount: rows.filter((row) => row.status === 'Reconciled').length,
+    totalPaid,
+    onHandCost,
+    removedCost,
+    adjustmentCost,
+    unreceivedCost,
+    precisionRounding,
+    accountedCost,
+    costVariance: totalPaid === null || accountedCost === null ? null : roundMoney(totalPaid - accountedCost),
+    quantityVariance: rows.reduce((sum, row) => sum + Number(row.quantityVariance || 0), 0),
   }
 }
 
@@ -6110,6 +6274,103 @@ function renderInventoryAgingReport(view) {
   view.append(panel)
 }
 
+function openAccountingReconciliationPurchase(purchaseId) {
+  state.purchaseRecordsFilterType = ''
+  state.purchaseRecordsFilterValue = ''
+  state.purchaseRecordsFilterLabel = ''
+  state.selectedPurchaseId = Number(purchaseId)
+  state.editingPurchaseLineId = null
+  state.showPurchaseCatalogCreate = false
+  navigateToPage('Purchases')
+}
+
+function renderAccountingReconciliationReport(view) {
+  const rows = accountingReconciliationRows()
+  const summary = accountingReconciliationSummary(rows)
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'accounting-reconciliation-panel',
+    title: 'Accounting Reconciliation',
+    description: 'Reconciles stored totalPaid to on-hand, removed, adjusted, and unreceived inventory costs.',
+    stateKey: 'accountingReconciliation',
+  })
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid'
+  metrics.append(
+    metricCard('Total Paid', summary.totalPaid, 'Authoritative purchase headers', true),
+    metricCard('On-Hand Basis', summary.onHandCost, 'Current positive balances', true),
+    metricCard('Removed Basis', summary.removedCost, 'Smoked, gifted, and discarded', true),
+    metricCard('Net Count Adjustment', summary.adjustmentCost, 'Signed adjustment basis', true),
+    metricCard('Unreceived Basis', summary.unreceivedCost, 'Ordered inventory not yet received', true),
+    metricCard('Precision Rounding', summary.precisionRounding, 'Makes displayed cent components foot', true),
+    metricCard('Accounted Basis', summary.accountedCost, 'On hand + removed - adjustments + unreceived + rounding', true),
+    metricCard('Cost Variance', summary.costVariance, 'Total paid less accounted basis', true),
+    metricCard('Purchases Reconciled', `${summary.reconciledPurchaseCount} of ${summary.purchaseCount}`, summary.quantityVariance === 0 ? 'Aggregate quantities foot' : `Aggregate quantity variance: ${formatCount(summary.quantityVariance)}`),
+  )
+  body.append(metrics)
+
+  const explanation = document.createElement('p')
+  explanation.className = 'muted compact-top-gap'
+  explanation.textContent = 'A purchase is reconciled when its line allocations equal total paid, its effective receipts and adjustments foot to current inventory plus removals, and its displayed cost variance is $0.00. Net count adjustments are signed and subtracted from accounted basis. Precision Rounding carries any sub-cent unit-cost difference needed for the displayed dollar-and-cent columns to foot exactly.'
+  body.append(explanation)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No purchases are available to reconcile.</p>'
+    body.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll compact-top-gap'
+  tableWrap.innerHTML = `
+    <table class="data-table accounting-reconciliation-table">
+      <thead>
+        <tr>
+          <th>Purchase</th>
+          <th>Vendor</th>
+          <th>Total Paid</th>
+          <th>On-Hand Basis</th>
+          <th>Removed Basis</th>
+          <th>Net Adjustment</th>
+          <th>Unreceived Basis</th>
+          <th>Precision Rounding</th>
+          <th>Accounted Basis</th>
+          <th>Variance</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td>
+              <button type="button" class="linkish-button" data-accounting-purchase-id="${Number(row.purchase.id)}">Purchase #${escapeHtml(String(row.purchase.id))}</button>
+              <div class="muted">${escapeHtml(displayDate(row.purchase.purchaseDate) || 'Date unknown')}</div>
+            </td>
+            <td>${escapeHtml(row.vendor?.name || 'Unknown Vendor')}</td>
+            <td>${escapeHtml(money(row.totalPaid))}</td>
+            <td>${escapeHtml(money(row.onHandCost))}<div class="muted">${formatCount(row.onHandQuantity)} cigars</div></td>
+            <td>${escapeHtml(money(row.removedCost))}<div class="muted">${formatCount(row.removedQuantity)} cigars</div></td>
+            <td>${escapeHtml(money(row.adjustmentCost))}<div class="muted">${formatCount(row.adjustmentQuantity)} net cigars</div></td>
+            <td>${escapeHtml(money(row.unreceivedCost))}<div class="muted">${formatCount(row.unreceivedQuantity)} cigars</div></td>
+            <td>${escapeHtml(money(row.precisionRounding))}</td>
+            <td>${escapeHtml(money(row.accountedCost))}</td>
+            <td>${escapeHtml(money(row.costVariance))}</td>
+            <td>${escapeHtml(row.status)}<div class="muted">${row.quantityVariance === 0 ? 'Quantities foot' : `Quantity variance: ${formatCount(row.quantityVariance)}`}</div></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  tableWrap.querySelectorAll('[data-accounting-purchase-id]').forEach((button) => {
+    button.addEventListener('click', () => openAccountingReconciliationPurchase(button.dataset.accountingPurchaseId))
+  })
+  body.append(tableWrap)
+  view.append(panel)
+}
+
 function buyAgainInsights() {
   const journalByEventId = new Map(records('smoking-journal-entries').map((entry) => [Number(entry.inventoryEventId), entry]))
   const ratingsByCatalogId = new Map()
@@ -6278,6 +6539,7 @@ function renderActivityReference(cell, event) {
 
 function renderReportsPage(view) {
   renderInventoryAgingReport(view)
+  renderAccountingReconciliationReport(view)
   renderRatingBreakdownReport(view)
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)

@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.31.0
+Revision: 1.32.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.32.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added a read-only Accounting Reconciliation report immediately after Inventory Aging.
+- Reconciled authoritative purchase `totalPaid` to on-hand, removed, signed physical-count adjustment, unreceived, and explicit precision-rounding cost bases overall and by purchase.
+- Added purchase drill-through, quantity-footing status, cost variance status, and saved report-section state.
+- Verified the current local dataset reconciles all 44 purchases to $3,977.13 with zero cost and quantity variance.
 
 ## 1.31.0 - 2026-07-25
 

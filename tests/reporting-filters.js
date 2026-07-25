@@ -1,7 +1,7 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.11.0
- * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, rating breakdown, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
+ * Revision: 1.12.0
+ * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
 
@@ -229,6 +229,7 @@ state.reportSectionState = {
   purchaseHistory: false,
   ratingBreakdown: true,
   inventoryAging: true,
+  accountingReconciliation: true,
   removalHistory: false,
   activity: true,
 }
@@ -262,12 +263,13 @@ state.reportSectionState = {
   purchaseHistory: false,
   ratingBreakdown: false,
   inventoryAging: false,
+  accountingReconciliation: false,
   removalHistory: false,
   activity: false,
 }
 testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
 testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
-testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
+testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
 testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
 testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
 state.purchaseTrendPeriod = 'year'
@@ -296,6 +298,7 @@ state.reportSectionState = {
   purchaseTrend: false,
   purchaseHistory: false,
   inventoryAging: false,
+  accountingReconciliation: false,
   removalHistory: false,
   activity: false,
 }
@@ -431,6 +434,51 @@ testAssert(lotCostPerCigar(state.records.lots[1], state.records['purchase-lines'
 testAssert(/11\.67$/.test(money(11.666667)), 'High-precision internal cost did not display as dollars and cents.')
 testAssert(completeMoneyTotal([0, '0.00']) === 0, 'Known zero money was not preserved.')
 testAssert(completeMoneyTotal([null, '1.00']) === null, 'Unknown money was incorrectly converted to zero.')
+
+const recordsBeforeAccountingReconciliation = state.records
+state.records = {
+  'catalog-cigars': [{ id: 1, manufacturer: 'Accounting', series: 'Fixture' }],
+  vendors: [{ id: 1, name: 'Fixture Vendor' }],
+  purchases: [
+    { id: 1, vendorId: 1, purchaseDate: '2026-01-01', status: 'received', totalPaid: '1.00' },
+    { id: 2, vendorId: 1, purchaseDate: '2026-01-02', status: 'partially-received', totalPaid: '2.00' },
+  ],
+  'purchase-lines': [
+    { id: 1, purchaseId: 1, catalogCigarId: 1, quantity: 3, purchasePrice: '1.00', trueCostBasis: '1.00', trueCostPerCigar: '0.333333' },
+    { id: 2, purchaseId: 2, catalogCigarId: 1, quantity: 4, purchasePrice: '2.00', trueCostBasis: '2.00', trueCostPerCigar: '0.50' },
+  ],
+  lots: [
+    { id: 1, purchaseLineId: 1, purchaseId: 1, catalogCigarId: 1 },
+    { id: 2, purchaseLineId: 2, purchaseId: 2, catalogCigarId: 1 },
+  ],
+  'lot-location-balances': [
+    { id: 1, lotId: 1, purchaseLineId: 1, purchaseId: 1, quantity: 1 },
+    { id: 2, lotId: 2, purchaseLineId: 2, purchaseId: 2, quantity: 2 },
+  ],
+  'storage-locations': [],
+  'storage-sub-locations': [],
+  'inventory-events': [
+    { id: 1, eventType: 'PURCHASE_RECEIPT', lotId: 1, purchaseLineId: 1, purchaseId: 1, quantity: 3 },
+    { id: 2, eventType: 'SMOKED', lotId: 1, purchaseLineId: 1, purchaseId: 1, quantity: 1 },
+    { id: 3, eventType: 'INVENTORY_ADJUSTMENT', lotId: 1, purchaseLineId: 1, purchaseId: 1, quantity: 1, quantityChange: -1 },
+    { id: 4, eventType: 'PURCHASE_RECEIPT', lotId: 2, purchaseLineId: 2, purchaseId: 2, quantity: 2 },
+  ],
+  'smoking-journal-entries': [],
+}
+let accountingRows = accountingReconciliationRows()
+let accountingSummary = accountingReconciliationSummary(accountingRows)
+const fullyReceivedAccountingRow = accountingRows.find((row) => row.purchase.id === 1)
+const partiallyReceivedAccountingRow = accountingRows.find((row) => row.purchase.id === 2)
+testAssert(accountingRows.length === 2 && accountingRows.every((row) => row.status === 'Reconciled'), 'Accounting Reconciliation did not recognize purchases whose quantities and costs foot.')
+testAssert(fullyReceivedAccountingRow.receivedQuantity === 3 && fullyReceivedAccountingRow.onHandQuantity === 1 && fullyReceivedAccountingRow.removedQuantity === 1 && fullyReceivedAccountingRow.adjustmentQuantity === -1 && fullyReceivedAccountingRow.quantityVariance === 0, 'Accounting Reconciliation quantity proof is incorrect.')
+testAssert(partiallyReceivedAccountingRow.unreceivedQuantity === 2 && partiallyReceivedAccountingRow.unreceivedCost === 1 && partiallyReceivedAccountingRow.accountedCost === 2, 'Accounting Reconciliation did not include unreceived purchase basis.')
+testAssert(fullyReceivedAccountingRow.precisionRounding === 0.01 && fullyReceivedAccountingRow.onHandCost + fullyReceivedAccountingRow.removedCost - fullyReceivedAccountingRow.adjustmentCost + fullyReceivedAccountingRow.unreceivedCost + fullyReceivedAccountingRow.precisionRounding === fullyReceivedAccountingRow.accountedCost, 'Accounting Reconciliation displayed cent components do not foot after precision rounding.')
+testAssert(accountingSummary.totalPaid === 3 && accountingSummary.accountedCost === 3 && accountingSummary.costVariance === 0 && accountingSummary.reconciledPurchaseCount === 2 && accountingSummary.onHandCost + accountingSummary.removedCost - accountingSummary.adjustmentCost + accountingSummary.unreceivedCost + accountingSummary.precisionRounding === accountingSummary.accountedCost, 'Accounting Reconciliation did not preserve high-precision unit costs through a cent-level purchase proof.')
+state.records['lot-location-balances'][0].quantity = 2
+accountingRows = accountingReconciliationRows()
+const variedAccountingRow = accountingRows.find((row) => row.purchase.id === 1)
+testAssert(variedAccountingRow.status === 'Quantity variance' && variedAccountingRow.quantityVariance === -1 && variedAccountingRow.costVariance === -0.33, 'Accounting Reconciliation did not identify a quantity and cost variance.')
+state.records = recordsBeforeAccountingReconciliation
 
 function mockClassList() {
   const values = new Set()
