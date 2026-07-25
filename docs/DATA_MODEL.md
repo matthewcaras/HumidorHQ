@@ -1,8 +1,8 @@
 <!--
 Filename: DATA_MODEL.md
-Revision: 1.4.2
+Revision: 1.5.0
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-20 09:30 ET
+Modified Date: 2026-07-25
 -->
 
 # HumidorHQ Data Model
@@ -83,6 +83,10 @@ line subtotal
 True cost per cigar =
 true line cost basis / quantity
 
+Purchase headers and authoritative line allocations are deterministic integer-cent amounts. The allocated true cost per cigar may carry up to six decimal places so extending it by quantity rounds back to the authoritative line cents; browser currency output is still shown to two decimal places. Known zero remains zero, while missing money remains unknown rather than being converted to zero.
+
+Existing historical JSON is not automatically migrated when this calculation changes. If a legacy line, Lot, or event snapshot does not foot to authoritative purchase `totalPaid`, the application may use a deterministic read-only purchase allocation for current display and new snapshots while preserving the original stored history for integrity review.
+
 ## Lots
 
 A lot represents a specific batch of cigars created from a purchase line.
@@ -99,7 +103,7 @@ Lots preserve:
 
 Lots can be split across humidors while retaining a link to the original purchase line.
 
-Inventory Aging is a read-only projection of positive Lot/location balances. It ages each balance from the Lot received-date snapshot, counts a split Lot once in distinct-Lot totals, weights average age by current quantity, and calculates value from immutable per-cigar snapshots in integer cents. Missing dates remain in an Unknown bucket, future dates are flagged separately, and a monetary total remains unknown unless every included cigar has a known value.
+Inventory Aging is a read-only projection of positive Lot/location balances. It ages each balance from the Lot received-date snapshot, counts a split Lot once in distinct-Lot totals, weights average age by current quantity, and extends reconciled per-cigar values at their stored precision before rounding the visible total to cents. Missing dates remain in an Unknown bucket, future dates are flagged separately, and a monetary total remains unknown unless every included cigar has a known value.
 
 ## Events
 

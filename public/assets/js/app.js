@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.24.34
+ * Revision: 1.25.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-24 11:26 ET
+ * Modified Date: 2026-07-25
  */
 
 const API_BASE_URL = 'api'
@@ -716,7 +716,12 @@ function money(value) {
   if (value === null || value === undefined || value === '') {
     return 'Unknown'
   }
-  return Number(value).toLocaleString(undefined, { style: 'currency', currency: 'USD' })
+  return Number(value).toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 function displayDate(value) {
@@ -945,12 +950,16 @@ function draftLineSubtotal(line) {
 }
 
 function purchaseLineTrueCostPerCigar(line) {
+  const authoritative = authoritativePurchaseLineCostPerCigar(line)
+  if (authoritative !== null) {
+    return authoritative
+  }
   if (line?.trueCostPerCigar !== null && line?.trueCostPerCigar !== undefined && line?.trueCostPerCigar !== '') {
     return line.trueCostPerCigar
   }
   const quantity = Math.max(1, numericValue(line?.quantity))
   const basis = line?.trueCostBasis ?? line?.purchasePrice ?? line?.lineSubtotal
-  return hasKnownMoney(basis) ? roundMoney(Number(basis) / quantity) : null
+  return hasKnownMoney(basis) ? Math.round((Number(basis) / quantity) * 1_000_000) / 1_000_000 : null
 }
 
 function ensurePurchaseDraftOrder() {
@@ -1010,7 +1019,7 @@ function lotDate(lot, purchase) {
 }
 
 function lotCostPerCigar(lot, line) {
-  return [lot?.costPerCigarSnapshot, lot?.allocatedCostPerCigar, line?.trueCostPerCigar, lot?.actualCostPerCigar, line?.unitCost]
+  return [authoritativePurchaseLineCostPerCigar(line), lot?.costPerCigarSnapshot, lot?.allocatedCostPerCigar, line?.trueCostPerCigar, lot?.actualCostPerCigar, line?.unitCost]
     .map((value) => value === '' ? null : value)
     .find((value) => value !== null && value !== undefined) ?? null
 }
@@ -1278,11 +1287,13 @@ function removalEventsOfType(type) {
 function removalMetrics(type) {
   const events = removalEventsOfType(type)
   const quantity = events.reduce((sum, event) => sum + numericValue(event.quantity), 0)
-  const knownCostEvents = events.filter((event) => hasKnownMoney(event.costPerCigarAtEvent))
+  const knownCostEvents = events
+    .map((event) => ({ event, costPerCigar: inventoryEventCostPerCigar(event) }))
+    .filter((row) => hasKnownMoney(row.costPerCigar))
   const knownMsrpEvents = events.filter((event) => hasKnownMoney(event.msrpPerCigarAtEvent))
-  const knownCostQuantity = knownCostEvents.reduce((sum, event) => sum + numericValue(event.quantity), 0)
+  const knownCostQuantity = knownCostEvents.reduce((sum, row) => sum + numericValue(row.event.quantity), 0)
   const knownMsrpQuantity = knownMsrpEvents.reduce((sum, event) => sum + numericValue(event.quantity), 0)
-  const knownCostTotal = knownCostEvents.reduce((sum, event) => sum + numericValue(event.quantity) * Number(event.costPerCigarAtEvent), 0)
+  const knownCostTotal = knownCostEvents.reduce((sum, row) => sum + numericValue(row.event.quantity) * Number(row.costPerCigar), 0)
   const knownMsrpTotal = knownMsrpEvents.reduce((sum, event) => sum + numericValue(event.quantity) * Number(event.msrpPerCigarAtEvent), 0)
   const costComplete = knownCostQuantity === quantity
   const msrpComplete = knownMsrpQuantity === quantity
@@ -4302,7 +4313,7 @@ function renderPurchaseLinesPanel(view) {
   }
 
   const lines = records('purchase-lines').filter((line) => Number(line.purchaseId) === Number(purchase.id))
-  const trueCostBasis = sumMoneyValues(lines.map((line) => line.trueCostBasis))
+  const trueCostBasis = sumMoneyValues(lines.map((line) => authoritativePurchaseLineCostBasis(line) ?? line.trueCostBasis))
   const summary = document.createElement('div')
   summary.className = 'metric-grid compact'
   summary.append(
@@ -4343,7 +4354,7 @@ function renderPurchaseLinesPanel(view) {
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
-      <td>${escapeHtml(money(line.trueCostBasis))}</td>
+      <td>${escapeHtml(money(authoritativePurchaseLineCostBasis(line) ?? line.trueCostBasis))}</td>
       <td class="row-actions"></td>
     `
     const actions = row.querySelector('.row-actions')
@@ -4461,7 +4472,7 @@ function renderPurchaseLineDetails(container, purchase) {
       <td>${escapeHtml(money(line.purchasePrice ?? line.lineSubtotal))}</td>
       <td>${escapeHtml(money(line.msrpPerCigar ?? line.msrpPerCigarResolved))}</td>
       <td>${escapeHtml(money(purchaseLineTrueCostPerCigar(line)))}</td>
-      <td>${escapeHtml(money(line.trueCostBasis))}</td>
+      <td>${escapeHtml(money(authoritativePurchaseLineCostBasis(line) ?? line.trueCostBasis))}</td>
     `
     tbody.append(row)
   })
@@ -4922,11 +4933,13 @@ function filteredRemovalEvents() {
 
 function removalReportMetrics(events) {
   const quantity = events.reduce((sum, event) => sum + numericValue(event.quantity), 0)
-  const knownCostEvents = events.filter((event) => hasKnownMoney(event.costPerCigarAtEvent))
+  const knownCostEvents = events
+    .map((event) => ({ event, costPerCigar: inventoryEventCostPerCigar(event) }))
+    .filter((row) => hasKnownMoney(row.costPerCigar))
   const knownMsrpEvents = events.filter((event) => hasKnownMoney(event.msrpPerCigarAtEvent))
-  const knownCostQuantity = knownCostEvents.reduce((sum, event) => sum + numericValue(event.quantity), 0)
+  const knownCostQuantity = knownCostEvents.reduce((sum, row) => sum + numericValue(row.event.quantity), 0)
   const knownMsrpQuantity = knownMsrpEvents.reduce((sum, event) => sum + numericValue(event.quantity), 0)
-  const knownCostTotal = knownCostEvents.reduce((sum, event) => sum + numericValue(event.quantity) * Number(event.costPerCigarAtEvent), 0)
+  const knownCostTotal = knownCostEvents.reduce((sum, row) => sum + numericValue(row.event.quantity) * Number(row.costPerCigar), 0)
   const knownMsrpTotal = knownMsrpEvents.reduce((sum, event) => sum + numericValue(event.quantity) * Number(event.msrpPerCigarAtEvent), 0)
   const costComplete = knownCostQuantity === quantity
   const msrpComplete = knownMsrpQuantity === quantity
@@ -5097,7 +5110,7 @@ function renderRemovalHistory(view) {
           : escapeHtml(details.cigarLabel)}</td>
         <td>${escapeHtml(details.locationLabel || 'Unassigned')}</td>
         <td>${formatCount(event.quantity)}</td>
-        <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
+        <td>${escapeHtml(money(inventoryEventCostPerCigar(event)))}</td>
         <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
         <td>${journal ? escapeHtml(String(journal.rating)) : '—'}</td>
         <td>${escapeHtml(journal?.notes || '')}</td>
@@ -5145,15 +5158,18 @@ function allocatePurchasePaidCents(purchase, lines) {
   const totalCents = Math.round(Number(purchase.totalPaid) * 100)
   if (totalCents === 0) return new Map(lines.map((line) => [Number(line.id), 0]))
 
-  let weights = lines.map((line) => line.trueCostBasis)
-  if (!weights.every(hasKnownMoney) || weights.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0) <= 0) {
-    weights = lines.map((line) => line.purchasePrice ?? line.lineSubtotal ?? null)
-  }
-  if (!weights.every(hasKnownMoney) || weights.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0) <= 0) {
+  const weightCents = lines.map((line) => {
+    const subtotal = line.purchasePrice ?? line.lineSubtotal
+    if (hasKnownMoney(subtotal)) return Math.round(Number(subtotal) * 100)
+    if (hasKnownMoney(line.unitCost) && Number(line.quantity || 0) > 0) {
+      return Math.round(Number(line.unitCost) * 100) * Number(line.quantity)
+    }
+    return null
+  })
+  if (weightCents.some((value) => value === null || value <= 0)) {
     return lines.length === 1 ? new Map([[Number(lines[0].id), totalCents]]) : null
   }
 
-  const weightCents = weights.map((value) => Math.round(Number(value) * 100))
   const weightTotal = weightCents.reduce((sum, value) => sum + value, 0)
   const allocations = lines.map((line, index) => {
     const numerator = totalCents * weightCents[index]
@@ -5169,6 +5185,41 @@ function allocatePurchasePaidCents(purchase, lines) {
     remainderOrder[index % remainderOrder.length].cents += 1
   }
   return new Map(allocations.map((item) => [item.id, item.cents]))
+}
+
+function authoritativePurchaseLineCostBasis(line) {
+  const lineId = Number(line?.id || 0)
+  const purchaseId = Number(line?.purchaseId || 0)
+  if (!lineId || !purchaseId) return null
+  const purchase = recordById('purchases', purchaseId)
+  if (!purchase) return null
+  const lines = records('purchase-lines').filter((candidate) => Number(candidate.purchaseId || 0) === purchaseId)
+  const totalPaidCents = hasKnownMoney(purchase.totalPaid) ? Math.round(Number(purchase.totalPaid) * 100) : null
+  const storedBasisCents = lines.map((candidate) => hasKnownMoney(candidate.trueCostBasis)
+    ? Math.round(Number(candidate.trueCostBasis) * 100)
+    : null)
+  if (totalPaidCents !== null
+    && storedBasisCents.every((value) => value !== null)
+    && storedBasisCents.reduce((sum, value) => sum + value, 0) === totalPaidCents) {
+    const lineIndex = lines.findIndex((candidate) => Number(candidate.id || 0) === lineId)
+    return lineIndex < 0 ? null : storedBasisCents[lineIndex] / 100
+  }
+  const allocations = allocatePurchasePaidCents(purchase, lines)
+  const cents = allocations?.get(lineId)
+  return cents === undefined ? null : cents / 100
+}
+
+function authoritativePurchaseLineCostPerCigar(line) {
+  const quantity = Number(line?.quantity || 0)
+  const costBasis = authoritativePurchaseLineCostBasis(line)
+  return costBasis === null || quantity <= 0
+    ? null
+    : Math.round((costBasis / quantity) * 1_000_000) / 1_000_000
+}
+
+function inventoryEventCostPerCigar(event) {
+  const line = recordById('purchase-lines', event?.purchaseLineId)
+  return authoritativePurchaseLineCostPerCigar(line) ?? event?.costPerCigarAtEvent ?? null
 }
 
 function purchaseHistoryPaidAllocations() {
@@ -5770,7 +5821,7 @@ function inventoryAgingRows(asOfDate = todayIsoDate()) {
         receivedDate,
         ageDays,
         agingBucket: inventoryAgingBucket(ageDays),
-        costValueCents: hasKnownMoney(entry.costPerCigar) ? entry.quantity * Math.round(Number(entry.costPerCigar) * 100) : null,
+        costValueCents: hasKnownMoney(entry.costPerCigar) ? entry.quantity * Number(entry.costPerCigar) * 100 : null,
         msrpValueCents: hasKnownMoney(entry.msrpPerCigar) ? entry.quantity * Math.round(Number(entry.msrpPerCigar) * 100) : null,
       }
     })
@@ -5799,7 +5850,7 @@ function summarizeInventoryAging(rows) {
     weightedAverageAge: knownAgeQuantity > 0
       ? knownAgeRows.reduce((sum, row) => sum + row.quantity * row.ageDays, 0) / knownAgeQuantity
       : null,
-    totalCostBasis: knownCostQuantity === quantity ? knownCostRows.reduce((sum, row) => sum + row.costValueCents, 0) / 100 : null,
+    totalCostBasis: knownCostQuantity === quantity ? roundMoney(knownCostRows.reduce((sum, row) => sum + row.costValueCents, 0) / 100) : null,
     totalMsrp: knownMsrpQuantity === quantity ? knownMsrpRows.reduce((sum, row) => sum + row.msrpValueCents, 0) / 100 : null,
     knownCostQuantity,
     knownMsrpQuantity,
@@ -6440,7 +6491,7 @@ function renderReportsPage(view) {
       <td class="activity-cigar-cell"></td>
       <td>${escapeHtml(activityEventLocationLabel(event))}</td>
       <td>${formatCount(inventoryEventDisplayQuantity(event))}</td>
-      <td>${escapeHtml(money(event.costPerCigarAtEvent))}</td>
+      <td>${escapeHtml(money(inventoryEventCostPerCigar(event)))}</td>
       <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
       <td class="activity-reference-cell"></td>
       <td class="row-actions"></td>

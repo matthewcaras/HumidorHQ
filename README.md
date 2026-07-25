@@ -1,6 +1,6 @@
 <!--
 Filename: README.md
-Revision: 1.30.48
+Revision: 1.31.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -29,6 +29,8 @@ HumidorHQ is a cigar collection and humidor management app using a flat-file hos
 - Signed-in user, logout controls, Mobile preview access, project revision, and a stacked modified date/time sit in the lower-left sidebar.
 - `Mobile` opens `/mobile/`, a visible viewport preview page for phone and tablet widths that defaults to iPhone 16 Pro without exposing Jason-only utility links.
 - Hidden Jason utility page at `/j/` provides quick links to Dashboard, Changelog, Audit, TODO, and an in-page preview that defaults to full web view with optional mobile presets.
+
+Purchase `totalPaid` and allocated line totals remain authoritative integer-cent amounts. Allocated cost per cigar is carried to six decimal places internally so quantity extensions reconcile to those cent totals, while every visible currency value remains formatted as dollars and cents. For older imported records whose stored line or snapshot costs do not foot to `totalPaid`, read-only UI projections use a deterministic weighted allocation without rewriting runtime JSON.
 
 ## Current Target
 
@@ -210,6 +212,8 @@ Run the read-only integrity checker with:
 .\tools\check-data-integrity.ps1 # defaults to .\data
 ```
 
+The checker reports authoritative purchase totals, deterministic line allocations, stored line bases, extended per-unit costs, and any line, Lot, or Inventory Event snapshot differences. It never repairs or rewrites the dataset.
+
 `tools/repair-inventory-only.ps1` is a narrowly scoped offline migration for the confirmed Balance 66 location and Lots 30, 54, 65, and 70 quantity-cache corrections. It requires exact before-value matches, an external backup directory, an explicit apply confirmation, and an additional override for repository runtime data. Rehearse it only against a copied temporary data root. It does not use API synchronization, import, or rebuild logic and does not modify purchase, purchase-line, event, journal, counter, balance-quantity, or cost/MSRP snapshot data.
 
 `tools/repair-purchase-headers.ps1` is a separately guarded offline migration for the approved Purchases 1-40 subtotal population and negative-discount normalization. Stored `totalPaid` remains authoritative. The script is dry-run by default, requires exact header preconditions and an external verified backup, and changes only `subtotal` and negative `discount` fields in `purchases.json`. It does not resynchronize purchase lines or modify allocations, inventory, history, counters, quantities, IDs, or snapshots.
@@ -218,6 +222,7 @@ The automated smoke, runtime-location, transaction, authentication-security, bac
 
 ```powershell
 .\tests\flat-file-smoke.ps1
+.\tests\accounting-reconciliation.ps1
 .\tests\runtime-data-separation.ps1
 .\tests\flat-file-transaction.ps1
 .\tests\auth-security.ps1

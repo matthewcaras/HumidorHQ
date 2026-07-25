@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.16.2
+ * Revision: 1.17.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
- * Modified Date: 2026-07-22 13:45 ET
+ * Modified Date: 2026-07-25
  */
 
 require_once __DIR__ . '/bootstrap.php';
@@ -590,7 +590,7 @@ function sync_purchase_inventory(int $purchaseId): void
         $line['trueCostBasis'] = $trueCostBasisCents === null ? null : cents_to_money($trueCostBasisCents);
         $line['trueCostPerCigar'] = $trueCostBasisCents === null
             ? null
-            : cents_to_money(intdiv($trueCostBasisCents + intdiv($quantity, 2), $quantity));
+            : precise_unit_cost_from_cents($trueCostBasisCents, $quantity);
         $line['msrpPerCigarResolved'] = $resolvedMsrp === null || $resolvedMsrp === '' ? null : round((float) $resolvedMsrp, 2);
         $line['updatedAt'] = $now;
         $updatedLinesById[$lineId] = $line;
@@ -890,7 +890,7 @@ function move_inventory(array $input): array
         'quantity' => $quantity,
         'eventDate' => today_local_date(),
         'occurredAt' => $now,
-        'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
+        'costPerCigarAtEvent' => reconciled_lot_cost_per_cigar($lot),
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
         'notes' => $notes,
         'createdAt' => $now,
@@ -1023,7 +1023,7 @@ function remove_inventory(array $input): array
         'quantity' => $quantity,
         'eventDate' => $eventDate,
         'occurredAt' => $now,
-        'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
+        'costPerCigarAtEvent' => reconciled_lot_cost_per_cigar($lot),
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
         'notes' => $notes,
         'removalKey' => $idempotencyKey,

@@ -1,10 +1,11 @@
 # Filename: check-data-integrity.ps1
-# Revision : 1.4.1
+# Revision : 1.5.0
 # Description : Performs a read-only integrity review of HumidorHQ flat-file JSON data.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-17
-# Modified Date : 2026-07-22 12:00 ET
+# Modified Date : 2026-07-25
 # Changelog :
+# 1.5.0 reconcile authoritative purchase totals to line allocations and six-decimal per-cigar costs
 # 1.4.1 treat critical lot cache and purchase-header reconciliation defects as errors
 # 1.4.0 reconcile and validate effective append-only inventory adjustments
 # 1.3.0 default to the repository data directory while retaining DataRoot and environment overrides
@@ -71,7 +72,76 @@ function Get-IdSet {
 function Convert-ToCents {
     param($Value)
     if ($null -eq $Value -or [string]$Value -eq '') { return 0L }
-    try { return [long][math]::Round(([decimal]$Value * 100), 0) } catch { return 0L }
+    try { return [long][decimal]::Round(([decimal]$Value * 100), 0, [MidpointRounding]::AwayFromZero) } catch { return 0L }
+}
+
+function Test-KnownMoney {
+    param($Value)
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $false }
+    try {
+        $parsed = [decimal]$Value
+        return $parsed -ge 0
+    } catch {
+        return $false
+    }
+}
+
+function Format-Cents {
+    param([long]$Value)
+    return '$' + (([decimal]$Value / 100).ToString('N2', [Globalization.CultureInfo]::InvariantCulture))
+}
+
+function Format-DecimalMoney {
+    param([decimal]$Value)
+    return '$' + $Value.ToString('N2', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-LineWeightCents {
+    param($Line)
+    foreach ($field in @('purchasePrice', 'lineSubtotal')) {
+        if (Test-KnownMoney $Line.$field) {
+            return Convert-ToCents $Line.$field
+        }
+    }
+    if ((Test-KnownMoney $Line.unitCost) -and [int]($Line.quantity ?? 0) -gt 0) {
+        return (Convert-ToCents $Line.unitCost) * [int]$Line.quantity
+    }
+    return $null
+}
+
+function Get-WeightedCentAllocations {
+    param(
+        [long]$TotalCents,
+        [hashtable]$Weights
+    )
+    if ($TotalCents -lt 0 -or $Weights.Count -eq 0) { return @{} }
+    $totalWeight = [long](($Weights.Values | Measure-Object -Sum).Sum ?? 0)
+    if ($totalWeight -le 0) { return @{} }
+    $allocations = @{}
+    $remainders = @()
+    $allocated = 0L
+    foreach ($id in @($Weights.Keys | Sort-Object { [int]$_ })) {
+        $weighted = $TotalCents * [long]$Weights[$id]
+        $base = [long][math]::Floor($weighted / $totalWeight)
+        $allocations[[int]$id] = $base
+        $remainders += [pscustomobject]@{
+            Id = [int]$id
+            Remainder = $weighted % $totalWeight
+        }
+        $allocated += $base
+    }
+    $remaining = $TotalCents - $allocated
+    $orderedRemainders = @($remainders | Sort-Object @{ Expression = 'Remainder'; Descending = $true }, @{ Expression = 'Id'; Descending = $false })
+    for ($index = 0; $index -lt $remaining; $index++) {
+        $id = [int]$orderedRemainders[$index % $orderedRemainders.Count].Id
+        $allocations[$id] = [long]$allocations[$id] + 1
+    }
+    return $allocations
+}
+
+function Format-IdList {
+    param([object[]]$Ids)
+    return (@($Ids | Sort-Object -Unique | ForEach-Object { [string]$_ }) -join ', ')
 }
 
 function Normalize-EventType {
@@ -104,8 +174,33 @@ $catalogIds = Get-IdSet $collections['catalog-cigars']
 $vendorIds = Get-IdSet $collections['vendors']
 $humidorIds = Get-IdSet $collections['storage-locations']
 $sectionIds = Get-IdSet $collections['storage-sub-locations']
+$purchaseIds = Get-IdSet $collections['purchases']
 $lotIds = Get-IdSet $collections['lots']
 $eventIds = Get-IdSet $collections['inventory-events']
+$purchaseLinesByPurchaseId = @{}
+foreach ($line in $collections['purchase-lines']) {
+    $purchaseId = Normalize-OptionalId $line.purchaseId
+    if (-not $purchaseLinesByPurchaseId.ContainsKey($purchaseId)) {
+        $purchaseLinesByPurchaseId[$purchaseId] = @()
+    }
+    $purchaseLinesByPurchaseId[$purchaseId] = @($purchaseLinesByPurchaseId[$purchaseId]) + @($line)
+}
+$lotsByPurchaseLineId = @{}
+foreach ($lot in $collections['lots']) {
+    $purchaseLineId = Normalize-OptionalId $lot.purchaseLineId
+    if (-not $lotsByPurchaseLineId.ContainsKey($purchaseLineId)) {
+        $lotsByPurchaseLineId[$purchaseLineId] = @()
+    }
+    $lotsByPurchaseLineId[$purchaseLineId] = @($lotsByPurchaseLineId[$purchaseLineId]) + @($lot)
+}
+$eventsByPurchaseLineId = @{}
+foreach ($event in $collections['inventory-events']) {
+    $purchaseLineId = Normalize-OptionalId $event.purchaseLineId
+    if (-not $eventsByPurchaseLineId.ContainsKey($purchaseLineId)) {
+        $eventsByPurchaseLineId[$purchaseLineId] = @()
+    }
+    $eventsByPurchaseLineId[$purchaseLineId] = @($eventsByPurchaseLineId[$purchaseLineId]) + @($event)
+}
 $eventsById = @{}
 foreach ($event in $collections['inventory-events']) {
     $eventId = [int]($event.id ?? 0)
@@ -237,6 +332,10 @@ foreach ($lot in $collections['lots']) {
 }
 
 foreach ($line in $collections['purchase-lines']) {
+    $purchaseId = Normalize-OptionalId $line.purchaseId
+    if ($purchaseId -eq 0 -or -not $purchaseIds.ContainsKey($purchaseId)) {
+        Write-IntegrityMessage ERROR 'MISSING_PURCHASE' "Purchase line id $($line.id) references a missing Purchase."
+    }
     $catalogId = Normalize-OptionalId $line.catalogCigarId
     if ($catalogId -eq 0 -or -not $catalogIds.ContainsKey($catalogId)) {
         Write-IntegrityMessage ERROR 'MISSING_CATALOG' "Purchase line id $($line.id) references a missing Catalog cigar."
@@ -262,6 +361,18 @@ foreach ($event in $collections['inventory-events']) {
         Write-IntegrityMessage ERROR 'MISSING_CATALOG' "Inventory event id $($event.id) references missing Catalog cigar id $catalogId."
     }
 }
+$authoritativePurchaseTotalCents = 0L
+$authoritativeLineAllocationTotalCents = 0L
+$storedLineBasisTotalCents = 0L
+$extendedLineUnitCostTotal = [decimal]0
+$lineBasisMismatchIds = @()
+$lineUnitMismatchIds = @()
+$lotSnapshotMismatchIds = @()
+$eventSnapshotMismatchIds = @()
+$componentMismatchPurchaseIds = @()
+$subtotalVariancePurchaseIds = @()
+$unallocatablePurchaseIds = @()
+
 foreach ($purchase in $collections['purchases']) {
     $vendorId = Normalize-OptionalId $purchase.vendorId
     if ($vendorId -gt 0 -and -not $vendorIds.ContainsKey($vendorId)) {
@@ -276,11 +387,159 @@ foreach ($purchase in $collections['purchases']) {
     if ($null -eq $purchase.totalPaid -or [string]$purchase.totalPaid -eq '') {
         Write-IntegrityMessage ERROR 'PURCHASE_TOTAL_UNKNOWN' "Purchase id $($purchase.id) has no stored totalPaid value."
     } else {
+        $headerFields = @('subtotal', 'shipping', 'exciseTax', 'salesTax', 'discount', 'totalPaid')
+        $unknownHeaderFields = @($headerFields | Where-Object { -not (Test-KnownMoney $purchase.$_) })
+        if ($unknownHeaderFields.Count -gt 0) {
+            Write-IntegrityMessage ERROR 'PURCHASE_MONEY_INVALID' "Purchase id $($purchase.id) has invalid or unknown money fields: $($unknownHeaderFields -join ', ')."
+            continue
+        }
         $expectedTotalCents = (Convert-ToCents $purchase.subtotal) + (Convert-ToCents $purchase.shipping) + (Convert-ToCents $purchase.exciseTax) + (Convert-ToCents $purchase.salesTax) - (Convert-ToCents $purchase.discount)
-        if ((Convert-ToCents $purchase.totalPaid) -ne $expectedTotalCents) {
+        $totalPaidCents = Convert-ToCents $purchase.totalPaid
+        if ($totalPaidCents -ne $expectedTotalCents) {
             Write-IntegrityMessage ERROR 'PURCHASE_TOTAL_MISMATCH' "Purchase id $($purchase.id) totalPaid does not reconcile to subtotal + shipping + excise tax + sales tax - discount."
         }
+        $authoritativePurchaseTotalCents += $totalPaidCents
+
+        $purchaseId = [int]($purchase.id ?? 0)
+        $purchaseLines = @($purchaseLinesByPurchaseId[$purchaseId])
+        if ($purchaseLines.Count -eq 0) {
+            continue
+        }
+        $weights = @{}
+        foreach ($line in $purchaseLines) {
+            $lineId = [int]($line.id ?? 0)
+            $weight = Get-LineWeightCents $line
+            if ($lineId -lt 1 -or $null -eq $weight -or $weight -le 0) {
+                $weights = @{}
+                break
+            }
+            $weights[$lineId] = [long]$weight
+        }
+        if ($weights.Count -ne $purchaseLines.Count) {
+            $hasAccountingHistory = $false
+            foreach ($line in $purchaseLines) {
+                $lineId = [int]($line.id ?? 0)
+                $relatedLots = @($lotsByPurchaseLineId[$lineId] | Where-Object {
+                    $null -ne $_ -and [int]($_.id ?? 0) -gt 0
+                })
+                $relatedEvents = @($eventsByPurchaseLineId[$lineId] | Where-Object {
+                    $null -ne $_ -and [int]($_.id ?? 0) -gt 0
+                })
+                if ($relatedLots.Count -gt 0 -or $relatedEvents.Count -gt 0) {
+                    $hasAccountingHistory = $true
+                    break
+                }
+            }
+            if ($hasAccountingHistory) {
+                $unallocatablePurchaseIds += $purchaseId
+            }
+            continue
+        }
+        $allocations = Get-WeightedCentAllocations -TotalCents $totalPaidCents -Weights $weights
+        $allocatedPurchaseCents = [long](($allocations.Values | Measure-Object -Sum).Sum ?? 0)
+        $authoritativeLineAllocationTotalCents += $allocatedPurchaseCents
+        if ($allocatedPurchaseCents -ne $totalPaidCents) {
+            Write-IntegrityMessage ERROR 'AUTHORITATIVE_ALLOCATION_MISMATCH' "Purchase id $purchaseId line allocations do not sum to totalPaid."
+        }
+
+        $lineSubtotalCents = [long](($weights.Values | Measure-Object -Sum).Sum ?? 0)
+        if ($lineSubtotalCents -ne (Convert-ToCents $purchase.subtotal)) {
+            $subtotalVariancePurchaseIds += $purchaseId
+        }
+
+        $componentMap = [ordered]@{
+            allocatedShipping = 'shipping'
+            allocatedExciseTax = 'exciseTax'
+            allocatedSalesTax = 'salesTax'
+            allocatedDiscount = 'discount'
+        }
+        foreach ($component in $componentMap.Keys) {
+            $componentValues = @($purchaseLines | ForEach-Object { $_.$component })
+            if ($componentValues.Count -ne $purchaseLines.Count -or @($componentValues | Where-Object { -not (Test-KnownMoney $_) }).Count -gt 0) {
+                $componentMismatchPurchaseIds += $purchaseId
+                break
+            }
+            $componentTotal = [long](($componentValues | ForEach-Object { Convert-ToCents $_ } | Measure-Object -Sum).Sum ?? 0)
+            if ($componentTotal -ne (Convert-ToCents $purchase.($componentMap[$component]))) {
+                $componentMismatchPurchaseIds += $purchaseId
+                break
+            }
+        }
+
+        foreach ($line in $purchaseLines) {
+            $lineId = [int]($line.id ?? 0)
+            $quantity = [int]($line.quantity ?? 0)
+            if ($quantity -lt 1 -or -not $allocations.ContainsKey($lineId)) {
+                $lineUnitMismatchIds += $lineId
+                continue
+            }
+            $expectedLineCents = [long]$allocations[$lineId]
+            if (Test-KnownMoney $line.trueCostBasis) {
+                $storedBasisCents = Convert-ToCents $line.trueCostBasis
+                $storedLineBasisTotalCents += $storedBasisCents
+                if ($storedBasisCents -ne $expectedLineCents) {
+                    $lineBasisMismatchIds += $lineId
+                }
+            } else {
+                $lineBasisMismatchIds += $lineId
+            }
+
+            $expectedUnitCost = ([decimal]$expectedLineCents / 100) / $quantity
+            if (Test-KnownMoney $line.trueCostPerCigar) {
+                $extended = [decimal]$line.trueCostPerCigar * $quantity
+                $extendedLineUnitCostTotal += $extended
+                $extendedCents = [long][decimal]::Round($extended * 100, 0, [MidpointRounding]::AwayFromZero)
+                if ($extendedCents -ne $expectedLineCents) {
+                    $lineUnitMismatchIds += $lineId
+                }
+            } else {
+                $lineUnitMismatchIds += $lineId
+            }
+
+            $relatedLots = @($lotsByPurchaseLineId[$lineId] | Where-Object {
+                $null -ne $_ -and [int]($_.id ?? 0) -gt 0
+            })
+            foreach ($lot in $relatedLots) {
+                if (-not (Test-KnownMoney $lot.costPerCigarSnapshot) -or [decimal]::Abs(([decimal]$lot.costPerCigarSnapshot) - $expectedUnitCost) -gt [decimal]'0.000001') {
+                    $lotSnapshotMismatchIds += [int]($lot.id ?? 0)
+                }
+            }
+            $relatedEvents = @($eventsByPurchaseLineId[$lineId] | Where-Object {
+                $null -ne $_ -and [int]($_.id ?? 0) -gt 0
+            })
+            foreach ($event in $relatedEvents) {
+                if (-not (Test-KnownMoney $event.costPerCigarAtEvent) -or [decimal]::Abs(([decimal]$event.costPerCigarAtEvent) - $expectedUnitCost) -gt [decimal]'0.000001') {
+                    $eventSnapshotMismatchIds += [int]($event.id ?? 0)
+                }
+            }
+        }
     }
+}
+
+Write-IntegrityMessage INFO 'AUTHORITATIVE_PURCHASE_TOTAL' "Stored authoritative purchase totalPaid: $(Format-Cents $authoritativePurchaseTotalCents)"
+Write-IntegrityMessage INFO 'AUTHORITATIVE_LINE_ALLOCATION_TOTAL' "Deterministic line allocation total: $(Format-Cents $authoritativeLineAllocationTotalCents)"
+Write-IntegrityMessage INFO 'STORED_LINE_BASIS_TOTAL' "Stored purchase-line trueCostBasis total: $(Format-Cents $storedLineBasisTotalCents)"
+Write-IntegrityMessage INFO 'EXTENDED_UNIT_COST_TOTAL' "Stored quantity-times-trueCostPerCigar total: $(Format-DecimalMoney $extendedLineUnitCostTotal)"
+if ($subtotalVariancePurchaseIds.Count -gt 0) {
+    Write-IntegrityMessage INFO 'PURCHASE_SUBTOTAL_VARIANCE' "Header subtotal differs from line-weight subtotal for Purchase ids: $(Format-IdList $subtotalVariancePurchaseIds). totalPaid remains authoritative."
+}
+if ($unallocatablePurchaseIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'PURCHASE_ALLOCATION_UNKNOWN' "Purchases could not be deterministically allocated because line weights are missing or zero. Purchase ids: $(Format-IdList $unallocatablePurchaseIds)."
+}
+if ($componentMismatchPurchaseIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'LINE_COMPONENT_ALLOCATION_MISMATCH' "Stored line shipping, tax, excise-tax, or discount allocations do not reconcile to their purchase headers. Purchase ids: $(Format-IdList $componentMismatchPurchaseIds)."
+}
+if ($lineBasisMismatchIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'LINE_COST_BASIS_MISMATCH' "Stored trueCostBasis differs from the deterministic authoritative totalPaid allocation. Purchase line ids: $(Format-IdList $lineBasisMismatchIds)."
+}
+if ($lineUnitMismatchIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'LINE_UNIT_COST_ROUNDING_MISMATCH' "Stored quantity times trueCostPerCigar does not round back to the authoritative line allocation. Purchase line ids: $(Format-IdList $lineUnitMismatchIds)."
+}
+if ($lotSnapshotMismatchIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'LOT_COST_SNAPSHOT_MISMATCH' "Lot cost-per-cigar snapshots differ from the six-decimal authoritative allocation. Lot ids: $(Format-IdList $lotSnapshotMismatchIds)."
+}
+if ($eventSnapshotMismatchIds.Count -gt 0) {
+    Write-IntegrityMessage WARNING 'EVENT_COST_SNAPSHOT_MISMATCH' "Inventory Event cost-per-cigar snapshots differ from the six-decimal authoritative allocation. Event ids: $(Format-IdList $eventSnapshotMismatchIds)."
 }
 
 foreach ($journal in $collections['smoking-journal-entries']) {

@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.30.48
+Revision: 1.31.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.31.0 - 2026-07-25
+
+Changed by: Matt
+
+- Preserved purchase and authoritative line allocations in integer cents while carrying allocated per-cigar costs to six decimal places internally.
+- Kept all visible currency formatted to dollars and cents, including Collection, Dashboard, Purchases, aging, removal, and activity views.
+- Reconciled legacy purchase-line, Lot, and event cost projections to stored authoritative `totalPaid` without rewriting runtime JSON.
+- Expanded the read-only integrity checker and isolated regression coverage for purchase allocation, per-unit rounding, Lot snapshots, and event snapshots.
 
 ## 1.30.48 - 2026-07-25
 

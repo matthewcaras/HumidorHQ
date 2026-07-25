@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: InventoryAdjustmentService.php
- * Revision: 1.0.0
+ * Revision: 1.1.0
  * Description: Transactional, idempotent physical-count inventory adjustments.
- * Modified Date: 2026-07-19 18:00 ET
+ * Modified Date: 2026-07-25
  */
 
 function adjustment_nonnegative_int(mixed $value, string $label): int
@@ -148,7 +148,7 @@ function adjust_inventory_to_physical_count(array $input): array
         'balanceQuantityAfter' => $countedQuantity,
         'eventDate' => $eventDate,
         'occurredAt' => $now,
-        'costPerCigarAtEvent' => $lot['costPerCigarSnapshot'] ?? $lot['allocatedCostPerCigar'] ?? $lot['actualCostPerCigar'] ?? null,
+        'costPerCigarAtEvent' => reconciled_lot_cost_per_cigar($lot),
         'msrpPerCigarAtEvent' => $lot['msrpPerCigarSnapshot'] ?? $lot['msrpPerCigar'] ?? null,
         'notes' => $notes,
         'createdAt' => $now,

@@ -1,8 +1,8 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.10.11
+ * Revision: 1.11.0
  * Description: Isolated assertions for Collection, Catalog, purchase-history, purchase-trend, rating breakdown, Buy Again, Smoking Journal, Activity, and inventory-aging report behavior.
- * Modified Date: 2026-07-22 10:00 ET
+ * Modified Date: 2026-07-25
  */
 
 const fs = require('node:fs')
@@ -319,15 +319,19 @@ agingRows = inventoryAgingRows('2025-05-01')
 testAssert(summarizeInventoryAging(agingRows).quantity === 3 && summarizeInventoryAging(agingRows).lotCount === 2, 'Inventory Aging Humidor filter is incorrect.')
 state.agingHumidorId = ''
 const lotTwo = state.records.lots.find((lot) => lot.id === 2)
+const purchaseTwo = state.records.purchases.find((purchase) => purchase.id === 2)
 const lotTwoCost = lotTwo.costPerCigarSnapshot
+const purchaseTwoTotalPaid = purchaseTwo.totalPaid
 const lotTwoDate = lotTwo.receivedDateSnapshot
 lotTwo.costPerCigarSnapshot = null
+purchaseTwo.totalPaid = null
 lotTwo.receivedDateSnapshot = null
 agingRows = inventoryAgingRows('2025-05-01')
 agingSummary = summarizeInventoryAging(agingRows)
 testAssert(agingSummary.totalCostBasis === null && agingSummary.knownCostQuantity === 2, 'Inventory Aging must preserve unknown cost instead of reporting a complete total.')
 testAssert(inventoryAgingBucketSummaries(agingRows).find((item) => item.bucket.key === 'unknown').quantity === 3, 'Inventory Aging must retain unknown receipt dates in an explicit bucket.')
 lotTwo.costPerCigarSnapshot = lotTwoCost
+purchaseTwo.totalPaid = purchaseTwoTotalPaid
 lotTwo.receivedDateSnapshot = lotTwoDate
 
 state.purchaseHistoryGroup = 'vendor'
@@ -417,10 +421,14 @@ state.activePage = 'Dashboard'
 state.purchaseTrendPeriod = 'year'
 const pennyAllocation = allocatePurchasePaidCents(
   { totalPaid: '0.01' },
-  [{ id: 5, trueCostBasis: '1.00' }, { id: 4, trueCostBasis: '1.00' }],
+  [{ id: 5, purchasePrice: '1.00' }, { id: 4, purchasePrice: '1.00' }],
 )
 testAssert(pennyAllocation.get(4) === 1 && pennyAllocation.get(5) === 0, 'Cent remainder allocation is not deterministic by line ID.')
 testAssert(allocatePurchasePaidCents({ totalPaid: '4.00' }, [{ id: 1 }, { id: 2 }]) === null, 'Missing allocation weights should remain unknown.')
+testAssert(authoritativePurchaseLineCostBasis(state.records['purchase-lines'][0]) === 20, 'Legacy stored line basis did not reconcile to the authoritative purchase total allocation.')
+testAssert(authoritativePurchaseLineCostPerCigar(state.records['purchase-lines'][1]) === 11.666667, 'Per-cigar allocation did not retain six-decimal internal precision.')
+testAssert(lotCostPerCigar(state.records.lots[1], state.records['purchase-lines'][1]) === 11.666667, 'Collection Lot cost did not prefer the reconciled high-precision allocation.')
+testAssert(/11\.67$/.test(money(11.666667)), 'High-precision internal cost did not display as dollars and cents.')
 testAssert(completeMoneyTotal([0, '0.00']) === 0, 'Known zero money was not preserved.')
 testAssert(completeMoneyTotal([null, '1.00']) === null, 'Unknown money was incorrectly converted to zero.')
 

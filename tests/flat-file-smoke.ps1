@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.32.31
+# Revision : 1.33.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.0 verify six-decimal allocated costs through receipt, movement, adjustment, and removal
 # 1.32.31 derive JavaScript and CSS cache-bust expectations from source metadata
 # 1.32.30 align smoke test cache-bust pin with app.js 1.24.34 and verify catalog average rating rendering
 # 1.32.27 align smoke test cache-bust pin with app.js 1.24.31
@@ -748,14 +749,14 @@ try {
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/purchase-lines/$($partialLineTwo.data.id)/receive" -Method Post -Session $session -Body $afterCompleteBody -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $completedReceiptHashes -Context 'Receipt after purchase completion'
 
-    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = ''; status = 'pending'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = '' } | ConvertTo-Json
+    $purchaseBody = @{ vendorId = "$($linkedVendor.data.id)"; purchaseDate = '2026-07-15'; subtotal = '50.01'; receivedDate = ''; status = 'pending'; invoiceNumber = 'SMOKE-PO-1'; shipping = '0'; exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50.01'; notes = '' } | ConvertTo-Json
     $createdPurchase = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchases" -Method Post -ContentType 'application/json' -Body $purchaseBody -WebSession $session
-    if ($createdPurchase.data.status -ne 'pending' -or $createdPurchase.data.subtotal -ne 50 -or $createdPurchase.data.invoiceNumber -ne 'SMOKE-PO-1') { throw 'Purchase create endpoint did not preserve status, subtotal, and invoice number.' }
+    if ($createdPurchase.data.status -ne 'pending' -or $createdPurchase.data.subtotal -ne 50.01 -or $createdPurchase.data.invoiceNumber -ne 'SMOKE-PO-1') { throw 'Purchase create endpoint did not preserve status, subtotal, and invoice number.' }
 
-    $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; quantity = '5'; purchasePrice = '50'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
+    $lineBody = @{ purchaseId = "$($createdPurchase.data.id)"; catalogCigarId = "$($createdCigar.data.id)"; quantity = '5'; purchasePrice = '50.01'; unitCost = '10'; msrpPerCigar = '9.50'; notes = 'temporary linked smoke test record' } | ConvertTo-Json
     $createdLine = Invoke-RestMethod "http://127.0.0.1:$port/api/records/purchase-lines" -Method Post -ContentType 'application/json' -Body $lineBody -WebSession $session
     if ((-not $createdLine.data.id) -or $createdLine.data.createdLotId -or $createdLine.data.createdInventoryEventId) { throw 'Pending purchase lines should not create receipt inventory ids before the order is received.' }
-    if ($createdLine.data.trueCostPerCigar -ne 10 -or $createdLine.data.allocatedShipping -ne 0 -or $createdLine.data.msrpPerCigarResolved -ne 9.5) { throw 'Purchase line create endpoint did not return allocated financial fields.' }
+    if ([decimal]$createdLine.data.trueCostPerCigar -ne [decimal]'10.002' -or $createdLine.data.allocatedShipping -ne 0 -or $createdLine.data.msrpPerCigarResolved -ne 9.5) { throw 'Purchase line create endpoint did not return high-precision allocated financial fields.' }
 
     $lots = Get-Content -LiteralPath (Join-Path $testDataRoot 'lots.json') -Raw | ConvertFrom-Json
     $pendingLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
@@ -783,7 +784,7 @@ try {
 
     $lots = Get-Content -LiteralPath (Join-Path $testDataRoot 'lots.json') -Raw | ConvertFrom-Json
     $linkedLot = $lots | Where-Object { $_.purchaseLineId -eq $createdLine.data.id } | Select-Object -First 1
-    if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id -or $linkedLot.costPerCigarSnapshot -ne 10 -or $linkedLot.msrpPerCigarSnapshot -ne 9.5) { throw 'Received purchase line did not create the expected linked lot.' }
+    if (-not $linkedLot -or $linkedLot.currentQuantity -ne 5 -or $linkedLot.catalogCigarId -ne $createdCigar.data.id -or [decimal]$linkedLot.costPerCigarSnapshot -ne [decimal]'10.002' -or $linkedLot.msrpPerCigarSnapshot -ne 9.5) { throw 'Received purchase line did not create the expected linked lot.' }
 
     $balances = Get-Content -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') -Raw | ConvertFrom-Json
     $linkedBalance = $balances | Where-Object { $_.lotId -eq $linkedLot.id -and $_.storageLocationId -eq $createdHumidor.data.id } | Select-Object -First 1
@@ -791,7 +792,7 @@ try {
 
     $events = Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json
     $linkedEvent = $events | Where-Object { $_.purchaseLineId -eq $createdLine.data.id -and $_.lotId -eq $linkedLot.id -and $_.eventType -eq 'purchase-receipt' } | Select-Object -First 1
-    if (-not $linkedEvent -or $linkedEvent.quantity -ne 5 -or $linkedEvent.storageSubLocationId -ne $createdSection.data.id -or $linkedEvent.costPerCigarAtEvent -ne 10 -or $linkedEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Received purchase line did not create the expected purchase-receipt inventory event.' }
+    if (-not $linkedEvent -or $linkedEvent.quantity -ne 5 -or $linkedEvent.storageSubLocationId -ne $createdSection.data.id -or [decimal]$linkedEvent.costPerCigarAtEvent -ne [decimal]'10.002' -or $linkedEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Received purchase line did not create the expected purchase-receipt inventory event.' }
 
     $activeStorageHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/storage-locations/$($createdHumidor.data.id)/archive" -Method Patch -Session $session -Body $null -StatusCode 409 -ErrorCode 'ACTIVE_INVENTORY_ASSIGNED' | Out-Null
@@ -871,9 +872,9 @@ try {
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECORD_REFERENCED' | Out-Null
 
     $receivedDateEdit = @{
-        vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-15'; subtotal = '50'; receivedDate = '2026-07-17'
+        vendorId = [string]$linkedVendor.data.id; purchaseDate = '2026-07-15'; subtotal = '50.01'; receivedDate = '2026-07-17'
         status = 'received'; invoiceNumber = 'SMOKE-PO-1'; expectedDate = ''; trackingNumber = ''; shipping = '0'
-        exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50'; notes = ''
+        exciseTax = '0'; salesTax = '0'; discount = '0'; totalPaid = '50.01'; notes = ''
     }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body $receivedDateEdit -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchases/$($createdPurchase.data.id)" -Method Put -Session $session -Body @{ status = 'pending' } -StatusCode 409 -ErrorCode 'RECEIPT_WORKFLOW_REQUIRED' | Out-Null
@@ -929,7 +930,7 @@ try {
 
     $eventsAfterMove = Get-Content -LiteralPath (Join-Path $testDataRoot 'inventory-events.json') -Raw | ConvertFrom-Json
     $moveEvent = $eventsAfterMove | Where-Object { $_.eventType -eq 'move' -and $_.lotId -eq $linkedLot.id -and $_.quantity -eq 2 } | Select-Object -First 1
-    if (-not $moveEvent -or $moveEvent.costPerCigarAtEvent -ne 10 -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the lot cost and MSRP on the move event.' }
+    if (-not $moveEvent -or [decimal]$moveEvent.costPerCigarAtEvent -ne [decimal]'10.002' -or $moveEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Inventory move did not preserve the precise lot cost and MSRP on the move event.' }
 
     $adjustmentGuardHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '2'; eventDate = '2026-07-18'; notes = 'no variance'; idempotencyKey = 'adjustment-no-change-test-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
@@ -942,7 +943,7 @@ try {
     $decreaseAdjustmentRequest = @{ sourceBalanceId = [string]$movedDestination.id; expectedQuantity = '2'; countedQuantity = '1'; eventDate = '2026-07-18'; notes = 'physical count found one fewer'; idempotencyKey = 'adjustment-decrease-test-001' }
     $decreaseAdjustment = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -ContentType 'application/json' -Body ($decreaseAdjustmentRequest | ConvertTo-Json) -WebSession $session
     if ($decreaseAdjustment.data.quantityChange -ne -1 -or $decreaseAdjustment.data.inventoryEvent.adjustmentDirection -ne 'DECREASE' -or $decreaseAdjustment.data.idempotentReplay -ne $false) { throw 'Downward physical-count adjustment did not return the expected event.' }
-    if ($decreaseAdjustment.data.inventoryEvent.costPerCigarAtEvent -ne 10 -or $decreaseAdjustment.data.inventoryEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Physical-count adjustment did not preserve Lot cost and MSRP snapshots.' }
+    if ([decimal]$decreaseAdjustment.data.inventoryEvent.costPerCigarAtEvent -ne [decimal]'10.002' -or $decreaseAdjustment.data.inventoryEvent.msrpPerCigarAtEvent -ne 9.5) { throw 'Physical-count adjustment did not preserve precise Lot cost and MSRP snapshots.' }
     $decreaseLot = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lots.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $linkedLot.id } | Select-Object -First 1
     $decreaseBalanceTotal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id }) | Measure-Object -Property quantity -Sum
     if ($decreaseLot.currentQuantity -ne 4 -or $decreaseBalanceTotal.Sum -ne 4) { throw 'Downward physical-count adjustment did not reconcile balance and Lot quantities exactly once.' }
@@ -1005,6 +1006,7 @@ try {
     $removeBody = $removeRequest | ConvertTo-Json
     $removed = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session
     if ($removed.data.idempotentReplay -ne $false -or $removed.data.inventoryEvent.eventDate -ne '2026-07-17') { throw 'Removal did not preserve the requested historical event date.' }
+    if ([decimal]$removed.data.inventoryEvent.costPerCigarAtEvent -ne [decimal]'10.002') { throw 'Removal did not preserve the six-decimal authoritative cost allocation.' }
     if ($removed.data.inventoryEvent.fromStorageLocationId -ne $createdHumidor.data.id -or $null -ne $removed.data.inventoryEvent.fromStorageSubLocationId) { throw 'Removal event did not preserve its exact General source location.' }
     $firstRemovalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
     $replayedRemoval = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory/remove" -Method Post -ContentType 'application/json' -Body $removeBody -WebSession $session

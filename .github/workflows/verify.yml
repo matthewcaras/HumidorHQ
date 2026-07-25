@@ -1,5 +1,5 @@
 # Filename: verify.yml
-# Revision: 1.0.0
+# Revision: 1.1.0
 # Description: Runs HumidorHQ syntax checks and isolated regression tests on GitHub.
 # Modified Date: 2026-07-25
 
@@ -101,6 +101,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $tests = @(
             '.\tests\flat-file-smoke.ps1',
+            '.\tests\accounting-reconciliation.ps1',
             '.\tests\runtime-data-separation.ps1',
             '.\tests\flat-file-transaction.ps1',
             '.\tests\auth-security.ps1',
