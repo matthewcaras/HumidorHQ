@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.29.0
+ * Revision: 1.30.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -74,6 +74,8 @@ const state = {
   consumptionTrendPeriod: 'lifetime',
   consumptionTrendCustomStart: '',
   consumptionTrendCustomEnd: '',
+  dataCompletenessCategory: 'all',
+  dataCompletenessSearch: '',
   purchaseHistoryGroup: 'vendor',
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
@@ -88,6 +90,7 @@ const state = {
     ratingBreakdown: false,
     inventoryAging: false,
     accountingReconciliation: false,
+    dataCompleteness: false,
     collectionValuation: false,
     consumptionTrends: false,
     removalHistory: false,
@@ -379,6 +382,8 @@ function reportsViewSnapshot() {
     consumptionTrendPeriod: state.consumptionTrendPeriod,
     consumptionTrendCustomStart: String(state.consumptionTrendCustomStart || ''),
     consumptionTrendCustomEnd: String(state.consumptionTrendCustomEnd || ''),
+    dataCompletenessCategory: state.dataCompletenessCategory,
+    dataCompletenessSearch: String(state.dataCompletenessSearch || ''),
     agingManufacturer: String(state.agingManufacturer || ''),
     agingHumidorId: String(state.agingHumidorId || ''),
     selectedAgingBucketKey: state.selectedAgingBucketKey || null,
@@ -396,6 +401,7 @@ function reportsViewSnapshot() {
       ratingBreakdown: Boolean(state.reportSectionState?.ratingBreakdown),
       inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
       accountingReconciliation: Boolean(state.reportSectionState?.accountingReconciliation),
+      dataCompleteness: Boolean(state.reportSectionState?.dataCompleteness),
       collectionValuation: Boolean(state.reportSectionState?.collectionValuation),
       consumptionTrends: Boolean(state.reportSectionState?.consumptionTrends),
       removalHistory: Boolean(state.reportSectionState?.removalHistory),
@@ -435,6 +441,8 @@ function normalizeReportsViewRecord(entry) {
       consumptionTrendPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.consumptionTrendPeriod) ? snapshot.consumptionTrendPeriod : 'lifetime',
       consumptionTrendCustomStart: String(snapshot.consumptionTrendCustomStart || ''),
       consumptionTrendCustomEnd: String(snapshot.consumptionTrendCustomEnd || ''),
+      dataCompletenessCategory: ['all', 'catalog', 'ratings', 'money', 'relationships'].includes(snapshot.dataCompletenessCategory) ? snapshot.dataCompletenessCategory : 'all',
+      dataCompletenessSearch: String(snapshot.dataCompletenessSearch || ''),
       agingManufacturer: String(snapshot.agingManufacturer || ''),
       agingHumidorId: String(snapshot.agingHumidorId || ''),
       selectedAgingBucketKey: String(snapshot.selectedAgingBucketKey || '') || null,
@@ -452,6 +460,7 @@ function normalizeReportsViewRecord(entry) {
         ratingBreakdown: Boolean(snapshot.reportSectionState?.ratingBreakdown),
         inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
         accountingReconciliation: Boolean(snapshot.reportSectionState?.accountingReconciliation),
+        dataCompleteness: Boolean(snapshot.reportSectionState?.dataCompleteness),
         collectionValuation: Boolean(snapshot.reportSectionState?.collectionValuation),
         consumptionTrends: Boolean(snapshot.reportSectionState?.consumptionTrends),
         removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
@@ -515,6 +524,8 @@ function applyReportsView(name) {
   state.consumptionTrendPeriod = view.snapshot.consumptionTrendPeriod
   state.consumptionTrendCustomStart = view.snapshot.consumptionTrendCustomStart
   state.consumptionTrendCustomEnd = view.snapshot.consumptionTrendCustomEnd
+  state.dataCompletenessCategory = view.snapshot.dataCompletenessCategory
+  state.dataCompletenessSearch = view.snapshot.dataCompletenessSearch
   state.agingManufacturer = view.snapshot.agingManufacturer
   state.agingHumidorId = view.snapshot.agingHumidorId
   state.selectedAgingBucketKey = view.snapshot.selectedAgingBucketKey
@@ -5424,6 +5435,7 @@ function filteredRemovalEvents() {
         details.cigar?.strength,
         details.cigar?.wrapper,
         details.cigar?.vitola,
+        `Event #${event.id}`,
         details.locationLabel,
         details.lotLabel,
         event.notes,
@@ -5688,6 +5700,360 @@ function openRemovalHistoryForConsumptionTrend(row) {
   return true
 }
 
+function dataCompletenessRows() {
+  const rows = []
+  const addRow = (row) => rows.push({
+    quantity: null,
+    action: null,
+    ...row,
+  })
+  const positive = positiveBalances()
+  const onHandByCatalogId = new Map()
+  positive.forEach((entry) => {
+    const cigarId = Number(entry.cigar?.id || 0)
+    if (cigarId) onHandByCatalogId.set(cigarId, (onHandByCatalogId.get(cigarId) || 0) + entry.quantity)
+  })
+
+  records('catalog-cigars').forEach((cigar) => {
+    const missing = [
+      !String(cigar.manufacturer || '').trim() ? 'Manufacturer' : '',
+      !String(cigar.strength || '').trim() ? 'Strength' : '',
+      !String(cigar.wrapper || '').trim() ? 'Wrapper' : '',
+      !String(cigar.vitola || '').trim() ? 'Vitola' : '',
+      !String(cigar.country || cigar.origin || '').trim() ? 'Origin' : '',
+    ].filter(Boolean)
+    if (missing.length === 0) return
+    const onHand = onHandByCatalogId.get(Number(cigar.id)) || 0
+    const purchased = purchasedQuantityForCatalog(cigar.id)
+    addRow({
+      key: `catalog-${cigar.id}`,
+      category: 'catalog',
+      categoryLabel: 'Catalog Metadata',
+      priority: 'Warning',
+      recordLabel: cigarName(cigar),
+      issue: `Missing ${missing.join(', ')}`,
+      impact: `${formatCount(onHand)} on hand; ${formatCount(purchased)} purchased${recordIsActive(cigar) ? '' : '; archived'}`,
+      quantity: onHand,
+      action: { type: 'catalog', catalogCigarId: Number(cigar.id) },
+    })
+  })
+
+  effectiveInventoryEvents()
+    .filter((event) => normalizeEventType(event.eventType) === 'SMOKED')
+    .forEach((event) => {
+      const journal = smokingJournalEntryForEvent(event.id)
+      const rating = Number(journal?.rating)
+      if (journal && Number.isInteger(rating) && rating >= 1 && rating <= 10) return
+      const cigar = catalogCigarForInventoryEvent(event)
+      addRow({
+        key: `rating-${event.id}`,
+        category: 'ratings',
+        categoryLabel: 'Unrated Smoke',
+        priority: 'Review',
+        recordLabel: `${cigar ? cigarName(cigar) : 'Unknown Cigar'} — Event #${event.id}`,
+        issue: journal ? 'Smoking Journal rating is missing or invalid' : 'Smoking Journal entry is missing',
+        impact: `${formatCount(event.quantity)} smoked on ${removalEventDate(event) || 'an unknown date'}`,
+        quantity: Number(event.quantity || 0),
+        action: { type: 'removal', inventoryEventId: Number(event.id), eventType: 'SMOKED' },
+      })
+    })
+
+  positive.forEach((entry) => {
+    const missing = [
+      !hasKnownMoney(entry.costPerCigar) ? 'cost basis' : '',
+      !hasKnownMoney(entry.msrpPerCigar) ? 'MSRP' : '',
+    ].filter(Boolean)
+    if (missing.length === 0) return
+    addRow({
+      key: `balance-money-${entry.balance.id}`,
+      category: 'money',
+      categoryLabel: 'Unknown Money',
+      priority: 'Warning',
+      recordLabel: `${entry.cigar ? cigarName(entry.cigar) : 'Unknown Cigar'} — Balance #${entry.balance.id}`,
+      issue: `Current inventory ${missing.join(' and ')} is unknown`,
+      impact: `${formatCount(entry.quantity)} on hand${entry.locationLabel ? ` at ${entry.locationLabel}` : ''}`,
+      quantity: entry.quantity,
+      action: entry.cigar ? {
+        type: 'collection',
+        catalogCigarId: Number(entry.cigar.id),
+        storageLocationId: Number(entry.humidor?.id || 0) || null,
+      } : null,
+    })
+  })
+
+  effectiveInventoryEvents()
+    .filter((event) => ['SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event.eventType)))
+    .forEach((event) => {
+      const missing = [
+        !hasKnownMoney(inventoryEventCostPerCigar(event)) ? 'cost basis' : '',
+        !hasKnownMoney(event.msrpPerCigarAtEvent) ? 'MSRP' : '',
+      ].filter(Boolean)
+      if (missing.length === 0) return
+      const cigar = catalogCigarForInventoryEvent(event)
+      addRow({
+        key: `event-money-${event.id}`,
+        category: 'money',
+        categoryLabel: 'Unknown Money',
+        priority: 'Warning',
+        recordLabel: `${cigar ? cigarName(cigar) : 'Unknown Cigar'} — Event #${event.id}`,
+        issue: `Historical removal ${missing.join(' and ')} is unknown`,
+        impact: `${formatCount(event.quantity)} ${removalEventLabel(event.eventType).toLowerCase()} on ${removalEventDate(event) || 'an unknown date'}`,
+        quantity: Number(event.quantity || 0),
+        action: { type: 'removal', inventoryEventId: Number(event.id), eventType: normalizeEventType(event.eventType) },
+      })
+    })
+
+  const addRelationshipRow = ({ key, recordLabel, missing, impact, action }) => {
+    if (missing.length === 0) return
+    addRow({
+      key,
+      category: 'relationships',
+      categoryLabel: 'Missing Relationship',
+      priority: 'Error',
+      recordLabel,
+      issue: missing.join('; '),
+      impact,
+      action,
+    })
+  }
+
+  records('purchases').forEach((purchase) => {
+    const missing = []
+    if (!Number(purchase.vendorId || 0) || !recordById('vendors', purchase.vendorId)) missing.push(`Vendor #${purchase.vendorId || 0} is missing`)
+    addRelationshipRow({
+      key: `relationship-purchase-${purchase.id}`,
+      recordLabel: `Purchase #${purchase.id}`,
+      missing,
+      impact: 'Purchase source and vendor reporting may be incomplete',
+      action: { type: 'purchase', purchaseId: Number(purchase.id) },
+    })
+  })
+
+  records('purchase-lines').forEach((line) => {
+    const purchase = recordById('purchases', line.purchaseId)
+    const cigar = recordById('catalog-cigars', line.catalogCigarId)
+    const missing = []
+    if (!purchase) missing.push(`Purchase #${line.purchaseId || 0} is missing`)
+    if (!cigar) missing.push(`Catalog cigar #${line.catalogCigarId || 0} is missing`)
+    if (Number(line.storageLocationId || 0) && !recordById('storage-locations', line.storageLocationId)) missing.push(`Humidor #${line.storageLocationId} is missing`)
+    if (Number(line.storageSubLocationId || 0)) {
+      const section = recordById('storage-sub-locations', line.storageSubLocationId)
+      if (!section) missing.push(`Section #${line.storageSubLocationId} is missing`)
+      else if (Number(line.storageLocationId || 0) && Number(section.storageLocationId || 0) !== Number(line.storageLocationId)) missing.push(`Section #${line.storageSubLocationId} belongs to a different Humidor`)
+    }
+    addRelationshipRow({
+      key: `relationship-line-${line.id}`,
+      recordLabel: `Purchase Line #${line.id}`,
+      missing,
+      impact: 'Purchase, receiving, or cigar history may be incomplete',
+      action: purchase
+        ? { type: 'purchase', purchaseId: Number(purchase.id) }
+        : (cigar ? { type: 'catalog', catalogCigarId: Number(cigar.id) } : null),
+    })
+  })
+
+  records('lots').forEach((lot) => {
+    const line = recordById('purchase-lines', lot.purchaseLineId)
+    const purchase = recordById('purchases', lot.purchaseId || line?.purchaseId)
+    const cigar = recordById('catalog-cigars', lot.catalogCigarId || line?.catalogCigarId)
+    const missing = []
+    if (!line) missing.push(`Purchase Line #${lot.purchaseLineId || 0} is missing`)
+    if (!purchase) missing.push(`Purchase #${lot.purchaseId || line?.purchaseId || 0} is missing`)
+    if (!cigar) missing.push(`Catalog cigar #${lot.catalogCigarId || line?.catalogCigarId || 0} is missing`)
+    addRelationshipRow({
+      key: `relationship-lot-${lot.id}`,
+      recordLabel: `Lot #${lot.id}`,
+      missing,
+      impact: 'Inventory quantity, cost, or purchase history may be incomplete',
+      action: cigar ? { type: 'collection', catalogCigarId: Number(cigar.id), storageLocationId: null } : null,
+    })
+  })
+
+  records('lot-location-balances').forEach((balance) => {
+    const normalized = normalizeBalance(balance)
+    const missing = []
+    if (!normalized.lot) missing.push(`Lot #${balance.lotId || 0} is missing`)
+    if (!Number(balance.storageLocationId || 0) || !recordById('storage-locations', balance.storageLocationId)) missing.push(`Humidor #${balance.storageLocationId || 0} is missing`)
+    if (Number(balance.storageSubLocationId || 0)) {
+      const section = recordById('storage-sub-locations', balance.storageSubLocationId)
+      if (!section) missing.push(`Section #${balance.storageSubLocationId} is missing`)
+      else if (Number(section.storageLocationId || 0) !== Number(balance.storageLocationId || 0)) missing.push(`Section #${balance.storageSubLocationId} belongs to a different Humidor`)
+    }
+    addRelationshipRow({
+      key: `relationship-balance-${balance.id}`,
+      recordLabel: `Balance #${balance.id}`,
+      missing,
+      impact: `${formatCount(balance.quantity)} inventory units may be assigned incorrectly`,
+      action: normalized.cigar ? {
+        type: 'collection',
+        catalogCigarId: Number(normalized.cigar.id),
+        storageLocationId: Number(normalized.humidor?.id || 0) || null,
+      } : null,
+    })
+  })
+
+  records('inventory-events').forEach((event) => {
+    const missing = []
+    if (!Number(event.lotId || 0) || !recordById('lots', event.lotId)) missing.push(`Lot #${event.lotId || 0} is missing`)
+    if (!catalogCigarForInventoryEvent(event)) missing.push(`Catalog cigar #${event.catalogCigarId || 0} is missing`)
+    const locationIds = [...new Set([event.storageLocationId, event.fromStorageLocationId, event.toStorageLocationId]
+      .map((value) => Number(value || 0)).filter(Boolean))]
+    locationIds.forEach((id) => {
+      if (!recordById('storage-locations', id)) missing.push(`Humidor #${id} is missing`)
+    })
+    const sectionIds = [...new Set([event.storageSubLocationId, event.fromStorageSubLocationId, event.toStorageSubLocationId]
+      .map((value) => Number(value || 0)).filter(Boolean))]
+    sectionIds.forEach((id) => {
+      if (!recordById('storage-sub-locations', id)) missing.push(`Section #${id} is missing`)
+    })
+    addRelationshipRow({
+      key: `relationship-event-${event.id}`,
+      recordLabel: `Inventory Event #${event.id}`,
+      missing,
+      impact: 'Inventory activity or historical reporting may be incomplete',
+      action: { type: 'activity', inventoryEventId: Number(event.id) },
+    })
+  })
+
+  records('smoking-journal-entries').forEach((journal) => {
+    const event = recordById('inventory-events', journal.inventoryEventId)
+    const missing = event ? [] : [`Inventory Event #${journal.inventoryEventId || 0} is missing`]
+    addRelationshipRow({
+      key: `relationship-journal-${journal.id}`,
+      recordLabel: `Smoking Journal Entry #${journal.id}`,
+      missing,
+      impact: 'The rating and tasting history cannot be tied to a smoke event',
+      action: event ? { type: 'removal', inventoryEventId: Number(event.id), eventType: 'SMOKED' } : null,
+    })
+  })
+
+  const priorityRank = { Error: 0, Warning: 1, Review: 2 }
+  return rows.sort((left, right) => (
+    priorityRank[left.priority] - priorityRank[right.priority]
+    || left.categoryLabel.localeCompare(right.categoryLabel, undefined, { sensitivity: 'base' })
+    || left.recordLabel.localeCompare(right.recordLabel, undefined, { sensitivity: 'base', numeric: true })
+    || left.key.localeCompare(right.key)
+  ))
+}
+
+function filteredDataCompletenessRows(rows = dataCompletenessRows()) {
+  const search = String(state.dataCompletenessSearch || '').trim().toLowerCase()
+  return rows.filter((row) => (
+    (state.dataCompletenessCategory === 'all' || row.category === state.dataCompletenessCategory)
+    && (!search || [row.categoryLabel, row.priority, row.recordLabel, row.issue, row.impact]
+      .some((value) => String(value || '').toLowerCase().includes(search)))
+  ))
+}
+
+function dataCompletenessSummary(rows = filteredDataCompletenessRows()) {
+  return {
+    total: rows.length,
+    catalog: rows.filter((row) => row.category === 'catalog').length,
+    ratings: rows.filter((row) => row.category === 'ratings').length,
+    money: rows.filter((row) => row.category === 'money').length,
+    relationships: rows.filter((row) => row.category === 'relationships').length,
+  }
+}
+
+function dataCompletenessCsv(rows) {
+  const headings = ['Priority', 'Category', 'Record', 'Exception', 'Impact', 'Affected Quantity']
+  const dataRows = rows.map((row) => [
+    row.priority,
+    row.categoryLabel,
+    row.recordLabel,
+    row.issue,
+    row.impact,
+    row.quantity,
+  ])
+  return [headings, ...dataRows]
+    .map((row) => row.map(accountingCsvCell).join(','))
+    .join('\r\n')
+}
+
+function downloadDataCompletenessCsv(rows) {
+  const csv = dataCompletenessCsv(rows)
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `humidorhq-data-completeness-${todayIsoDate()}.csv`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function openDataCompletenessIssue(row) {
+  const action = row?.action
+  if (!action) return false
+  if (action.type === 'catalog') {
+    const cigar = recordById('catalog-cigars', action.catalogCigarId)
+    if (!cigar) return false
+    state.catalogSearch = cigarName(cigar)
+    state.selectedCatalogHistoryCigarId = null
+    state.editing['catalog-cigars'] = Number(cigar.id)
+    if (!recordIsActive(cigar)) state.showArchivedRecords['catalog-cigars'] = true
+    navigateToPage('Catalog')
+    return true
+  }
+  if (action.type === 'collection') {
+    const cigar = recordById('catalog-cigars', action.catalogCigarId)
+    if (!cigar) return false
+    state.collectionHumidorFilterId = Number(action.storageLocationId || 0) || null
+    state.collectionSectionFilterId = null
+    state.collectionStrengthFilter = ''
+    state.collectionBuyAgainFilter = ''
+    state.collectionSearch = ''
+    state.selectedCollectionCigarId = Number(cigar.id)
+    state.collectionScrollTargetCigarId = Number(cigar.id)
+    navigateToPage('Collection')
+    return true
+  }
+  if (action.type === 'purchase') {
+    if (!recordById('purchases', action.purchaseId)) return false
+    state.purchaseRecordsFilterType = ''
+    state.purchaseRecordsFilterValue = ''
+    state.purchaseRecordsFilterLabel = ''
+    state.selectedPurchaseId = Number(action.purchaseId)
+    state.editingPurchaseLineId = null
+    state.showPurchaseCatalogCreate = false
+    navigateToPage('Purchases')
+    return true
+  }
+  if (action.type === 'removal') {
+    state.reportPeriod = 'lifetime'
+    state.reportRemovalType = action.eventType || 'all'
+    state.reportSearch = `Event #${action.inventoryEventId}`
+    state.reportSectionState.dataCompleteness = true
+    state.reportSectionState.removalHistory = true
+    if (typeof document !== 'undefined' && typeof render === 'function') {
+      render()
+      setTimeout(() => {
+        document.querySelector('.removal-history-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 0)
+    }
+    return true
+  }
+  if (action.type === 'activity') {
+    state.activityPeriod = 'lifetime'
+    state.activityType = 'all'
+    state.activitySearch = `Event #${action.inventoryEventId}`
+    state.activityLotId = ''
+    state.activityHumidorId = ''
+    state.showAllActivity = true
+    state.reportSectionState.dataCompleteness = true
+    state.reportSectionState.activity = true
+    if (typeof document !== 'undefined' && typeof render === 'function') {
+      render()
+      setTimeout(() => {
+        document.querySelector('.report-activity-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 0)
+    }
+    return true
+  }
+  return false
+}
+
 function reportFilterButton(label, value, stateKey) {
   const button = document.createElement('button')
   button.type = 'button'
@@ -5709,6 +6075,138 @@ function reportFilterButton(label, value, stateKey) {
     render()
   })
   return button
+}
+
+function renderDataCompletenessReport(view) {
+  const allRows = dataCompletenessRows()
+  const rows = filteredDataCompletenessRows(allRows)
+  const summary = dataCompletenessSummary(rows)
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'data-completeness-panel',
+    title: 'Data Completeness Exceptions',
+    description: 'Read-only worklist of missing cigar details, unrated smokes, unknown money, and broken record relationships.',
+    stateKey: 'dataCompleteness',
+  })
+
+  const controls = document.createElement('div')
+  controls.className = 'report-filter-grid'
+  const category = document.createElement('fieldset')
+  category.className = 'report-filter-group'
+  category.innerHTML = '<legend>Exception Type</legend>'
+  const categoryButtons = document.createElement('div')
+  categoryButtons.className = 'report-filter-buttons'
+  categoryButtons.append(
+    reportFilterButton('All Exceptions', 'all', 'dataCompletenessCategory'),
+    reportFilterButton('Catalog Metadata', 'catalog', 'dataCompletenessCategory'),
+    reportFilterButton('Unrated Smokes', 'ratings', 'dataCompletenessCategory'),
+    reportFilterButton('Unknown Money', 'money', 'dataCompletenessCategory'),
+    reportFilterButton('Relationships', 'relationships', 'dataCompletenessCategory'),
+  )
+  category.append(categoryButtons)
+  const actions = document.createElement('fieldset')
+  actions.className = 'report-filter-group'
+  actions.innerHTML = '<legend>Workpaper</legend>'
+  const exportButton = document.createElement('button')
+  exportButton.type = 'button'
+  exportButton.className = 'primary-button'
+  exportButton.textContent = 'Export CSV'
+  exportButton.disabled = rows.length === 0
+  exportButton.addEventListener('click', () => downloadDataCompletenessCsv(rows))
+  actions.append(exportButton)
+  controls.append(category, actions)
+  body.append(controls)
+
+  const searchForm = document.createElement('form')
+  searchForm.className = 'report-search-form'
+  searchForm.innerHTML = `
+    <label class="form-field"><span>Search Exceptions</span><input name="dataCompletenessSearch" value="${escapeHtml(state.dataCompletenessSearch)}" placeholder="Search record, exception, impact, or priority"></label>
+    <button class="primary-button" type="submit">Search</button>
+    <button class="secondary-button" type="button" data-clear-completeness>Clear</button>
+  `
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    state.dataCompletenessSearch = new FormData(searchForm).get('dataCompletenessSearch') || ''
+    render()
+  })
+  searchForm.querySelector('[data-clear-completeness]').addEventListener('click', () => {
+    state.dataCompletenessSearch = ''
+    state.dataCompletenessCategory = 'all'
+    render()
+  })
+  body.append(searchForm)
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
+  metrics.append(
+    metricCard('Matching Exceptions', summary.total, `${formatCount(allRows.length)} total exceptions`),
+    metricCard('Catalog Metadata', summary.catalog, 'Cigars with missing report attributes'),
+    metricCard('Unrated Smokes', summary.ratings, 'Effective smokes without a valid rating'),
+    metricCard('Unknown Money', summary.money, 'Inventory or removals with incomplete value'),
+    metricCard('Relationship Errors', summary.relationships, 'Records with missing or mismatched links'),
+  )
+  body.append(metrics)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = allRows.length === 0
+      ? '<p>No data-completeness exceptions were detected.</p>'
+      : '<p>No data-completeness exceptions match the selected filters.</p>'
+    body.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll compact-top-gap'
+  tableWrap.innerHTML = `
+    <table class="data-table data-completeness-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Category</th>
+          <th>Record</th>
+          <th>Exception</th>
+          <th>Impact</th>
+          <th>Affected Qty</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr${row.action ? ` class="clickable-record-row" tabindex="0" data-completeness-key="${escapeHtml(row.key)}"` : ''}>
+            <td>${escapeHtml(row.priority)}</td>
+            <td>${escapeHtml(row.categoryLabel)}</td>
+            <td>${escapeHtml(row.recordLabel)}</td>
+            <td>${escapeHtml(row.issue)}</td>
+            <td>${escapeHtml(row.impact)}</td>
+            <td>${row.quantity === null ? '—' : formatCount(row.quantity)}</td>
+            <td>${row.action ? `<button type="button" class="linkish-button" data-completeness-key="${escapeHtml(row.key)}">Open Context</button>` : 'Manual Review'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  tableWrap.querySelectorAll('[data-completeness-key]').forEach((element) => {
+    const row = rows.find((item) => item.key === element.dataset.completenessKey)
+    if (!row) return
+    const open = (event) => {
+      if (element.tagName === 'TR' && event.target.closest('button')) return
+      openDataCompletenessIssue(row)
+    }
+    element.addEventListener('click', open)
+    if (element.tagName === 'TR') {
+      element.setAttribute('aria-label', `Open context for ${row.recordLabel}`)
+      element.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          openDataCompletenessIssue(row)
+        }
+      })
+    }
+  })
+  body.append(tableWrap)
+  view.append(panel)
 }
 
 function renderConsumptionTrendsReport(view) {
@@ -7486,6 +7984,7 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderInventoryAgingReport(view)
   renderAccountingReconciliationReport(view)
+  renderDataCompletenessReport(view)
   renderCollectionValuationReport(view)
   renderRatingBreakdownReport(view)
   renderConsumptionTrendsReport(view)

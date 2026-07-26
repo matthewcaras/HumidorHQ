@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.35.0
+Revision: 1.36.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.36.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added a read-only Data Completeness Exceptions report for missing Catalog characteristics, unrated effective smokes, unknown inventory/removal money, and broken record relationships.
+- Added exception-type and text filters, summary counts, and formula-safe CSV export.
+- Added direct context links to the affected Catalog, Purchase, Collection, Removal History, or Activity record when a safe target exists.
+- Added exact Inventory Event reference searching to Removal History for auditable exception drill-through.
+- Included Data Completeness filters and report open state in locally saved Reports views.
 
 ## 1.35.0 - 2026-07-25
 
