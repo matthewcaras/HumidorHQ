@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.36.2
+Revision: 1.37.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.37.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added an authenticated, read-only Excel-friendly CSV export package to Backup & Restore.
+- Included current Collection balances, Catalog, Purchases, purchase lines, Smoking Journal, removal history, complete inventory activity, and an export summary in one ZIP.
+- Joined human-readable cigar, Vendor, Humidor, and section names while preserving IDs and explicit unknown values.
+- Used authoritative purchase allocations and reconciled Lot cost bases without changing runtime data.
+- Excluded credentials, password hashes, audit logs, counters, backups, lock files, and transaction files.
+- Added stable CSV headings, UTF-8 Excel compatibility, formula-injection protection, consistent snapshot locking, and temporary-package cleanup.
+- Added isolated authentication, content, reversal-status, row-count, secret-exclusion, and source/runtime hash tests.
 
 ## 1.36.2 - 2026-07-25
 

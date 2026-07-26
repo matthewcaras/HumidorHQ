@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.30.2
+ * Revision: 1.31.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -2160,6 +2160,17 @@ async function ensurePageData(pageId) {
 
 function renderBackupPage(view) {
   const data = state.backupData || { backups: [] }
+  const exportPanel = document.createElement('section')
+  exportPanel.className = 'data-form'
+  exportPanel.innerHTML = `
+    <h3>Excel-Friendly Data Export</h3>
+    <p class="muted">Download a read-only ZIP of CSV files for the current Collection, Catalog, Purchases, purchase lines, Smoking Journal, removal history, and complete inventory activity. Credentials and audit logs are never included.</p>
+    <div class="form-actions">
+      <a class="primary-button" href="${API_BASE_URL}/exports/csv">Download CSV Export</a>
+    </div>
+  `
+  view.append(exportPanel)
+
   const panel = document.createElement('section')
   panel.className = 'data-form'
   panel.innerHTML = `

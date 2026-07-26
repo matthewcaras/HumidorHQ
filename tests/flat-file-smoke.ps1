@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.3
+# Revision : 1.33.4
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.4 verify authenticated read-only CSV export route and Backup page control hooks
 # 1.33.3 verify effective journal editing and reject changes to reversed smoke history
 # 1.33.2 verify journal-only updates preserve inventory history and Data Completeness rating actions
 # 1.33.1 pin isolated API timezone and reversal dates to UTC to avoid midnight-boundary test failures
@@ -322,6 +323,10 @@ foreach ($ratingReportHook in @('function ratingBreakdownRows', 'function rating
 }
 foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(savedViewBar)')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($reportSavedViewHook)) { throw "Reports saved views are missing hook: $reportSavedViewHook" }
+}
+foreach ($csvExportHook in @('/exports/csv', 'Excel-Friendly Data Export', 'Download CSV Export', 'function create_csv_export_package', 'collection.csv', 'catalog.csv', 'purchases.csv', 'purchase-lines.csv', 'smoking-journal.csv', 'removal-history.csv', 'inventory-activity.csv', 'export-summary.csv')) {
+    $exportSource = $appJs + (Get-Content -LiteralPath (Join-Path $repoRoot 'api\index.php') -Raw) + (Get-Content -LiteralPath (Join-Path $repoRoot 'api\lib\services\DataExportService.php') -Raw)
+    if ($exportSource -notmatch [regex]::Escape($csvExportHook)) { throw "CSV data export is missing hook: $csvExportHook" }
 }
 foreach ($dataCompletenessRatingHook in @("action: { type: 'journal'", "action.type === 'journal'", 'Add Rating', 'renderPendingSmokingJournal(view)')) {
     if ($appJs -notmatch [regex]::Escape($dataCompletenessRatingHook)) { throw "Data Completeness rating workflow is missing hook: $dataCompletenessRatingHook" }

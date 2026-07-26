@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /*
  * Filename: index.php
- * Revision: 1.17.0
+ * Revision: 1.18.0
  * Description: PHP API router and flat-file record workflow handlers for HumidorHQ.
  * Modified Date: 2026-07-25
  */
@@ -14,6 +14,7 @@ require_once API_ROOT . '/lib/services/ReceiveStoreService.php';
 require_once API_ROOT . '/lib/services/InventoryAdjustmentService.php';
 require_once API_ROOT . '/lib/services/InventoryReversalService.php';
 require_once API_ROOT . '/lib/services/BackupRestoreService.php';
+require_once API_ROOT . '/lib/services/DataExportService.php';
 require_once API_ROOT . '/lib/services/ProductionImportService.php';
 send_security_headers();
 
@@ -1695,6 +1696,22 @@ try {
         header('Content-Type: application/json');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         readfile($file);
+        exit;
+    }
+    if ($path === '/exports/csv' && $method === 'GET') {
+        require_auth();
+        $package = create_csv_export_package();
+        try {
+            send_security_headers();
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $package['filename'] . '"');
+            header('Content-Length: ' . (string) filesize($package['path']));
+            if (readfile($package['path']) === false) {
+                throw new ApiError('CSV_EXPORT_FAILED', 'The CSV export package could not be downloaded.', 500);
+            }
+        } finally {
+            @unlink($package['path']);
+        }
         exit;
     }
     if (preg_match('#^/backups/([^/]+)/(preview|restore|download)$#', $path, $matches)) {
