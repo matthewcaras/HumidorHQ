@@ -1,7 +1,7 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.14.0
- * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, rating, inventory, and Activity report behavior.
+ * Revision: 1.15.0
+ * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
 
@@ -94,6 +94,42 @@ state.ratingBreakdownDimension = 'size'
 ratingRows = ratingBreakdownRows()
 testAssert(ratingRows.length === 2 && ratingRows[0].label === 'Robusto (5.00 × 50)' && ratingRows[0].averageRating === 8.5 && ratingRows[1].label === 'Toro (6.00 × 54)' && ratingRows[1].averageRating === 10, 'Rating Breakdown size summary is incorrect.')
 state.ratingBreakdownDimension = 'strength'
+state.consumptionTrendDimension = 'month'
+state.consumptionTrendType = 'all'
+state.consumptionTrendPeriod = 'lifetime'
+state.consumptionTrendCustomStart = ''
+state.consumptionTrendCustomEnd = ''
+let consumptionRows = consumptionTrendRows()
+let consumptionSummary = consumptionTrendSummary(consumptionRows)
+testAssert(consumptionRows.map((row) => row.label).join(',') === 'March 2026,February 2026,January 2026', 'Consumption Trends month groups are not newest first.')
+testAssert(consumptionSummary.quantity === 3 && consumptionSummary.smoked === 3 && consumptionSummary.gifted === 0 && consumptionSummary.discarded === 0, 'Consumption Trends removal quantities are incorrect.')
+testAssert(consumptionSummary.totalCostRemoved === 31.67 && Number(consumptionSummary.averageCostPerCigar.toFixed(2)) === 10.56, 'Consumption Trends removal costs do not reconcile.')
+testAssert(consumptionSummary.averageRating === 9 && consumptionSummary.ratingCount === 3, 'Consumption Trends average rating is incorrect.')
+testAssert(consumptionRows.reduce((sum, row) => sum + row.totalCostRemoved, 0) === consumptionSummary.totalCostRemoved, 'Consumption Trends displayed group costs do not foot to the summary.')
+state.consumptionTrendDimension = 'strength'
+consumptionRows = consumptionTrendRows()
+testAssert(consumptionRows.map((row) => row.label).join(',') === 'Mild,Full' && consumptionRows[0].quantity === 2 && consumptionRows[0].averageRating === 8.5 && consumptionRows[1].quantity === 1 && consumptionRows[1].averageRating === 10, 'Consumption Trends strength grouping or business-order sorting is incorrect.')
+const mildConsumptionRow = consumptionRows.find((row) => row.label === 'Mild')
+testAssert(openRemovalHistoryForConsumptionTrend(mildConsumptionRow), 'Consumption Trends characteristic drill-through was not available.')
+testAssert(state.reportPeriod === 'lifetime' && state.reportRemovalType === 'all' && state.reportSearch === 'Mild' && state.reportSectionState.removalHistory === true, 'Consumption Trends characteristic drill-through did not configure Removal History.')
+state.consumptionTrendDimension = 'month'
+consumptionRows = consumptionTrendRows()
+testAssert(openRemovalHistoryForConsumptionTrend(consumptionRows.find((row) => row.key === '2026-02')), 'Consumption Trends month drill-through was not available.')
+testAssert(state.reportPeriod === 'custom' && state.reportCustomStart === '2026-02-01' && state.reportCustomEnd === '2026-02-28' && state.reportSearch === '', 'Consumption Trends month drill-through did not configure the exact Removal History month.')
+const consumptionCsv = consumptionTrendCsv(consumptionRows)
+testAssert(consumptionCsv.includes('"Group By","Month"') && consumptionCsv.includes('"February 2026"') && consumptionCsv.includes('Average Smoke Rating') && consumptionCsv.includes('\r\n'), 'Consumption Trends CSV is missing expected headings or rows.')
+state.consumptionTrendType = 'GIFTED'
+testAssert(consumptionTrendRows().length === 0 && consumptionTrendSummary(consumptionTrendRows()).quantity === 0, 'Consumption Trends removal-type filtering is incorrect.')
+state.consumptionTrendType = 'all'
+state.consumptionTrendPeriod = 'custom'
+state.consumptionTrendCustomStart = '2026-01-01'
+state.consumptionTrendCustomEnd = '2026-02-28'
+testAssert(consumptionTrendSummary(consumptionTrendRows()).quantity === 2, 'Consumption Trends custom-date filtering is incorrect.')
+state.consumptionTrendPeriod = 'lifetime'
+state.consumptionTrendCustomStart = ''
+state.consumptionTrendCustomEnd = ''
+state.reportSectionState.removalHistory = false
+state.reportSectionState.consumptionTrends = false
 state.reportPeriod = 'lifetime'
 state.reportRemovalType = 'all'
 state.reportSearch = 'pepper finish'
@@ -219,6 +255,11 @@ state.accountingReconciliationStatus = 'received'
 state.accountingReconciliationStart = '2026-01-01'
 state.accountingReconciliationEnd = '2026-06-30'
 state.collectionValuationDimension = 'humidor'
+state.consumptionTrendDimension = 'wrapper'
+state.consumptionTrendType = 'SMOKED'
+state.consumptionTrendPeriod = 'custom'
+state.consumptionTrendCustomStart = '2026-02-01'
+state.consumptionTrendCustomEnd = '2026-04-30'
 state.agingManufacturer = 'Bravo'
 state.agingHumidorId = '2'
 state.selectedAgingBucketKey = '91-180'
@@ -237,6 +278,7 @@ state.reportSectionState = {
   inventoryAging: true,
   accountingReconciliation: true,
   collectionValuation: true,
+  consumptionTrends: true,
   removalHistory: false,
   activity: true,
 }
@@ -260,6 +302,11 @@ state.accountingReconciliationStatus = ''
 state.accountingReconciliationStart = ''
 state.accountingReconciliationEnd = ''
 state.collectionValuationDimension = 'manufacturer'
+state.consumptionTrendDimension = 'month'
+state.consumptionTrendType = 'all'
+state.consumptionTrendPeriod = 'lifetime'
+state.consumptionTrendCustomStart = ''
+state.consumptionTrendCustomEnd = ''
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -278,12 +325,13 @@ state.reportSectionState = {
   inventoryAging: false,
   accountingReconciliation: false,
   collectionValuation: false,
+  consumptionTrends: false,
   removalHistory: false,
   activity: false,
 }
 testAssert(applyReportsView('Reports Snapshot'), 'Reports saved view should apply by name.')
-testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.accountingReconciliationScope === 'exceptions' && state.accountingReconciliationVendorId === '2' && state.accountingReconciliationStatus === 'received' && state.accountingReconciliationStart === '2026-01-01' && state.accountingReconciliationEnd === '2026-06-30' && state.collectionValuationDimension === 'humidor' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
-testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.collectionValuation === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
+testAssert(state.purchaseTrendPeriod === 'month' && state.purchaseRecordsFilterType === 'manufacturer' && state.purchaseRecordsFilterValue === 'bravo' && state.purchaseRecordsFilterLabel === 'Bravo' && state.purchaseHistoryGroup === 'manufacturer' && state.purchaseHistoryManufacturer === 'alpha' && state.purchaseHistoryBuyAgainFilter === 'YES' && state.ratingBreakdownDimension === 'wrapper' && state.reportPeriod === 'custom' && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'pepper' && state.accountingReconciliationScope === 'exceptions' && state.accountingReconciliationVendorId === '2' && state.accountingReconciliationStatus === 'received' && state.accountingReconciliationStart === '2026-01-01' && state.accountingReconciliationEnd === '2026-06-30' && state.collectionValuationDimension === 'humidor' && state.consumptionTrendDimension === 'wrapper' && state.consumptionTrendType === 'SMOKED' && state.consumptionTrendPeriod === 'custom' && state.consumptionTrendCustomStart === '2026-02-01' && state.consumptionTrendCustomEnd === '2026-04-30' && state.agingManufacturer === 'Bravo' && state.agingHumidorId === '2' && state.selectedAgingBucketKey === '91-180' && state.activityPeriod === 'custom' && state.activityType === 'MOVE' && state.activitySearch === 'event 20' && state.activityLotId === '2' && state.activityHumidorId === '2' && state.activityCustomStart === '2026-01-01' && state.activityCustomEnd === '2026-12-31' && state.showAllActivity === true, 'Reports saved view did not restore the expected filters.')
+testAssert(state.reportSectionState.purchaseTrend === true && state.reportSectionState.ratingBreakdown === true && state.reportSectionState.inventoryAging === true && state.reportSectionState.accountingReconciliation === true && state.reportSectionState.collectionValuation === true && state.reportSectionState.consumptionTrends === true && state.reportSectionState.activity === true, 'Reports saved view did not restore report section open state.')
 testAssert(deleteReportsView('Reports Snapshot'), 'Reports saved view should delete by name.')
 testAssert(reportsSavedViews().length === 0, 'Reports saved view delete did not clear storage.')
 state.purchaseTrendPeriod = 'year'
@@ -303,6 +351,11 @@ state.accountingReconciliationStatus = ''
 state.accountingReconciliationStart = ''
 state.accountingReconciliationEnd = ''
 state.collectionValuationDimension = 'manufacturer'
+state.consumptionTrendDimension = 'month'
+state.consumptionTrendType = 'all'
+state.consumptionTrendPeriod = 'lifetime'
+state.consumptionTrendCustomStart = ''
+state.consumptionTrendCustomEnd = ''
 state.agingManufacturer = ''
 state.agingHumidorId = ''
 state.selectedAgingBucketKey = null
@@ -320,6 +373,7 @@ state.reportSectionState = {
   inventoryAging: false,
   accountingReconciliation: false,
   collectionValuation: false,
+  consumptionTrends: false,
   removalHistory: false,
   activity: false,
 }
@@ -585,6 +639,12 @@ catalogJournalMetrics = smokingJournalHistoryMetrics(catalogJournalRows)
 testAssert(catalogJournalRows.find((row) => row.event.id === 11)?.reversed === true, 'Catalog Smoking Journal did not mark reversed smoke history.')
 testAssert(catalogJournalMetrics.totalEntries === 2 && catalogJournalMetrics.effectiveQuantity === 1, 'Reversed Smoking Journal history was not excluded from effective quantity.')
 testAssert(catalogJournalMetrics.averageRating === 8 && catalogJournalMetrics.lastSmokedDate === '2026-01-05', 'Reversed Smoking Journal history was not excluded from effective rating and date summaries.')
+state.consumptionTrendDimension = 'month'
+state.consumptionTrendType = 'all'
+state.consumptionTrendPeriod = 'lifetime'
+consumptionRows = consumptionTrendRows()
+consumptionSummary = consumptionTrendSummary(consumptionRows)
+testAssert(consumptionSummary.quantity === 2 && consumptionSummary.averageRating === 9 && consumptionRows.every((row) => row.key !== '2026-02'), 'Consumption Trends did not exclude a reversed removal from effective quantities and ratings.')
 state.activitySearch = 'event 11'
 const relatedActivity = filteredActivityEvents()
 testAssert(relatedActivity.length === 2 && relatedActivity.some((event) => event.id === 11) && relatedActivity.some((event) => event.id === 13), 'Activity event-reference search did not link an original event and its reversal.')

@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.28.0
+ * Revision: 1.29.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -69,6 +69,11 @@ const state = {
   accountingReconciliationStart: '',
   accountingReconciliationEnd: '',
   collectionValuationDimension: 'manufacturer',
+  consumptionTrendDimension: 'month',
+  consumptionTrendType: 'all',
+  consumptionTrendPeriod: 'lifetime',
+  consumptionTrendCustomStart: '',
+  consumptionTrendCustomEnd: '',
   purchaseHistoryGroup: 'vendor',
   purchaseHistoryVendorId: '',
   purchaseHistoryManufacturer: '',
@@ -84,6 +89,7 @@ const state = {
     inventoryAging: false,
     accountingReconciliation: false,
     collectionValuation: false,
+    consumptionTrends: false,
     removalHistory: false,
     activity: false,
   },
@@ -368,6 +374,11 @@ function reportsViewSnapshot() {
     accountingReconciliationStart: String(state.accountingReconciliationStart || ''),
     accountingReconciliationEnd: String(state.accountingReconciliationEnd || ''),
     collectionValuationDimension: state.collectionValuationDimension,
+    consumptionTrendDimension: state.consumptionTrendDimension,
+    consumptionTrendType: state.consumptionTrendType,
+    consumptionTrendPeriod: state.consumptionTrendPeriod,
+    consumptionTrendCustomStart: String(state.consumptionTrendCustomStart || ''),
+    consumptionTrendCustomEnd: String(state.consumptionTrendCustomEnd || ''),
     agingManufacturer: String(state.agingManufacturer || ''),
     agingHumidorId: String(state.agingHumidorId || ''),
     selectedAgingBucketKey: state.selectedAgingBucketKey || null,
@@ -386,6 +397,7 @@ function reportsViewSnapshot() {
       inventoryAging: Boolean(state.reportSectionState?.inventoryAging),
       accountingReconciliation: Boolean(state.reportSectionState?.accountingReconciliation),
       collectionValuation: Boolean(state.reportSectionState?.collectionValuation),
+      consumptionTrends: Boolean(state.reportSectionState?.consumptionTrends),
       removalHistory: Boolean(state.reportSectionState?.removalHistory),
       activity: Boolean(state.reportSectionState?.activity),
     },
@@ -418,6 +430,11 @@ function normalizeReportsViewRecord(entry) {
       accountingReconciliationStart: String(snapshot.accountingReconciliationStart || ''),
       accountingReconciliationEnd: String(snapshot.accountingReconciliationEnd || ''),
       collectionValuationDimension: ['manufacturer', 'strength', 'wrapper', 'vitola', 'humidor'].includes(snapshot.collectionValuationDimension) ? snapshot.collectionValuationDimension : 'manufacturer',
+      consumptionTrendDimension: ['month', 'manufacturer', 'strength', 'wrapper', 'vitola'].includes(snapshot.consumptionTrendDimension) ? snapshot.consumptionTrendDimension : 'month',
+      consumptionTrendType: ['all', 'SMOKED', 'GIFTED', 'DISCARDED'].includes(snapshot.consumptionTrendType) ? snapshot.consumptionTrendType : 'all',
+      consumptionTrendPeriod: ['lifetime', 'current', 'prior', 'custom'].includes(snapshot.consumptionTrendPeriod) ? snapshot.consumptionTrendPeriod : 'lifetime',
+      consumptionTrendCustomStart: String(snapshot.consumptionTrendCustomStart || ''),
+      consumptionTrendCustomEnd: String(snapshot.consumptionTrendCustomEnd || ''),
       agingManufacturer: String(snapshot.agingManufacturer || ''),
       agingHumidorId: String(snapshot.agingHumidorId || ''),
       selectedAgingBucketKey: String(snapshot.selectedAgingBucketKey || '') || null,
@@ -436,6 +453,7 @@ function normalizeReportsViewRecord(entry) {
         inventoryAging: Boolean(snapshot.reportSectionState?.inventoryAging),
         accountingReconciliation: Boolean(snapshot.reportSectionState?.accountingReconciliation),
         collectionValuation: Boolean(snapshot.reportSectionState?.collectionValuation),
+        consumptionTrends: Boolean(snapshot.reportSectionState?.consumptionTrends),
         removalHistory: Boolean(snapshot.reportSectionState?.removalHistory),
         activity: Boolean(snapshot.reportSectionState?.activity),
       },
@@ -492,6 +510,11 @@ function applyReportsView(name) {
   state.accountingReconciliationStart = view.snapshot.accountingReconciliationStart
   state.accountingReconciliationEnd = view.snapshot.accountingReconciliationEnd
   state.collectionValuationDimension = view.snapshot.collectionValuationDimension
+  state.consumptionTrendDimension = view.snapshot.consumptionTrendDimension
+  state.consumptionTrendType = view.snapshot.consumptionTrendType
+  state.consumptionTrendPeriod = view.snapshot.consumptionTrendPeriod
+  state.consumptionTrendCustomStart = view.snapshot.consumptionTrendCustomStart
+  state.consumptionTrendCustomEnd = view.snapshot.consumptionTrendCustomEnd
   state.agingManufacturer = view.snapshot.agingManufacturer
   state.agingHumidorId = view.snapshot.agingHumidorId
   state.selectedAgingBucketKey = view.snapshot.selectedAgingBucketKey
@@ -5395,7 +5418,18 @@ function filteredRemovalEvents() {
       }
       const details = removalEventDetails(event)
       const journal = smokingJournalEntryForEvent(event.id)
-      return [details.cigarLabel, details.locationLabel, details.lotLabel, event.notes, journal?.notes, journal?.rating]
+      return [
+        details.cigarLabel,
+        details.cigar?.manufacturer,
+        details.cigar?.strength,
+        details.cigar?.wrapper,
+        details.cigar?.vitola,
+        details.locationLabel,
+        details.lotLabel,
+        event.notes,
+        journal?.notes,
+        journal?.rating,
+      ]
         .some((value) => String(value || '').toLowerCase().includes(search))
     })
     .sort((left, right) => removalEventDate(right).localeCompare(removalEventDate(left)) || Number(right.id || 0) - Number(left.id || 0))
@@ -5428,6 +5462,232 @@ function removalReportMetrics(events) {
   }
 }
 
+function consumptionTrendDimensionLabel(value = state.consumptionTrendDimension) {
+  return {
+    month: 'Month',
+    manufacturer: 'Manufacturer',
+    strength: 'Strength',
+    wrapper: 'Wrapper',
+    vitola: 'Vitola',
+  }[value] || 'Month'
+}
+
+function consumptionTrendMonth(date) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''))
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12) return null
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  if (day < 1 || day > lastDay) return null
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  return {
+    key: `${match[1]}-${match[2]}`,
+    label: `${monthNames[month - 1]} ${year}`,
+    start: `${match[1]}-${match[2]}-01`,
+    end: `${match[1]}-${match[2]}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function consumptionTrendEventGroup(event, dimension) {
+  if (dimension === 'month') {
+    const month = consumptionTrendMonth(removalEventDate(event))
+    return month
+      ? { ...month, searchTerm: '', drillable: true }
+      : { key: 'unknown-month', label: 'Unknown Month', start: '', end: '', searchTerm: '', drillable: false }
+  }
+  const cigar = catalogCigarForInventoryEvent(event)
+  const field = dimension === 'manufacturer' ? 'manufacturer' : dimension
+  const fallback = `Unknown ${consumptionTrendDimensionLabel(dimension)}`
+  const label = String(cigar?.[field] || '').trim() || fallback
+  return {
+    key: label.toLowerCase(),
+    label,
+    start: '',
+    end: '',
+    searchTerm: label === fallback ? '' : label,
+    drillable: label !== fallback,
+  }
+}
+
+function consumptionTrendEvents() {
+  const currentYear = new Date().getFullYear()
+  return effectiveInventoryEvents()
+    .filter((event) => ['SMOKED', 'GIFTED', 'DISCARDED'].includes(normalizeEventType(event.eventType)))
+    .filter((event) => state.consumptionTrendType === 'all' || normalizeEventType(event.eventType) === state.consumptionTrendType)
+    .filter((event) => {
+      const date = removalEventDate(event)
+      const year = Number(date.slice(0, 4) || 0)
+      if (state.consumptionTrendPeriod === 'current') return year === currentYear
+      if (state.consumptionTrendPeriod === 'prior') return year === currentYear - 1
+      if (state.consumptionTrendPeriod === 'custom') {
+        const afterStart = !state.consumptionTrendCustomStart || date >= state.consumptionTrendCustomStart
+        const beforeEnd = !state.consumptionTrendCustomEnd || date <= state.consumptionTrendCustomEnd
+        return afterStart && beforeEnd
+      }
+      return true
+    })
+}
+
+function consumptionTrendRows(dimension = state.consumptionTrendDimension, events = consumptionTrendEvents()) {
+  const groups = new Map()
+  events.forEach((event) => {
+    const group = consumptionTrendEventGroup(event, dimension)
+    if (!groups.has(group.key)) {
+      groups.set(group.key, {
+        ...group,
+        dimension,
+        quantity: 0,
+        smoked: 0,
+        gifted: 0,
+        discarded: 0,
+        knownCostQuantity: 0,
+        rawCostRemoved: 0,
+        ratings: [],
+        cigarIds: new Set(),
+        lastEventDate: '',
+      })
+    }
+    const row = groups.get(group.key)
+    const quantity = Number(event.quantity || 0)
+    const eventType = normalizeEventType(event.eventType)
+    row.quantity += quantity
+    if (eventType === 'SMOKED') row.smoked += quantity
+    if (eventType === 'GIFTED') row.gifted += quantity
+    if (eventType === 'DISCARDED') row.discarded += quantity
+    const cigarId = catalogCigarIdForInventoryEvent(event)
+    if (cigarId) row.cigarIds.add(cigarId)
+    const costPerCigar = inventoryEventCostPerCigar(event)
+    if (hasKnownMoney(costPerCigar)) {
+      row.rawCostRemoved += quantity * Number(costPerCigar)
+      row.knownCostQuantity += quantity
+    }
+    if (eventType === 'SMOKED') {
+      const rating = Number(smokingJournalEntryForEvent(event.id)?.rating)
+      if (Number.isInteger(rating) && rating >= 1 && rating <= 10) row.ratings.push(rating)
+    }
+    const eventDate = removalEventDate(event)
+    if (eventDate > row.lastEventDate) row.lastEventDate = eventDate
+  })
+
+  const rows = Array.from(groups.values()).map((row) => ({
+    ...row,
+    cigarCount: row.cigarIds.size,
+    costComplete: row.knownCostQuantity === row.quantity,
+    totalCostRemoved: null,
+    ratingCount: row.ratings.length,
+    averageRating: row.ratings.length
+      ? row.ratings.reduce((sum, rating) => sum + rating, 0) / row.ratings.length
+      : null,
+  }))
+  reconcileCollectionValuationGroupMoney(rows, 'rawCostRemoved', 'costComplete', 'totalCostRemoved')
+  rows.forEach((row) => {
+    row.averageCostPerCigar = row.totalCostRemoved === null || row.quantity <= 0
+      ? null
+      : row.totalCostRemoved / row.quantity
+  })
+  return rows.sort((left, right) => {
+    if (dimension === 'month') {
+      if (left.key === 'unknown-month') return 1
+      if (right.key === 'unknown-month') return -1
+      return right.key.localeCompare(left.key)
+    }
+    if (dimension === 'strength') {
+      const rankDifference = strengthSortRank(left.label) - strengthSortRank(right.label)
+      if (rankDifference !== 0) return rankDifference
+    }
+    return left.label.localeCompare(right.label, undefined, { sensitivity: 'base' })
+  })
+}
+
+function consumptionTrendSummary(rows = consumptionTrendRows()) {
+  const ratings = rows.flatMap((row) => row.ratings)
+  const quantity = rows.reduce((sum, row) => sum + row.quantity, 0)
+  const totalCostRemoved = sumMoneyValues(rows.map((row) => row.totalCostRemoved))
+  return {
+    quantity,
+    smoked: rows.reduce((sum, row) => sum + row.smoked, 0),
+    gifted: rows.reduce((sum, row) => sum + row.gifted, 0),
+    discarded: rows.reduce((sum, row) => sum + row.discarded, 0),
+    totalCostRemoved,
+    averageCostPerCigar: totalCostRemoved === null || quantity <= 0 ? null : totalCostRemoved / quantity,
+    ratingCount: ratings.length,
+    averageRating: ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null,
+  }
+}
+
+function consumptionTrendCsv(rows, dimension = state.consumptionTrendDimension) {
+  const headings = [
+    'Group By',
+    consumptionTrendDimensionLabel(dimension),
+    'Total Removed',
+    'Smoked',
+    'Gifted',
+    'Discarded',
+    'Distinct Cigars',
+    'Cost Removed',
+    'Average Cost Per Cigar',
+    'Average Smoke Rating',
+    'Rated Smoke Entries',
+    'Last Event Date',
+  ]
+  const dataRows = rows.map((row) => [
+    consumptionTrendDimensionLabel(dimension),
+    row.label,
+    row.quantity,
+    row.smoked,
+    row.gifted,
+    row.discarded,
+    row.cigarCount,
+    accountingCsvMoney(row.totalCostRemoved),
+    accountingCsvMoney(row.averageCostPerCigar),
+    row.averageRating === null ? '' : row.averageRating.toFixed(2),
+    row.ratingCount,
+    row.lastEventDate,
+  ])
+  return [headings, ...dataRows]
+    .map((row) => row.map(accountingCsvCell).join(','))
+    .join('\r\n')
+}
+
+function downloadConsumptionTrendCsv(rows) {
+  const csv = consumptionTrendCsv(rows)
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `humidorhq-consumption-trends-${state.consumptionTrendDimension}-${todayIsoDate()}.csv`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function openRemovalHistoryForConsumptionTrend(row) {
+  if (!row?.drillable) return false
+  state.reportRemovalType = state.consumptionTrendType
+  state.reportSearch = row.dimension === 'month' ? '' : row.searchTerm
+  if (row.dimension === 'month') {
+    state.reportPeriod = 'custom'
+    state.reportCustomStart = row.start
+    state.reportCustomEnd = row.end
+  } else {
+    state.reportPeriod = state.consumptionTrendPeriod
+    state.reportCustomStart = state.consumptionTrendCustomStart
+    state.reportCustomEnd = state.consumptionTrendCustomEnd
+  }
+  state.reportSectionState.consumptionTrends = true
+  state.reportSectionState.removalHistory = true
+  if (typeof document !== 'undefined' && typeof render === 'function') {
+    render()
+    setTimeout(() => {
+      document.querySelector('.removal-history-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+  return true
+}
+
 function reportFilterButton(label, value, stateKey) {
   const button = document.createElement('button')
   button.type = 'button'
@@ -5435,10 +5695,14 @@ function reportFilterButton(label, value, stateKey) {
   button.textContent = label
   button.addEventListener('click', () => {
     state[stateKey] = value
-    if (['reportPeriod', 'activityPeriod'].includes(stateKey) && value === 'custom') {
+    if (['reportPeriod', 'activityPeriod', 'consumptionTrendPeriod'].includes(stateKey) && value === 'custom') {
       const year = new Date().getFullYear()
-      const startKey = stateKey === 'activityPeriod' ? 'activityCustomStart' : 'reportCustomStart'
-      const endKey = stateKey === 'activityPeriod' ? 'activityCustomEnd' : 'reportCustomEnd'
+      const dateKeys = {
+        reportPeriod: ['reportCustomStart', 'reportCustomEnd'],
+        activityPeriod: ['activityCustomStart', 'activityCustomEnd'],
+        consumptionTrendPeriod: ['consumptionTrendCustomStart', 'consumptionTrendCustomEnd'],
+      }
+      const [startKey, endKey] = dateKeys[stateKey]
       state[startKey] ||= `${year}-01-01`
       state[endKey] ||= todayIsoDate()
     }
@@ -5447,10 +5711,177 @@ function reportFilterButton(label, value, stateKey) {
   return button
 }
 
+function renderConsumptionTrendsReport(view) {
+  const events = consumptionTrendEvents()
+  const rows = consumptionTrendRows(state.consumptionTrendDimension, events)
+  const summary = consumptionTrendSummary(rows)
+  const { panel, body } = createCollapsibleReportSection({
+    className: 'consumption-trends-panel',
+    title: 'Consumption Trends',
+    description: 'Recorded effective smoke, gift, and discard history by month or cigar characteristic; unrecorded history is not inferred.',
+    stateKey: 'consumptionTrends',
+  })
+
+  const controls = document.createElement('div')
+  controls.className = 'report-filter-grid'
+  const period = document.createElement('fieldset')
+  period.className = 'report-filter-group'
+  period.innerHTML = '<legend>Period</legend>'
+  const periodButtons = document.createElement('div')
+  periodButtons.className = 'report-filter-buttons'
+  periodButtons.append(
+    reportFilterButton('Lifetime', 'lifetime', 'consumptionTrendPeriod'),
+    reportFilterButton('Current Year', 'current', 'consumptionTrendPeriod'),
+    reportFilterButton('Prior Year', 'prior', 'consumptionTrendPeriod'),
+    reportFilterButton('Custom', 'custom', 'consumptionTrendPeriod'),
+  )
+  period.append(periodButtons)
+
+  const removalType = document.createElement('fieldset')
+  removalType.className = 'report-filter-group'
+  removalType.innerHTML = '<legend>Removal Type</legend>'
+  const typeButtons = document.createElement('div')
+  typeButtons.className = 'report-filter-buttons report-type-buttons'
+  typeButtons.append(
+    reportFilterButton('All Removals', 'all', 'consumptionTrendType'),
+    reportFilterButton('Smoked', 'SMOKED', 'consumptionTrendType'),
+    reportFilterButton('Gifted', 'GIFTED', 'consumptionTrendType'),
+    reportFilterButton('Discarded', 'DISCARDED', 'consumptionTrendType'),
+  )
+  removalType.append(typeButtons)
+
+  const group = document.createElement('fieldset')
+  group.className = 'report-filter-group'
+  group.innerHTML = '<legend>Group By</legend>'
+  const groupButtons = document.createElement('div')
+  groupButtons.className = 'report-filter-buttons'
+  groupButtons.append(
+    reportFilterButton('Month', 'month', 'consumptionTrendDimension'),
+    reportFilterButton('Manufacturer', 'manufacturer', 'consumptionTrendDimension'),
+    reportFilterButton('Strength', 'strength', 'consumptionTrendDimension'),
+    reportFilterButton('Wrapper', 'wrapper', 'consumptionTrendDimension'),
+    reportFilterButton('Vitola', 'vitola', 'consumptionTrendDimension'),
+  )
+  group.append(groupButtons)
+
+  const actions = document.createElement('fieldset')
+  actions.className = 'report-filter-group'
+  actions.innerHTML = '<legend>Workpaper</legend>'
+  const exportButton = document.createElement('button')
+  exportButton.type = 'button'
+  exportButton.className = 'primary-button'
+  exportButton.textContent = 'Export CSV'
+  exportButton.disabled = rows.length === 0
+  exportButton.addEventListener('click', () => downloadConsumptionTrendCsv(rows))
+  actions.append(exportButton)
+  controls.append(period, removalType, group, actions)
+  body.append(controls)
+
+  if (state.consumptionTrendPeriod === 'custom') {
+    const customDates = document.createElement('div')
+    customDates.className = 'report-custom-dates'
+    customDates.innerHTML = `
+      <label class="form-field"><span>Start Date</span><input type="date" name="consumptionTrendStart" value="${escapeHtml(state.consumptionTrendCustomStart)}"></label>
+      <label class="form-field"><span>End Date</span><input type="date" name="consumptionTrendEnd" value="${escapeHtml(state.consumptionTrendCustomEnd)}"></label>
+    `
+    customDates.querySelector('[name="consumptionTrendStart"]').addEventListener('change', (event) => {
+      state.consumptionTrendCustomStart = event.target.value
+      render()
+    })
+    customDates.querySelector('[name="consumptionTrendEnd"]').addEventListener('change', (event) => {
+      state.consumptionTrendCustomEnd = event.target.value
+      render()
+    })
+    body.append(customDates)
+  }
+
+  const metrics = document.createElement('div')
+  metrics.className = 'metric-grid compact report-count-grid compact-top-gap'
+  metrics.append(
+    metricCard('Total Removed', summary.quantity, 'Recorded effective removals'),
+    metricCard('Smoked', summary.smoked, ''),
+    metricCard('Gifted', summary.gifted, ''),
+    metricCard('Discarded', summary.discarded, ''),
+    metricCard('Cost Removed', summary.totalCostRemoved, 'Reconciled acquisition basis', true),
+    metricCard('Average Cost / Cigar', summary.averageCostPerCigar, 'Quantity weighted', true),
+    metricCard('Average Smoke Rating', averageRatingDisplay(summary.averageRating), `${formatCount(summary.ratingCount)} rated entries`),
+  )
+  body.append(metrics)
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty-state'
+    empty.innerHTML = '<p>No recorded smoked, gifted, or discarded events match the selected filters.</p>'
+    body.append(empty)
+    view.append(panel)
+    return
+  }
+
+  const tableWrap = document.createElement('div')
+  tableWrap.className = 'table-scroll compact-top-gap'
+  tableWrap.innerHTML = `
+    <table class="data-table consumption-trends-table">
+      <thead>
+        <tr>
+          <th>${escapeHtml(consumptionTrendDimensionLabel())}</th>
+          <th>Total</th>
+          <th>Smoked</th>
+          <th>Gifted</th>
+          <th>Discarded</th>
+          <th>Distinct Cigars</th>
+          <th>Cost Removed</th>
+          <th>Avg Cost / Cigar</th>
+          <th>Avg Smoke Rating</th>
+          <th>Rated Entries</th>
+          <th>Last Event</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr${row.drillable ? ` class="clickable-record-row" tabindex="0" data-consumption-key="${escapeHtml(row.key)}"` : ''}>
+            <td>${row.drillable ? `<button type="button" class="linkish-button" data-consumption-key="${escapeHtml(row.key)}">${escapeHtml(row.label)}</button>` : escapeHtml(row.label)}</td>
+            <td>${formatCount(row.quantity)}</td>
+            <td>${formatCount(row.smoked)}</td>
+            <td>${formatCount(row.gifted)}</td>
+            <td>${formatCount(row.discarded)}</td>
+            <td>${formatCount(row.cigarCount)}</td>
+            <td>${escapeHtml(money(row.totalCostRemoved))}</td>
+            <td>${escapeHtml(money(row.averageCostPerCigar))}</td>
+            <td>${escapeHtml(averageRatingDisplay(row.averageRating))}</td>
+            <td>${formatCount(row.ratingCount)}</td>
+            <td>${escapeHtml(row.lastEventDate || 'Unknown')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+  tableWrap.querySelectorAll('[data-consumption-key]').forEach((element) => {
+    const row = rows.find((item) => item.key === element.dataset.consumptionKey)
+    if (!row) return
+    const open = (event) => {
+      if (element.tagName === 'TR' && event.target.closest('button')) return
+      openRemovalHistoryForConsumptionTrend(row)
+    }
+    element.addEventListener('click', open)
+    if (element.tagName === 'TR') {
+      element.setAttribute('aria-label', `Open Removal History for ${row.label}`)
+      element.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          openRemovalHistoryForConsumptionTrend(row)
+        }
+      })
+    }
+  })
+  body.append(tableWrap)
+  view.append(panel)
+}
+
 function renderRemovalHistory(view) {
   const events = filteredRemovalEvents()
   const metrics = removalReportMetrics(events)
   const { panel, body } = createCollapsibleReportSection({
+    className: 'removal-history-panel',
     title: 'Removal History',
     description: 'Choose a date range and removal type to recalculate the counts and values below.',
     stateKey: 'removalHistory',
@@ -5688,7 +6119,8 @@ function authoritativePurchaseLineCostPerCigar(line) {
 }
 
 function inventoryEventCostPerCigar(event) {
-  const line = recordById('purchase-lines', event?.purchaseLineId)
+  const lot = recordById('lots', event?.lotId)
+  const line = recordById('purchase-lines', event?.purchaseLineId || lot?.purchaseLineId)
   return authoritativePurchaseLineCostPerCigar(line) ?? event?.costPerCigarAtEvent ?? null
 }
 
@@ -7056,6 +7488,7 @@ function renderReportsPage(view) {
   renderAccountingReconciliationReport(view)
   renderCollectionValuationReport(view)
   renderRatingBreakdownReport(view)
+  renderConsumptionTrendsReport(view)
   renderPurchaseTrendReport(view)
   renderPurchaseHistoryReport(view)
   renderRemovalHistory(view)

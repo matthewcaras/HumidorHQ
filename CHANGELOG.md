@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.34.0
+Revision: 1.35.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.35.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added a read-only Consumption Trends report for effective smoked, gifted, and discarded history.
+- Added Lifetime, Current Year, Prior Year, and custom date filters plus removal-type filtering.
+- Added Month, Manufacturer, Strength, Wrapper, and Vitola groupings with business-order strength sorting.
+- Added reconciled removal cost, average cost, and two-decimal smoking rating metrics while keeping unknown money explicit.
+- Resolved authoritative removal cost through the linked Lot when an event does not directly store its purchase-line id.
+- Added Removal History drill-through, formula-safe CSV export, reversed-event exclusion, and locally saved Reports-view support.
 
 ## 1.34.0 - 2026-07-25
 
