@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.38.1
+Revision: 1.39.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.39.0 - 2026-07-25
+
+Changed by: Matt
+
+- Added a Quick Smoke workflow to the Dashboard for routine mobile use.
+- Added alphabetical search across on-hand cigar identity, construction, strength, origin, and Humidor location.
+- Required selection of the exact positive Lot/location balance when a cigar is split and showed Lot receipt date, location, and available quantity.
+- Defaulted Quick Smoke to one cigar and the current local date while applying the selected Lot’s receipt date as the earliest valid date.
+- Reused the existing authenticated, CSRF-protected, idempotent inventory removal endpoint without duplicating inventory mutation logic.
+- Disabled repeat submissions while a smoke is processing, retained inline API errors, and handed a successful smoke directly to the existing centered Smoking Journal.
+- Added focused Quick Smoke search, balance-selection, responsive-layout, integration-hook, and runtime-data safety coverage.
 
 ## 1.38.1 - 2026-07-25
 

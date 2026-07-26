@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.32.1
+ * Revision: 1.33.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -28,6 +28,8 @@ const state = {
   collectionStrengthFilter: '',
   collectionBuyAgainFilter: '',
   collectionSearch: '',
+  dashboardQuickSmokeSearch: '',
+  dashboardQuickSmokeCatalogId: null,
   catalogSearch: '',
   selectedCatalogHistoryCigarId: null,
   selectedCollectionCigarId: null,
@@ -2835,6 +2837,216 @@ function openCollectionForHumidor(humidorId) {
   navigateToPage('Collection')
 }
 
+function dashboardQuickSmokeItems(search = state.dashboardQuickSmokeSearch) {
+  const query = String(search || '').trim().toLowerCase()
+  if (!query) return []
+  return buildCollectionItems()
+    .filter((item) => [
+      cigarName(item.cigar),
+      item.cigar.manufacturer,
+      item.cigar.series,
+      item.cigar.vitola,
+      item.cigar.shape,
+      item.cigar.wrapper,
+      item.cigar.binder,
+      item.cigar.filler,
+      item.cigar.country,
+      item.cigar.strength,
+      ...item.locations.map((location) => location.label),
+    ].some((value) => String(value || '').toLowerCase().includes(query)))
+    .sort((left, right) => cigarName(left.cigar).localeCompare(cigarName(right.cigar), undefined, { sensitivity: 'base' }) || Number(left.cigar.id) - Number(right.cigar.id))
+}
+
+function dashboardQuickSmokeBalances(catalogCigarId) {
+  return positiveBalances()
+    .filter((balance) => Number(balance.cigar?.id || 0) === Number(catalogCigarId || 0))
+    .sort((left, right) => String(left.oldestDate || '').localeCompare(String(right.oldestDate || ''))
+      || left.locationLabel.localeCompare(right.locationLabel)
+      || Number(left.lot?.id || 0) - Number(right.lot?.id || 0))
+}
+
+function renderDashboardQuickSmoke() {
+  const panel = document.createElement('section')
+  panel.className = 'dashboard-panel quick-smoke-panel'
+  panel.innerHTML = `
+    <div class="section-heading compact-heading">
+      <div>
+        <h3>Quick Smoke</h3>
+        <p class="muted">Find an on-hand cigar, confirm its Lot and date, then add the Smoking Journal entry.</p>
+      </div>
+    </div>
+  `
+
+  const searchForm = document.createElement('form')
+  searchForm.className = 'quick-smoke-search'
+  searchForm.innerHTML = `
+    <label class="form-field">
+      <span>Search On-Hand Cigars</span>
+      <input name="quickSmokeSearch" type="search" value="${escapeHtml(state.dashboardQuickSmokeSearch)}" placeholder="Cigar, manufacturer, wrapper, strength, or Humidor" autocomplete="off">
+    </label>
+    <button type="submit" class="primary-button">Search</button>
+    <button type="button" class="secondary-button" data-clear-quick-smoke>Clear</button>
+  `
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    state.dashboardQuickSmokeSearch = String(new FormData(searchForm).get('quickSmokeSearch') || '').trim()
+    state.dashboardQuickSmokeCatalogId = null
+    render()
+  })
+  searchForm.querySelector('[data-clear-quick-smoke]').addEventListener('click', () => {
+    state.dashboardQuickSmokeSearch = ''
+    state.dashboardQuickSmokeCatalogId = null
+    render()
+  })
+  panel.append(searchForm)
+
+  const matches = dashboardQuickSmokeItems()
+  const selectedCigarId = Number(state.dashboardQuickSmokeCatalogId || 0)
+  const selectedItem = selectedCigarId
+    ? buildCollectionItems().find((item) => Number(item.cigar.id) === selectedCigarId)
+    : null
+
+  if (state.dashboardQuickSmokeSearch && !selectedItem) {
+    const results = document.createElement('div')
+    results.className = 'quick-smoke-results'
+    if (matches.length === 0) {
+      results.innerHTML = '<p class="muted">No on-hand cigars match that search.</p>'
+    } else {
+      const visibleMatches = matches.slice(0, 8)
+      visibleMatches.forEach((item) => {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'quick-smoke-result'
+        button.dataset.quickSmokeCigarId = String(item.cigar.id)
+        button.innerHTML = `
+          <strong>${escapeHtml(cigarName(item.cigar))}</strong>
+          <span>${strengthBadge(item.cigar.strength)} ${formatCount(item.totalQuantity)} on hand</span>
+        `
+        results.append(button)
+      })
+      if (matches.length > visibleMatches.length) {
+        const more = document.createElement('p')
+        more.className = 'muted quick-smoke-more'
+        more.textContent = `${formatCount(matches.length - visibleMatches.length)} more matches. Refine the search to narrow the list.`
+        results.append(more)
+      }
+    }
+    panel.append(results)
+    panel.querySelectorAll('[data-quick-smoke-cigar-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.dashboardQuickSmokeCatalogId = Number(button.dataset.quickSmokeCigarId || 0)
+        render()
+        window.requestAnimationFrame(() => {
+          const form = document.querySelector('[data-quick-smoke-form]')
+          form?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          form?.querySelector('select, input')?.focus({ preventScroll: true })
+        })
+      })
+    })
+  }
+
+  if (selectedItem) {
+    const balances = dashboardQuickSmokeBalances(selectedItem.cigar.id)
+    const selected = document.createElement('div')
+    selected.className = 'quick-smoke-selected'
+    selected.innerHTML = `
+      <div class="quick-smoke-selected-heading">
+        <div>
+          <strong>${escapeHtml(cigarName(selectedItem.cigar))}</strong>
+          <span>${strengthBadge(selectedItem.cigar.strength)} ${formatCount(selectedItem.totalQuantity)} on hand</span>
+        </div>
+        <button type="button" class="secondary-button compact-button" data-change-quick-smoke>Change</button>
+      </div>
+      <form class="quick-smoke-form" data-quick-smoke-form>
+        <label class="form-field">
+          <span>Lot And Location</span>
+          <select name="sourceBalanceId" required>
+            ${balances.length > 1 ? '<option value="">Choose the exact Lot and location...</option>' : ''}
+            ${balances.map((balance) => `
+              <option value="${balance.balance.id}" data-received-date="${escapeHtml(displayDate(balance.oldestDate))}">
+                Lot ${escapeHtml(String(balance.lot?.id || 'Unknown'))} — ${escapeHtml(displayDate(balance.oldestDate) || 'Unknown date')} — ${escapeHtml(balance.locationLabel)} — ${formatCount(balance.quantity)} on hand
+              </option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="form-field">
+          <span>Smoke Date</span>
+          <input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required>
+          <small data-quick-smoke-date-help>Select a Lot to confirm its earliest valid smoke date.</small>
+        </label>
+        <p class="form-error quick-smoke-error" data-quick-smoke-error role="alert" tabindex="-1" hidden></p>
+        <div class="form-actions quick-smoke-actions">
+          <button type="submit" class="primary-button" data-quick-smoke-submit>Smoke 1 Cigar</button>
+          <button type="button" class="secondary-button" data-cancel-quick-smoke>Cancel</button>
+        </div>
+      </form>
+    `
+    selected.querySelector('[data-change-quick-smoke]').addEventListener('click', () => {
+      state.dashboardQuickSmokeCatalogId = null
+      render()
+    })
+    selected.querySelector('[data-cancel-quick-smoke]').addEventListener('click', () => {
+      state.dashboardQuickSmokeCatalogId = null
+      state.dashboardQuickSmokeSearch = ''
+      render()
+    })
+    const form = selected.querySelector('[data-quick-smoke-form]')
+    const balanceSelect = form.elements.sourceBalanceId
+    const eventDateInput = form.elements.eventDate
+    const dateHelp = form.querySelector('[data-quick-smoke-date-help]')
+    const updateDateBoundary = () => {
+      const selectedOption = balanceSelect.selectedOptions[0]
+      const receivedDate = String(selectedOption?.dataset.receivedDate || '')
+      eventDateInput.min = receivedDate
+      dateHelp.textContent = receivedDate
+        ? `Receipt date: ${displayDate(receivedDate)}. The smoke date cannot be earlier.`
+        : 'Select a Lot to confirm its earliest valid smoke date.'
+    }
+    balanceSelect.addEventListener('change', updateDateBoundary)
+    updateDateBoundary()
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const data = new FormData(form)
+      const balanceId = Number(data.get('sourceBalanceId') || 0)
+      const submitButton = form.querySelector('[data-quick-smoke-submit]')
+      const error = form.querySelector('[data-quick-smoke-error]')
+      error.hidden = true
+      error.textContent = ''
+      submitButton.disabled = true
+      submitButton.textContent = 'Smoking...'
+      try {
+        const result = await apiPost('/inventory/remove', {
+          sourceBalanceId: String(balanceId),
+          quantity: '1',
+          eventType: 'SMOKED',
+          eventDate: String(data.get('eventDate') || '').trim(),
+          notes: '',
+          idempotencyKey: removalIdempotencyKey(balanceId, 'SMOKED'),
+        })
+        clearRemovalIdempotencyKey(balanceId, 'SMOKED')
+        state.dashboardQuickSmokeSearch = ''
+        state.dashboardQuickSmokeCatalogId = null
+        state.pendingSmokingJournalEventId = Number(result.inventoryEventId || 0)
+        state.formError = null
+        await refreshCollections(['lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
+      } catch (requestError) {
+        state.formError = requestError.message
+        error.textContent = state.formError
+        error.hidden = false
+        error.focus({ preventScroll: true })
+        error.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        submitButton.disabled = false
+        submitButton.textContent = 'Smoke 1 Cigar'
+        return
+      }
+      render()
+    })
+    panel.append(selected)
+  }
+
+  return panel
+}
+
 function renderDashboard(view) {
   const current = currentCollectionMetrics(false)
   const enRouteQuantity = enRoutePurchaseQuantity()
@@ -3015,7 +3227,7 @@ function renderDashboard(view) {
   body.className = 'dashboard-body'
   const main = document.createElement('div')
   main.className = 'dashboard-main-grid'
-  main.append(humidorPanel)
+  main.append(renderDashboardQuickSmoke(), humidorPanel)
   if (preInventoryPanel) main.append(preInventoryPanel)
   const side = document.createElement('aside')
   side.className = 'dashboard-side-grid'
@@ -3027,6 +3239,7 @@ function renderDashboard(view) {
     button.addEventListener('click', () => navigateToPage(button.dataset.page))
   })
   view.append(shell)
+  renderPendingSmokingJournal(view)
 }
 
 function renderPendingSmokingJournal(view) {

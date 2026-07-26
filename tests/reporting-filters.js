@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.16.4
+ * Revision: 1.17.0
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, data completeness, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -74,6 +74,11 @@ const sortedCatalog = catalogRecordsForDisplay(records('catalog-cigars'))
 testAssert(sortedCatalog[0].manufacturer === 'Alpha' && sortedCatalog[1].manufacturer === 'Bravo', 'Catalog alphabetical sorting is incorrect.')
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').length === 1 && catalogRecordsForDisplay(records('catalog-cigars'), 'stock up')[0].id === 2, 'Catalog search did not match Buy Again notes.')
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
+const quickSmokeMatches = dashboardQuickSmokeItems('bravo')
+testAssert(quickSmokeMatches.length === 1 && quickSmokeMatches[0].cigar.id === 2 && quickSmokeMatches[0].totalQuantity === 3, 'Quick Smoke search did not return the matching positive on-hand cigar.')
+testAssert(dashboardQuickSmokeItems('').length === 0 && dashboardQuickSmokeItems('not present').length === 0, 'Quick Smoke search should not list cigars without a search match.')
+const quickSmokeBalances = dashboardQuickSmokeBalances(2)
+testAssert(quickSmokeBalances.length === 2 && quickSmokeBalances.every((balance) => balance.quantity > 0 && balance.cigar.id === 2), 'Quick Smoke Lot/location choices are incorrect.')
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
 const blankRatingScale = smokingJournalRatingScale()

@@ -1,6 +1,6 @@
 /*
  * Filename: app.css
- * Revision: 1.9.1
+ * Revision: 1.10.0
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
  * Modified Date: 2026-07-25
  */
@@ -393,6 +393,102 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 16px;
+}
+
+.quick-smoke-search {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+}
+
+.quick-smoke-results {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quick-smoke-result {
+  align-items: center;
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.quick-smoke-result:hover,
+.quick-smoke-result:focus-visible {
+  background: var(--accent-soft);
+  border-color: var(--line-strong);
+}
+
+.quick-smoke-result span {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.quick-smoke-more {
+  margin: 2px 0 0;
+}
+
+.quick-smoke-selected {
+  background: var(--panel-muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.quick-smoke-selected-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.quick-smoke-selected-heading > div,
+.quick-smoke-selected-heading span {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.quick-smoke-selected-heading > div {
+  display: grid;
+}
+
+.quick-smoke-selected-heading span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.quick-smoke-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(150px, 0.7fr);
+  margin-top: 12px;
+}
+
+.quick-smoke-form .form-field small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.quick-smoke-error,
+.quick-smoke-actions {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .compact-heading {
@@ -1622,6 +1718,40 @@ code {
   .journal-form-actions button {
     min-height: 44px;
     width: 100%;
+  }
+
+  .quick-smoke-search {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-smoke-search .form-field {
+    grid-column: 1 / -1;
+  }
+
+  .quick-smoke-search button,
+  .quick-smoke-actions button {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .quick-smoke-result {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .quick-smoke-form {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-smoke-form .form-field,
+  .quick-smoke-actions,
+  .quick-smoke-error {
+    grid-column: 1;
+  }
+
+  .quick-smoke-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .inline-select-row,

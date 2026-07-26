@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.6
+# Revision : 1.34.0
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.34.0 verify Dashboard Quick Smoke search, Lot/date selection, idempotency, and journal handoff
 # 1.33.6 verify tap-friendly Smoking Journal ratings, compact optional notes, and retained form errors
 # 1.33.5 verify mobile inventory-action context, touch sizing, cancellation, and inline errors
 # 1.33.4 verify authenticated read-only CSV export route and Backup page control hooks
@@ -459,6 +460,12 @@ foreach ($hiddenPage in @('Audit', 'Changelog', 'Todo', 'PurchaseLines')) {
 }
 foreach ($quantityHook in @('purchasedQuantityForPurchase', 'purchasedQuantityForCatalog', 'onHandQuantityForCatalog', 'Qty Purchased', 'On Hand')) {
     if ($appJs -notmatch [regex]::Escape($quantityHook)) { throw "Plain JavaScript app is missing quantity display hook: $quantityHook" }
+}
+foreach ($quickSmokeHook in @('function dashboardQuickSmokeItems', 'function dashboardQuickSmokeBalances', 'function renderDashboardQuickSmoke', 'Quick Smoke', 'Search On-Hand Cigars', 'data-quick-smoke-form', "quantity: '1'", "eventType: 'SMOKED'", "removalIdempotencyKey(balanceId, 'SMOKED')", 'pendingSmokingJournalEventId', 'renderPendingSmokingJournal(view)')) {
+    if ($appJs -notmatch [regex]::Escape($quickSmokeHook)) { throw "Dashboard Quick Smoke is missing hook: $quickSmokeHook" }
+}
+foreach ($quickSmokeCssHook in @('.quick-smoke-search', '.quick-smoke-result', '.quick-smoke-form', '.quick-smoke-actions')) {
+    if ($appCss -notmatch [regex]::Escape($quickSmokeCssHook)) { throw "Dashboard Quick Smoke styling is missing hook: $quickSmokeCssHook" }
 }
 foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'purchaseDraftLines', 'subtotal', 'showPurchaseCatalogCreate', 'purchasePrice', 'msrpPerCigar', 'storageSubLocationId', 'trueCostPerCigar', 'currentSavings', 'collectionSort', 'collectionSectionFilterId', 'inline-move-form', 'table-scroll', '/inventory/move', '/inventory/remove', 'inlineEdit: true')) {
     if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
