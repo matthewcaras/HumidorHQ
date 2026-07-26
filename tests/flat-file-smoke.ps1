@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.34.0
+# Revision : 1.34.1
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.34.1 verify Activity, Accounting Reconciliation, Data Completeness, and Saved Views ordering
 # 1.34.0 verify Dashboard Quick Smoke search, Lot/date selection, idempotency, and journal handoff
 # 1.33.6 verify tap-friendly Smoking Journal ratings, compact optional notes, and retained form errors
 # 1.33.5 verify mobile inventory-action context, touch sizing, cancellation, and inline errors
@@ -334,8 +335,9 @@ foreach ($csvExportHook in @('/exports/csv', 'Excel-Friendly Data Export', 'Down
 foreach ($dataCompletenessRatingHook in @("action: { type: 'journal'", "action.type === 'journal'", 'Add Rating', 'renderPendingSmokingJournal(view)')) {
     if ($appJs -notmatch [regex]::Escape($dataCompletenessRatingHook)) { throw "Data Completeness rating workflow is missing hook: $dataCompletenessRatingHook" }
 }
-if ($appJs -notmatch '(?s)view\.append\(activity\).*?renderDataCompletenessReport\(view\).*?view\.append\(savedViewBar\)') {
-    throw 'Data Completeness must render below Activity and above the bottom Reports Saved Views controls.'
+$reportTailOrderPattern = '(?s)view\.append\(activity\).*?renderAccountingReconciliationReport\(view\).*?renderDataCompletenessReport\(view\).*?view\.append\(savedViewBar\)'
+if ([regex]::Matches($appJs, $reportTailOrderPattern).Count -ne 2) {
+    throw 'Both Activity result paths must render Accounting Reconciliation, then Data Completeness, then the bottom Reports Saved Views controls.'
 }
 foreach ($importHook in @('function Resolve-ImportedInventoryPlacement', 'StageCurrentInventoryToPreInventory', 'Pre Inventory / General', 'manual reconciliation after import')) {
     if ((Get-Content -LiteralPath (Join-Path $repoRoot 'tools\import-rich-workbook.ps1') -Raw) -notmatch [regex]::Escape($importHook)) { throw "Workbook import staging is missing hook: $importHook" }

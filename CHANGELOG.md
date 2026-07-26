@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.39.0
+Revision: 1.39.1
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.39.1 - 2026-07-26
+
+Changed by: Matt
+
+- Moved Accounting Reconciliation below Activity and immediately above Data Completeness Exceptions on Reports.
+- Preserved the requested order when Activity has no matching rows as well as when it displays results.
+- Left all report calculations, filters, saved views, and runtime data unchanged.
+- Added an exact two-path report-order regression check.
 
 ## 1.39.0 - 2026-07-25
 

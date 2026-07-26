@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.33.0
+ * Revision: 1.33.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -8349,7 +8349,6 @@ function renderActivityReference(cell, event) {
 function renderReportsPage(view) {
   renderPendingSmokingJournal(view)
   renderInventoryAgingReport(view)
-  renderAccountingReconciliationReport(view)
   renderCollectionValuationReport(view)
   renderRatingBreakdownReport(view)
   renderConsumptionTrendsReport(view)
@@ -8532,6 +8531,7 @@ function renderReportsPage(view) {
     empty.innerHTML = '<p>No inventory events match the selected Activity filters.</p>'
     activityBody.append(empty)
     view.append(activity)
+    renderAccountingReconciliationReport(view)
     renderDataCompletenessReport(view)
     view.append(savedViewBar)
     return
@@ -8652,6 +8652,7 @@ function renderReportsPage(view) {
     activityBody.append(tableWrap)
 
   view.append(activity)
+  renderAccountingReconciliationReport(view)
   renderDataCompletenessReport(view)
   view.append(savedViewBar)
 }
