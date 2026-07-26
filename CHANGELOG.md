@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.36.1
+Revision: 1.36.2
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,16 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.36.2 - 2026-07-25
+
+Changed by: Matt
+
+- Added Edit Journal actions to effective rated smoke records in Removal History and the Catalog Journal.
+- Reused the centered Smoking Journal form with existing ratings, notes, and Buy Again values prefilled.
+- Kept reversed Smoking Journal history visible but non-editable in the UI.
+- Added an authoritative API conflict guard that rejects changes to a journal after its smoke event is reversed.
+- Added regression coverage proving journal corrections preserve purchases, Lots, balances, Inventory Events, and reversed history.
 
 ## 1.36.1 - 2026-07-25
 

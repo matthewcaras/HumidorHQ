@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.16.1
+ * Revision: 1.16.2
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, data completeness, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -76,6 +76,10 @@ testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').lengt
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
+state.pendingSmokingJournalEventId = null
+testAssert(openSmokingJournalForEvent(10, true) && state.pendingSmokingJournalEventId === 10, 'Existing effective Smoking Journal entry did not open for editing.')
+state.pendingSmokingJournalEventId = null
+testAssert(openSmokingJournalForEvent(999, true) === false && state.pendingSmokingJournalEventId === null, 'Missing Smoking Journal event incorrectly opened for editing.')
 let catalogJournalRows = smokingJournalHistoryRows(1)
 let catalogJournalMetrics = smokingJournalHistoryMetrics(catalogJournalRows)
 testAssert(catalogJournalRows.length === 2 && catalogJournalRows[0].event.id === 11 && catalogJournalRows[1].event.id === 10, 'Catalog Smoking Journal history is not ordered newest first.')
@@ -162,6 +166,7 @@ const reversedSmoke = { id: 13, eventType: 'REVERSAL', reversesInventoryEventId:
 state.records['inventory-events'].push(reversedSmoke)
 state.pendingSmokingJournalEventId = null
 testAssert(openDataCompletenessIssue(ratingCompletenessRow) === false && state.pendingSmokingJournalEventId === null, 'Data Completeness allowed a rating to be added to a reversed smoke.')
+testAssert(openSmokingJournalForEvent(10, true) === false && state.pendingSmokingJournalEventId === null, 'Reversed Smoking Journal history incorrectly opened for editing.')
 state.records['inventory-events'].pop()
 state.pendingSmokingJournalEventId = null
 state.activePage = 'Reports'

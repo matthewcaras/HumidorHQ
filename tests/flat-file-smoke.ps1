@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.2
+# Revision : 1.33.3
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.3 verify effective journal editing and reject changes to reversed smoke history
 # 1.33.2 verify journal-only updates preserve inventory history and Data Completeness rating actions
 # 1.33.1 pin isolated API timezone and reversal dates to UTC to avoid midnight-boundary test failures
 # 1.33.0 verify six-decimal allocated costs through receipt, movement, adjustment, and removal
@@ -367,6 +368,9 @@ foreach ($reportingHook in @('function renderPurchaseHistoryReport', 'function a
 }
 foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'function smokingJournalHistoryMetrics', 'function renderCatalogSmokingHistory', 'Journal Entries', 'Reversed — history retained', 'data-journal-catalog-id', 'journal?.notes', 'journal?.rating')) {
     if ($appJs -notmatch [regex]::Escape($journalHistoryHook)) { throw "Smoking Journal history visibility is missing hook: $journalHistoryHook" }
+}
+foreach ($journalEditHook in @('function openSmokingJournalForEvent', 'function wireSmokingJournalEditButtons', 'data-edit-smoking-journal-event-id', 'Edit Journal', 'Edit Smoking Journal', 'Save Changes', 'JOURNAL_EVENT_REVERSED')) {
+    if (($appJs + (Get-Content -LiteralPath (Join-Path $repoRoot 'api\lib\services\SmokingJournalService.php') -Raw)) -notmatch [regex]::Escape($journalEditHook)) { throw "Smoking Journal editing is missing hook: $journalEditHook" }
 }
 foreach ($mobileCatalogHook in @('catalog-records-table', '.responsive-table > tbody > tr.responsive-detail-row > td', 'max-width: none', 'border: 2px solid rgba(242, 182, 109, 0.48)')) {
     if ($appJs -notmatch [regex]::Escape($mobileCatalogHook) -and $appCss -notmatch [regex]::Escape($mobileCatalogHook)) { throw "Mobile Catalog presentation is missing hook: $mobileCatalogHook" }
@@ -1062,6 +1066,14 @@ try {
     $catalogAfterJournal = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Get -WebSession $session
     $updatedJournalCigar = @($catalogAfterJournal.data.records | Where-Object { $_.id -eq $createdCigar.data.id }) | Select-Object -First 1
     if ($updatedJournalCigar.buyAgainStatus -ne 'YES' -or $updatedJournalCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Catalog did not retain the Buy Again decision saved from Smoking Journal.' }
+    $journalCounterHash = (Get-FileHash -LiteralPath (Join-Path $testDataRoot 'counters.json') -Algorithm SHA256).Hash
+    $journalEdit = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body (@{ rating = 9; notes = 'corrected tasting notes' } | ConvertTo-Json) -WebSession $session
+    if ($journalEdit.data.journalEntry.id -ne $journal.data.journalEntry.id -or $journalEdit.data.journalEntry.createdAt -ne $journal.data.journalEntry.createdAt -or $journalEdit.data.journalEntry.rating -ne 9 -or $journalEdit.data.journalEntry.notes -ne 'corrected tasting notes') { throw 'Smoking Journal edit did not update the existing entry in place.' }
+    if ((Get-FileHash -LiteralPath (Join-Path $testDataRoot 'counters.json') -Algorithm SHA256).Hash -ne $journalCounterHash) { throw 'Smoking Journal edit incorrectly changed counters.' }
+    foreach ($filename in $journalProtectedFiles) {
+        $actualHash = (Get-FileHash -LiteralPath (Join-Path $testDataRoot $filename) -Algorithm SHA256).Hash
+        if ($actualHash -ne $journalProtectedHashes[$filename]) { throw "Smoking Journal edit modified protected inventory history: $filename" }
+    }
     $journalRecords = Invoke-RestMethod "http://127.0.0.1:$port/api/records/smoking-journal-entries" -Method Get -WebSession $session
     if (-not ($journalRecords.data.records | Where-Object { $_.inventoryEventId -eq $removed.data.inventoryEventId })) { throw 'Smoking Journal entry was not available to the read-only report collection.' }
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/records/purchase-lines/$($createdLine.data.id)" -Method Delete -Session $session -Body $null -StatusCode 409 -ErrorCode 'RECEIVED_INVENTORY_IMMUTABLE' | Out-Null
@@ -1089,6 +1101,9 @@ try {
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Rejected duplicate reversal'
     $journalAfterReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterReversal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Reversing a smoked event deleted or orphaned its Smoking Journal history.' }
+    $reversedJournalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 4; notes = 'must remain unchanged' } -StatusCode 409 -ErrorCode 'JOURNAL_EVENT_REVERSED' | Out-Null
+    Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $reversedJournalHashes -Context 'Rejected reversed Smoking Journal edit'
 
     $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
     $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'correct mistaken discard'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session

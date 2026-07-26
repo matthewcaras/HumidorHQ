@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.30.1
+ * Revision: 1.30.2
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -3016,7 +3016,7 @@ function renderPendingSmokingJournal(view) {
     return
   }
   const event = recordById('inventory-events', eventId)
-  if (!event || normalizeEventType(event.eventType) !== 'SMOKED') {
+  if (!event || normalizeEventType(event.eventType) !== 'SMOKED' || inventoryEventIsReversed(event)) {
     state.pendingSmokingJournalEventId = null
     return
   }
@@ -3026,13 +3026,13 @@ function renderPendingSmokingJournal(view) {
   panel.className = 'dashboard-panel'
   panel.tabIndex = -1
   panel.innerHTML = `
-    <div class="section-heading compact-heading"><div><h3>Smoking Journal</h3><p class="muted">Add a rating, tasting notes, and an optional Buy Again decision for the smoked cigar.</p></div></div>
+    <div class="section-heading compact-heading"><div><h3>${existing ? 'Edit Smoking Journal' : 'Smoking Journal'}</h3><p class="muted">${existing ? 'Correct the rating, tasting notes, or Buy Again decision without changing the smoke event.' : 'Add a rating, tasting notes, and an optional Buy Again decision for the smoked cigar.'}</p></div></div>
     <form class="record-form compact-top-gap" data-smoking-journal-form>
       <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
       <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
       <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === buyAgainDefaults.status ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
       <label class="form-field wide"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(buyAgainDefaults.notes)}</textarea></label>
-      <div class="form-actions"><button type="submit" class="primary-button">Save Journal Entry</button><button type="button" class="secondary-button" data-skip-journal>Skip</button></div>
+      <div class="form-actions"><button type="submit" class="primary-button">${existing ? 'Save Changes' : 'Save Journal Entry'}</button><button type="button" class="secondary-button" data-skip-journal>${existing ? 'Cancel' : 'Skip'}</button></div>
     </form>
   `
   const form = panel.querySelector('[data-smoking-journal-form]')
@@ -3062,6 +3062,24 @@ function renderPendingSmokingJournal(view) {
   window.requestAnimationFrame(() => {
     panel.scrollIntoView({ behavior: 'smooth', block: 'center' })
     panel.focus({ preventScroll: true })
+  })
+}
+
+function openSmokingJournalForEvent(eventId, requireExisting = false) {
+  const event = recordById('inventory-events', eventId)
+  if (!event || normalizeEventType(event.eventType) !== 'SMOKED' || inventoryEventIsReversed(event)) return false
+  if (requireExisting && !smokingJournalEntryForEvent(event.id)) return false
+  state.pendingSmokingJournalEventId = Number(event.id)
+  state.formError = null
+  if (typeof document !== 'undefined' && typeof render === 'function') render()
+  return true
+}
+
+function wireSmokingJournalEditButtons(container) {
+  container.querySelectorAll('[data-edit-smoking-journal-event-id]').forEach((button) => {
+    button.addEventListener('click', () => {
+      openSmokingJournalForEvent(Number(button.dataset.editSmokingJournalEventId), true)
+    })
   })
 }
 
@@ -3866,7 +3884,7 @@ function renderCatalogSmokingHistory(container, cigar) {
   tableWrap.className = 'table-scroll'
   tableWrap.innerHTML = `
     <table class="data-table smoking-journal-table">
-      <thead><tr><th>Date</th><th>Rating</th><th>Qty</th><th>Lot</th><th>Location</th><th>Journal Notes</th><th>Status</th></tr></thead>
+      <thead><tr><th>Date</th><th>Rating</th><th>Qty</th><th>Lot</th><th>Location</th><th>Journal Notes</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${rows.map((row) => `
         <tr>
           <td>${escapeHtml(row.date || '—')}</td>
@@ -3876,10 +3894,12 @@ function renderCatalogSmokingHistory(container, cigar) {
           <td>${escapeHtml(row.locationLabel || 'Unassigned')}</td>
           <td>${escapeHtml(row.journal.notes || '')}</td>
           <td>${row.reversed ? 'Reversed — history retained' : 'Effective'}</td>
+          <td>${row.reversed ? 'History Only' : `<button type="button" class="secondary-button compact-button" data-edit-smoking-journal-event-id="${Number(row.event.id)}">Edit Journal</button>`}</td>
         </tr>
       `).join('')}</tbody>
     </table>
   `
+  wireSmokingJournalEditButtons(tableWrap)
   container.append(tableWrap)
 }
 
@@ -5987,13 +6007,8 @@ function openDataCompletenessIssue(row) {
   const action = row?.action
   if (!action) return false
   if (action.type === 'journal') {
-    const event = recordById('inventory-events', action.inventoryEventId)
-    if (!event || normalizeEventType(event.eventType) !== 'SMOKED' || inventoryEventIsReversed(event)) return false
-    state.pendingSmokingJournalEventId = Number(event.id)
-    state.formError = null
     state.reportSectionState.dataCompleteness = true
-    if (typeof document !== 'undefined' && typeof render === 'function') render()
-    return true
+    return openSmokingJournalForEvent(action.inventoryEventId)
   }
   if (action.type === 'catalog') {
     const cigar = recordById('catalog-cigars', action.catalogCigarId)
@@ -6502,7 +6517,7 @@ function renderRemovalHistory(view) {
     const table = document.createElement('table')
     table.className = 'data-table'
     table.innerHTML = `
-      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th><th>Rating</th><th>Journal Notes</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th>Cigar</th><th>Location</th><th>Qty</th><th>Cost / Cigar</th><th>MSRP / Cigar</th><th>Rating</th><th>Journal Notes</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     `
     const tbody = table.querySelector('tbody')
@@ -6522,6 +6537,7 @@ function renderRemovalHistory(view) {
         <td>${escapeHtml(money(event.msrpPerCigarAtEvent))}</td>
         <td>${journal ? escapeHtml(String(journal.rating)) : '—'}</td>
         <td>${escapeHtml(journal?.notes || '')}</td>
+        <td>${normalizeEventType(event.eventType) === 'SMOKED' && journal ? `<button type="button" class="secondary-button compact-button" data-edit-smoking-journal-event-id="${Number(event.id)}">Edit Journal</button>` : '—'}</td>
       `
       tbody.append(row)
     })
@@ -6533,6 +6549,7 @@ function renderRemovalHistory(view) {
         navigateToPage('Catalog')
       })
     })
+    wireSmokingJournalEditButtons(table)
     tableWrap.append(table)
     body.append(tableWrap)
   }
@@ -8514,6 +8531,7 @@ function render() {
       ensurePageData(state.activePage).then(render).catch((error) => { state.error = error; render() })
       return
     }
+    if (managedPage.collection === 'catalog-cigars') renderPendingSmokingJournal(view)
     renderManagedTable(view, managedPage)
     if (!managedPage.inlineEdit || !state.editing[managedPage.collection]) {
       view.append(renderManagedForm(document.createElement('div'), managedPage))

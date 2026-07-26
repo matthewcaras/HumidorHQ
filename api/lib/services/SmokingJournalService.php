@@ -2,9 +2,9 @@
 declare(strict_types=1);
 /*
  * Filename: SmokingJournalService.php
- * Revision: 1.3.0
+ * Revision: 1.3.1
  * Description: PHP application source file for the HumidorHQ flat-file app.
- * Modified Date: 2026-07-19 17:00 ET
+ * Modified Date: 2026-07-25 21:40 ET
  */
 
 const JOURNAL_PROTECTED_BODY_FIELDS = [
@@ -41,6 +41,18 @@ function smoking_journal_find_event(int $inventoryEventId): array
         journal_error('JOURNAL_EVENT_NOT_SMOKED', 'Smoking Journal entries can only be attached to smoked events.', 409);
     }
     return $event;
+}
+
+function smoking_journal_event_is_reversed(int $inventoryEventId): bool
+{
+    foreach (load_collection('inventory-events') as $event) {
+        if (is_array($event)
+            && ($event['eventType'] ?? null) === 'REVERSAL'
+            && (int) ($event['reversesInventoryEventId'] ?? 0) === $inventoryEventId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function smoking_journal_parse_input(array $input): array
@@ -182,6 +194,9 @@ function upsert_smoking_journal(int $inventoryEventId, array $input): array
         return with_data_transaction(static fn (): array => upsert_smoking_journal($inventoryEventId, $input));
     }
     $event = smoking_journal_find_event($inventoryEventId);
+    if (smoking_journal_event_is_reversed($inventoryEventId)) {
+        journal_error('JOURNAL_EVENT_REVERSED', 'A preserved Smoking Journal entry cannot be changed after its smoke event is reversed.', 409);
+    }
     $data = smoking_journal_parse_input($input);
     $now = now_iso();
     $entry = upsert_by_field(
