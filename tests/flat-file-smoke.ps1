@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.0
+# Revision : 1.33.1
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.1 pin isolated API timezone and reversal dates to UTC to avoid midnight-boundary test failures
 # 1.33.0 verify six-decimal allocated costs through receipt, movement, adjustment, and removal
 # 1.32.31 derive JavaScript and CSS cache-bust expectations from source metadata
 # 1.32.30 align smoke test cache-bust pin with app.js 1.24.34 and verify catalog average rating rendering
@@ -492,9 +493,12 @@ $serverOutLog = Join-Path $testRoot 'php.out.log'
 $serverErrLog = Join-Path $testRoot 'php.err.log'
 $phpArgs = "-S 127.0.0.1:$port -t `"$repoRoot`""
 $previousDataRoot = $env:HUMIDORHQ_DATA_ROOT
+$previousTimezone = $env:HUMIDORHQ_TIMEZONE
 $env:HUMIDORHQ_DATA_ROOT = $testDataRoot
+$env:HUMIDORHQ_TIMEZONE = 'UTC'
 $process = Start-Process -FilePath $php -ArgumentList $phpArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
 $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
+$env:HUMIDORHQ_TIMEZONE = $previousTimezone
 $testFailure = $null
 try {
     Start-Sleep -Milliseconds 700
@@ -955,7 +959,7 @@ try {
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory/adjust-count" -Method Post -Session $session -Body $adjustmentConflict -StatusCode 409 -ErrorCode 'ADJUSTMENT_IDEMPOTENCY_CONFLICT' | Out-Null
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $decreaseAdjustmentHashes -Context 'Conflicting physical-count adjustment replay'
 
-    $adjustmentReversalDate = Get-Date -Format 'yyyy-MM-dd'
+    $adjustmentReversalDate = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
     $decreaseReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($decreaseAdjustment.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $adjustmentReversalDate; notes = 'correct count entry'; idempotencyKey = 'reversal-adjust-down-test-001' } | ConvertTo-Json) -WebSession $session
     if ($decreaseReversal.data.reversedEventType -ne 'INVENTORY_ADJUSTMENT') { throw 'Downward adjustment reversal did not create a compensating event.' }
 
@@ -1048,15 +1052,15 @@ try {
     $journalAfterBlockedDelete = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterBlockedDelete.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Blocked purchase-line deletion orphaned or removed its Smoking Journal entry.' }
 
-    $currentLocalDate = Get-Date -Format 'yyyy-MM-dd'
+    $currentTestDate = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
     $blockedReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
-    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'destination quantity unavailable'; idempotencyKey = 'reversal-move-blocked-quantity-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
-    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'receipt quantity unavailable'; idempotencyKey = 'reversal-receipt-blocked-qty-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentTestDate; notes = 'destination quantity unavailable'; idempotencyKey = 'reversal-move-blocked-quantity-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentTestDate; notes = 'receipt quantity unavailable'; idempotencyKey = 'reversal-receipt-blocked-qty-1' } -StatusCode 409 -ErrorCode 'REVERSAL_QUANTITY_UNAVAILABLE' | Out-Null
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = '2026-07-16'; notes = 'too early'; idempotencyKey = 'reversal-smoke-early-date-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
-    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = ''; idempotencyKey = 'reversal-smoke-no-reason-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentTestDate; notes = ''; idempotencyKey = 'reversal-smoke-no-reason-001' } -StatusCode 422 -ErrorCode 'VALIDATION_ERROR' | Out-Null
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $blockedReversalHashes -Context 'Rejected unavailable or invalid reversals'
 
-    $smokeReversalBody = @{ eventDate = $currentLocalDate; notes = 'correct mistaken smoke'; idempotencyKey = 'reversal-smoke-test-valid-001' }
+    $smokeReversalBody = @{ eventDate = $currentTestDate; notes = 'correct mistaken smoke'; idempotencyKey = 'reversal-smoke-test-valid-001' }
     $smokeReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body ($smokeReversalBody | ConvertTo-Json) -WebSession $session
     if ($smokeReversal.data.reversedEventType -ne 'SMOKED' -or $smokeReversal.data.quantityReversed -ne 1 -or $smokeReversal.data.idempotentReplay -ne $false) { throw 'Smoked-event reversal did not return the expected compensating event.' }
     $smokeReversalHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
@@ -1065,21 +1069,21 @@ try {
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Exact reversal replay'
     $reversalConflict = $smokeReversalBody.Clone(); $reversalConflict.notes = 'different reversal request'
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body $reversalConflict -StatusCode 409 -ErrorCode 'REVERSAL_IDEMPOTENCY_CONFLICT' | Out-Null
-    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentLocalDate; notes = 'second reversal'; idempotencyKey = 'reversal-smoke-second-key-002' } -StatusCode 409 -ErrorCode 'EVENT_ALREADY_REVERSED' | Out-Null
+    Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/reverse" -Method Post -Session $session -Body @{ eventDate = $currentTestDate; notes = 'second reversal'; idempotencyKey = 'reversal-smoke-second-key-002' } -StatusCode 409 -ErrorCode 'EVENT_ALREADY_REVERSED' | Out-Null
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $smokeReversalHashes -Context 'Rejected duplicate reversal'
     $journalAfterReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Get -WebSession $session
     if ($journalAfterReversal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Reversing a smoked event deleted or orphaned its Smoking Journal history.' }
 
-    $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
-    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken discard'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    $giftReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($giftedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'correct mistaken gift'; idempotencyKey = 'reversal-gift-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    $discardReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($discardedRemoval.data.inventoryEventId)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'correct mistaken discard'; idempotencyKey = 'reversal-discard-test-valid-01' } | ConvertTo-Json) -WebSession $session
     if ($giftReversal.data.reversedEventType -ne 'GIFTED' -or $discardReversal.data.reversedEventType -ne 'DISCARDED') { throw 'Gift or discard reversal did not preserve the reversed event type.' }
 
-    $moveReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'correct mistaken move'; idempotencyKey = 'reversal-move-test-valid-0001' } | ConvertTo-Json) -WebSession $session
+    $moveReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($moveEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'correct mistaken move'; idempotencyKey = 'reversal-move-test-valid-0001' } | ConvertTo-Json) -WebSession $session
     if ($moveReversal.data.reversedEventType -ne 'MOVE') { throw 'Move reversal did not create a compensating event.' }
     $balancesAfterOperationalReversals = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'lot-location-balances.json') | ConvertFrom-Json) | Where-Object { $_.lotId -eq $linkedLot.id })
     if (($balancesAfterOperationalReversals | Measure-Object -Property quantity -Sum).Sum -ne 5 -or $balancesAfterOperationalReversals.Count -ne 1 -or $balancesAfterOperationalReversals[0].storageSubLocationId -ne $createdSection.data.id) { throw 'Removal and move reversals did not restore the exact original inventory state.' }
 
-    $receiptReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentLocalDate; notes = 'replace incorrect receipt'; idempotencyKey = 'reversal-receipt-test-valid-01' } | ConvertTo-Json) -WebSession $session
+    $receiptReversal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($linkedEvent.id)/reverse" -Method Post -ContentType 'application/json' -Body (@{ eventDate = $currentTestDate; notes = 'replace incorrect receipt'; idempotencyKey = 'reversal-receipt-test-valid-01' } | ConvertTo-Json) -WebSession $session
     if ($receiptReversal.data.reversedEventType -ne 'PURCHASE_RECEIPT') { throw 'Receipt reversal did not create a compensating event.' }
     $purchaseAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchases.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdPurchase.data.id } | Select-Object -First 1
     $lineAfterReceiptReversal = @((Get-Content -Raw -LiteralPath (Join-Path $testDataRoot 'purchase-lines.json') | ConvertFrom-Json)) | Where-Object { $_.id -eq $createdLine.data.id } | Select-Object -First 1
@@ -1188,6 +1192,7 @@ try {
 } finally {
     if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
     $env:HUMIDORHQ_DATA_ROOT = $previousDataRoot
+    $env:HUMIDORHQ_TIMEZONE = $previousTimezone
     try {
         Assert-RepositoryDataHashes -Expected $sourceDataHashes
     } catch {

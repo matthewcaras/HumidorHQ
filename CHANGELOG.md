@@ -31,6 +31,7 @@ Changed by: Matt
 - Added reconciled removal cost, average cost, and two-decimal smoking rating metrics while keeping unknown money explicit.
 - Resolved authoritative removal cost through the linked Lot when an event does not directly store its purchase-line id.
 - Added Removal History drill-through, formula-safe CSV export, reversed-event exclusion, and locally saved Reports-view support.
+- Made the isolated smoke-test timezone deterministic so reversal validation cannot fail at a UTC/local midnight boundary.
 
 ## 1.34.0 - 2026-07-25
 
