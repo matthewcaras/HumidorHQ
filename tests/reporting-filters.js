@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.16.3
+ * Revision: 1.16.4
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, data completeness, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -76,6 +76,10 @@ testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'stock up').lengt
 testAssert(catalogRecordsForDisplay(records('catalog-cigars'), 'connecticut')[0].id === 1, 'Catalog search did not match cigar attributes.')
 const journalDefaults = smokingJournalBuyAgainDefaults({ lotId: 2 })
 testAssert(journalDefaults.status === 'YES' && journalDefaults.notes === 'Stock up', 'Smoking Journal did not default to the Catalog Buy Again decision.')
+const blankRatingScale = smokingJournalRatingScale()
+const selectedRatingScale = smokingJournalRatingScale(8)
+testAssert(blankRatingScale.length === 10 && blankRatingScale.every((rating, index) => rating.value === index + 1 && !rating.selected), 'Smoking Journal blank rating scale is incorrect.')
+testAssert(selectedRatingScale.filter((rating) => rating.selected).length === 1 && selectedRatingScale[7].selected, 'Smoking Journal rating scale did not preserve an existing rating.')
 state.pendingSmokingJournalEventId = null
 testAssert(openSmokingJournalForEvent(10, true) && state.pendingSmokingJournalEventId === 10, 'Existing effective Smoking Journal entry did not open for editing.')
 state.pendingSmokingJournalEventId = null

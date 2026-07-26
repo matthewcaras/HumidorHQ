@@ -1,6 +1,6 @@
 /*
  * Filename: app.css
- * Revision: 1.9.0
+ * Revision: 1.9.1
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
  * Modified Date: 2026-07-25
  */
@@ -1238,6 +1238,103 @@ h3 {
   white-space: normal;
 }
 
+.smoking-journal-form {
+  display: grid;
+  gap: 14px;
+}
+
+.journal-rating-fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.journal-rating-fieldset legend {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.journal-rating-fieldset > small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 7px;
+}
+
+.journal-rating-scale {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(10, minmax(38px, 1fr));
+}
+
+.journal-rating-choice {
+  cursor: pointer;
+  position: relative;
+}
+
+.journal-rating-choice input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.journal-rating-choice span {
+  align-items: center;
+  background: #17100d;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  display: flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.journal-rating-choice:hover span {
+  border-color: var(--line-strong);
+}
+
+.journal-rating-choice input:checked + span {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: #1a120e;
+}
+
+.journal-rating-choice input:focus-visible + span {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.journal-optional-fields {
+  background: var(--panel-muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.journal-optional-fields summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 44px;
+  padding: 11px 12px;
+}
+
+.journal-optional-grid {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+}
+
+.journal-form-error {
+  margin: 0;
+}
+
 
 .hidden-page-tools {
   display: flex;
@@ -1505,6 +1602,24 @@ code {
   }
 
   .inventory-action-form-actions button {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .journal-rating-scale {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+  }
+
+  .journal-optional-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .journal-form-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .journal-form-actions button {
     min-height: 44px;
     width: 100%;
   }

@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.38.0
+Revision: 1.38.1
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,17 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.38.1 - 2026-07-25
+
+Changed by: Matt
+
+- Replaced the Smoking Journal numeric rating field with tap-friendly 1–10 choices that preserve existing ratings while editing.
+- Kept the current Catalog Buy Again decision as the default and made it available directly beneath the rating.
+- Moved tasting and Buy Again notes into a compact optional section that automatically opens when an existing journal has tasting notes.
+- Added cigar, smoke-date, and Lot context to the journal heading.
+- Kept rejected saves open with their unsaved inputs and an inline validation message instead of rerendering the form.
+- Added mobile two-row rating controls, larger touch targets, responsive optional fields, and focused regression coverage.
 
 ## 1.38.0 - 2026-07-25
 

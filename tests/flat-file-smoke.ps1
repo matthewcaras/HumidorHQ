@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.5
+# Revision : 1.33.6
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.6 verify tap-friendly Smoking Journal ratings, compact optional notes, and retained form errors
 # 1.33.5 verify mobile inventory-action context, touch sizing, cancellation, and inline errors
 # 1.33.4 verify authenticated read-only CSV export route and Backup page control hooks
 # 1.33.3 verify effective journal editing and reject changes to reversed smoke history
@@ -377,6 +378,12 @@ foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'functio
 }
 foreach ($journalEditHook in @('function openSmokingJournalForEvent', 'function wireSmokingJournalEditButtons', 'data-edit-smoking-journal-event-id', 'Edit Journal', 'Edit Smoking Journal', 'Save Changes', 'JOURNAL_EVENT_REVERSED')) {
     if (($appJs + (Get-Content -LiteralPath (Join-Path $repoRoot 'api\lib\services\SmokingJournalService.php') -Raw)) -notmatch [regex]::Escape($journalEditHook)) { throw "Smoking Journal editing is missing hook: $journalEditHook" }
+}
+foreach ($mobileJournalHook in @('function smokingJournalRatingScale', 'journal-rating-scale', 'journal-rating-choice', 'type="radio" name="rating"', 'Optional tasting and Buy Again notes', 'data-journal-form-error', 'Skip for Now')) {
+    if ($appJs -notmatch [regex]::Escape($mobileJournalHook)) { throw "Mobile Smoking Journal entry is missing hook: $mobileJournalHook" }
+}
+foreach ($mobileJournalCssHook in @('.journal-rating-scale', 'repeat(5, minmax(44px, 1fr))', '.journal-optional-fields', '.journal-form-actions')) {
+    if ($appCss -notmatch [regex]::Escape($mobileJournalCssHook)) { throw "Mobile Smoking Journal styling is missing hook: $mobileJournalCssHook" }
 }
 foreach ($mobileCatalogHook in @('catalog-records-table', '.responsive-table > tbody > tr.responsive-detail-row > td', 'max-width: none', 'border: 2px solid rgba(242, 182, 109, 0.48)')) {
     if ($appJs -notmatch [regex]::Escape($mobileCatalogHook) -and $appCss -notmatch [regex]::Escape($mobileCatalogHook)) { throw "Mobile Catalog presentation is missing hook: $mobileCatalogHook" }

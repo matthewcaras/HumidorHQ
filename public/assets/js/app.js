@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.32.0
+ * Revision: 1.32.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -2640,6 +2640,14 @@ function smokingJournalAverageRatingForCatalogCigar(catalogCigarId) {
   return smokingJournalHistoryMetrics(smokingJournalHistoryRows(catalogCigarId)).averageRating
 }
 
+function smokingJournalRatingScale(selectedRating = null) {
+  const selected = Number(selectedRating || 0)
+  return Array.from({ length: 10 }, (_, index) => {
+    const value = index + 1
+    return { value, selected: value === selected }
+  })
+}
+
 function cigarOriginLabel(cigar) {
   return String(cigar?.country || cigar?.origin || '').trim() || 'Unknown Origin'
 }
@@ -3033,17 +3041,40 @@ function renderPendingSmokingJournal(view) {
   }
   const existing = smokingJournalEntryForEvent(eventId)
   const buyAgainDefaults = smokingJournalBuyAgainDefaults(event)
+  const details = removalEventDetails(event)
+  const journalContext = [
+    details.cigarLabel,
+    removalEventDate(event) ? `Smoked ${displayDate(removalEventDate(event))}` : '',
+    event.lotId ? `Lot ${event.lotId}` : '',
+  ].filter(Boolean).join(' • ')
   const panel = document.createElement('section')
-  panel.className = 'dashboard-panel'
+  panel.className = 'dashboard-panel smoking-journal-panel'
   panel.tabIndex = -1
   panel.innerHTML = `
-    <div class="section-heading compact-heading"><div><h3>${existing ? 'Edit Smoking Journal' : 'Smoking Journal'}</h3><p class="muted">${existing ? 'Correct the rating, tasting notes, or Buy Again decision without changing the smoke event.' : 'Add a rating, tasting notes, and an optional Buy Again decision for the smoked cigar.'}</p></div></div>
-    <form class="record-form compact-top-gap" data-smoking-journal-form>
-      <label class="form-field"><span>Rating (1-10)</span><input name="rating" type="number" min="1" max="10" step="1" value="${escapeHtml(existing?.rating || '')}" required></label>
-      <label class="form-field wide"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
+    <div class="section-heading compact-heading"><div><h3>${existing ? 'Edit Smoking Journal' : 'Smoking Journal'}</h3><p class="muted">${escapeHtml(journalContext || 'Rate the smoked cigar and update its Buy Again decision.')}</p></div></div>
+    <form class="record-form compact-top-gap smoking-journal-form" data-smoking-journal-form>
+      <fieldset class="journal-rating-fieldset">
+        <legend>Rating</legend>
+        <div class="journal-rating-scale" role="radiogroup" aria-describedby="journal-rating-help">
+          ${smokingJournalRatingScale(existing?.rating).map((rating) => `
+            <label class="journal-rating-choice">
+              <input type="radio" name="rating" value="${rating.value}"${rating.selected ? ' checked' : ''} required>
+              <span>${rating.value}</span>
+            </label>
+          `).join('')}
+        </div>
+        <small id="journal-rating-help">1 = Poor &bull; 10 = Exceptional</small>
+      </fieldset>
       <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === buyAgainDefaults.status ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
-      <label class="form-field wide"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(buyAgainDefaults.notes)}</textarea></label>
-      <div class="form-actions"><button type="submit" class="primary-button">${existing ? 'Save Changes' : 'Save Journal Entry'}</button><button type="button" class="secondary-button" data-skip-journal>${existing ? 'Cancel' : 'Skip'}</button></div>
+      <details class="journal-optional-fields"${existing?.notes ? ' open' : ''}>
+        <summary>Optional tasting and Buy Again notes</summary>
+        <div class="journal-optional-grid">
+          <label class="form-field"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
+          <label class="form-field"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(buyAgainDefaults.notes)}</textarea></label>
+        </div>
+      </details>
+      <p class="form-error journal-form-error" data-journal-form-error role="alert" tabindex="-1" hidden></p>
+      <div class="form-actions journal-form-actions"><button type="submit" class="primary-button">${existing ? 'Save Changes' : 'Save Journal Entry'}</button><button type="button" class="secondary-button" data-skip-journal>${existing ? 'Cancel' : 'Skip for Now'}</button></div>
     </form>
   `
   const form = panel.querySelector('[data-smoking-journal-form]')
@@ -3062,6 +3093,12 @@ function renderPendingSmokingJournal(view) {
       await refreshCollections(['smoking-journal-entries', 'catalog-cigars'])
     } catch (error) {
       state.formError = error.message
+      const formError = form.querySelector('[data-journal-form-error]')
+      formError.textContent = state.formError
+      formError.hidden = false
+      formError.focus({ preventScroll: true })
+      formError.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
     }
     render()
   })
