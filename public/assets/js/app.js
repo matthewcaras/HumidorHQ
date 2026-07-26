@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.31.0
+ * Revision: 1.32.0
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -3099,6 +3099,52 @@ function toggleCollectionCigarSelection(cigarId) {
   state.selectedCollectionCigarId = Number(state.selectedCollectionCigarId || 0) === normalizedCigarId ? null : normalizedCigarId
 }
 
+function closeCollectionActionForms(table, exceptForm = null) {
+  if (!exceptForm) {
+    state.formError = null
+  }
+  table.querySelectorAll('form[data-collection-action-form]').forEach((form) => {
+    const keepOpen = form === exceptForm
+    form.classList.toggle('is-open', keepOpen)
+    if (!keepOpen) {
+      const error = form.querySelector('[data-collection-action-error]')
+      if (error) {
+        error.hidden = true
+        error.textContent = ''
+      }
+    }
+  })
+  table.querySelectorAll('button[data-collection-action-button]').forEach((button) => {
+    button.setAttribute('aria-expanded', 'false')
+  })
+}
+
+function openCollectionActionForm(table, form, triggerButton) {
+  if (!form) return
+  const wasOpen = form.classList.contains('is-open')
+  state.formError = null
+  closeCollectionActionForms(table, wasOpen ? null : form)
+  if (wasOpen) return
+  triggerButton?.setAttribute('aria-expanded', 'true')
+  window.requestAnimationFrame(() => {
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    form.querySelector('input:not([type="hidden"]):not([readonly]), select, textarea')?.focus({ preventScroll: true })
+  })
+}
+
+function showCollectionActionError(form, message) {
+  state.formError = String(message || 'The action could not be completed.')
+  const error = form.querySelector('[data-collection-action-error]')
+  if (error) {
+    error.textContent = state.formError
+    error.hidden = false
+  }
+  window.requestAnimationFrame(() => {
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    error?.focus({ preventScroll: true })
+  })
+}
+
 function renderCollectionPage(view) {
   const metrics = currentCollectionMetrics()
   const items = sortCollectionItems(metrics.items)
@@ -3453,30 +3499,41 @@ function renderCollectionPage(view) {
                     </td>
                     <td>${escapeHtml(money(balance.costPerCigar))}</td>
                     <td>${escapeHtml(money(balance.msrpPerCigar))}</td>
-                    <td>
+                    <td class="collection-actions-cell">
                       <div class="inline-action-stack">
                         <div class="inline-action-buttons">
-                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="SMOKED">Smoke</button>
-                          <button type="button" class="secondary-button compact-button" data-move-toggle-id="${balance.balance.id}">Move</button>
-                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED">Give</button>
-                          <button type="button" class="secondary-button compact-button" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED">Discard</button>
-                          ${balanceAllowsCountReconciliation(balance) ? `<button type="button" class="secondary-button compact-button" data-adjustment-toggle-id="${balance.balance.id}">Reconcile Count</button>` : ''}
+                          <button type="button" class="secondary-button compact-button" data-collection-action-button data-collection-action-target="form[data-removal-form='${balance.balance.id}']" data-remove-balance-id="${balance.balance.id}" data-remove-type="SMOKED" aria-expanded="false">Smoke</button>
+                          <button type="button" class="secondary-button compact-button" data-collection-action-button data-collection-action-target="form[data-move-balance-id='${balance.balance.id}']" data-move-toggle-id="${balance.balance.id}" aria-expanded="false">Move</button>
+                          <button type="button" class="secondary-button compact-button" data-collection-action-button data-collection-action-target="form[data-removal-form='${balance.balance.id}']" data-remove-balance-id="${balance.balance.id}" data-remove-type="GIFTED" aria-expanded="false">Give</button>
+                          <button type="button" class="secondary-button compact-button" data-collection-action-button data-collection-action-target="form[data-removal-form='${balance.balance.id}']" data-remove-balance-id="${balance.balance.id}" data-remove-type="DISCARDED" aria-expanded="false">Discard</button>
+                          ${balanceAllowsCountReconciliation(balance) ? `<button type="button" class="secondary-button compact-button" data-collection-action-button data-collection-action-target="form[data-adjustment-form='${balance.balance.id}']" data-adjustment-toggle-id="${balance.balance.id}" aria-expanded="false">Reconcile Count</button>` : ''}
                         </div>
-                        <form class="inline-move-form" data-removal-form="${balance.balance.id}">
+                        <form class="inline-move-form inventory-action-form" data-collection-action-form data-removal-form="${balance.balance.id}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <input type="hidden" name="eventType" value="">
                           <input type="hidden" name="idempotencyKey" value="">
-                          <label class="form-field"><span>Qty</span><input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="1" required></label>
-                          <label class="form-field"><span>Event Date</span><input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
-                          <label class="form-field wide"><span>Notes</span><textarea name="notes" rows="2"></textarea></label>
-                          <button type="submit" class="primary-button compact-button" data-removal-submit>Confirm Removal</button>
-                          <button type="button" class="secondary-button compact-button" data-cancel-removal>Cancel</button>
+                          <div class="inventory-action-heading">
+                            <h4 data-removal-heading>Remove Cigar</h4>
+                            <p>${escapeHtml(cigarName(item.cigar))} &bull; Lot ${escapeHtml(String(balance.lot?.id || 'Unknown'))} &bull; ${escapeHtml(balance.locationLabel)} &bull; ${formatCount(balance.quantity)} available</p>
+                          </div>
+                          <label class="form-field"><span>Quantity</span><input name="quantity" type="number" inputmode="numeric" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="1" required></label>
+                          <label class="form-field"><span>Event Date</span><input name="eventDate" type="date" min="${escapeHtml(displayDate(balance.oldestDate))}" max="${todayIsoDate()}" value="${todayIsoDate()}" required><small>${balance.oldestDate ? `Receipt date: ${escapeHtml(displayDate(balance.oldestDate))}` : 'Receipt date unavailable'}</small></label>
+                          <label class="form-field wide"><span>Notes (Optional)</span><textarea name="notes" rows="2"></textarea></label>
+                          <p class="form-error inventory-action-error" data-collection-action-error role="alert" tabindex="-1" hidden></p>
+                          <div class="inventory-action-form-actions">
+                            <button type="submit" class="primary-button compact-button" data-removal-submit>Confirm Removal</button>
+                            <button type="button" class="secondary-button compact-button" data-cancel-removal>Cancel</button>
+                          </div>
                         </form>
-                        <form class="inline-move-form" data-move-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
+                        <form class="inline-move-form inventory-action-form" data-collection-action-form data-move-balance-id="${balance.balance.id}" data-current-location-id="${balance.balance.storageLocationId || ''}" data-current-section-id="${balance.balance.storageSubLocationId || ''}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
+                          <div class="inventory-action-heading">
+                            <h4>Move Cigar</h4>
+                            <p>${escapeHtml(cigarName(item.cigar))} &bull; Lot ${escapeHtml(String(balance.lot?.id || 'Unknown'))} &bull; from ${escapeHtml(balance.locationLabel)} &bull; ${formatCount(balance.quantity)} available</p>
+                          </div>
                           <label class="form-field">
-                            <span>Qty</span>
-                            <input name="quantity" type="number" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="${Math.max(1, Number(balance.quantity || 1))}" required>
+                            <span>Quantity</span>
+                            <input name="quantity" type="number" inputmode="numeric" min="1" max="${Math.max(1, Number(balance.quantity || 1))}" step="1" value="${Math.max(1, Number(balance.quantity || 1))}" required>
                           </label>
                           <label class="form-field">
                             <span>Humidor</span>
@@ -3492,18 +3549,29 @@ function renderCollectionPage(view) {
                             </select>
                           </label>
                           <input type="hidden" name="cigarName" value="${escapeHtml(cigarName(item.cigar))}">
-                          <button type="submit" class="primary-button compact-button">Confirm Move</button>
+                          <p class="form-error inventory-action-error" data-collection-action-error role="alert" tabindex="-1" hidden></p>
+                          <div class="inventory-action-form-actions">
+                            <button type="submit" class="primary-button compact-button">Confirm Move</button>
+                            <button type="button" class="secondary-button compact-button" data-cancel-move>Cancel</button>
+                          </div>
                         </form>
-                        <form class="inline-move-form" data-adjustment-form="${balance.balance.id}">
+                        <form class="inline-move-form inventory-action-form" data-collection-action-form data-adjustment-form="${balance.balance.id}">
                           <input type="hidden" name="sourceBalanceId" value="${balance.balance.id}">
                           <input type="hidden" name="expectedQuantity" value="${balance.quantity}">
+                          <div class="inventory-action-heading">
+                            <h4>Reconcile Physical Count</h4>
+                            <p>${escapeHtml(cigarName(item.cigar))} &bull; Lot ${escapeHtml(String(balance.lot?.id || 'Unknown'))} &bull; ${escapeHtml(balance.locationLabel)}</p>
+                          </div>
                           <label class="form-field"><span>Expected Quantity</span><input type="number" value="${balance.quantity}" readonly></label>
                           <label class="form-field"><span>Physical Count</span><input name="countedQuantity" type="number" min="0" step="1" value="${balance.quantity}" required></label>
                           <label class="form-field"><span>Variance</span><input data-adjustment-variance value="0" readonly></label>
                           <label class="form-field"><span>Count Date</span><input name="eventDate" type="date" max="${todayIsoDate()}" value="${todayIsoDate()}" required></label>
                           <label class="form-field wide"><span>Adjustment Reason</span><textarea name="notes" rows="2" required></textarea></label>
-                          <button type="submit" class="primary-button compact-button" data-adjustment-submit disabled>Confirm Adjustment</button>
-                          <button type="button" class="secondary-button compact-button" data-cancel-adjustment>Cancel</button>
+                          <p class="form-error inventory-action-error" data-collection-action-error role="alert" tabindex="-1" hidden></p>
+                          <div class="inventory-action-form-actions">
+                            <button type="submit" class="primary-button compact-button" data-adjustment-submit disabled>Confirm Adjustment</button>
+                            <button type="button" class="secondary-button compact-button" data-cancel-adjustment>Cancel</button>
+                          </div>
                         </form>
                       </div>
                     </td>
@@ -3532,14 +3600,20 @@ function renderCollectionPage(view) {
       if (!form) {
         return
       }
+      const previousType = normalizeEventType(form.elements.eventType.value)
+      const switchRemovalType = form.classList.contains('is-open') && previousType && previousType !== type
+      if (switchRemovalType) {
+        closeCollectionActionForms(table)
+      }
       form.elements.eventType.value = type
       form.elements.idempotencyKey.value = removalIdempotencyKey(balanceId, type)
+      form.querySelector('[data-removal-heading]').textContent = `${removalActionLabel(type)} Cigar`
       form.querySelector('[data-removal-submit]').textContent = `Confirm ${removalActionLabel(type)}`
-      table.querySelectorAll('form[data-removal-form]').forEach((otherForm) => otherForm.classList.toggle('is-open', otherForm === form))
+      openCollectionActionForm(table, form, button)
     })
   })
   table.querySelectorAll('form[data-removal-form]').forEach((form) => {
-    form.querySelector('[data-cancel-removal]').addEventListener('click', () => form.classList.remove('is-open'))
+    form.querySelector('[data-cancel-removal]').addEventListener('click', () => closeCollectionActionForms(table))
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
       const data = new FormData(form)
@@ -3561,7 +3635,8 @@ function renderCollectionPage(view) {
         state.formError = null
         await refreshCollections(['lot-location-balances', 'inventory-events', 'smoking-journal-entries'])
       } catch (error) {
-        state.formError = error.message
+        showCollectionActionError(form, error.message)
+        return
       }
       render()
     })
@@ -3569,13 +3644,13 @@ function renderCollectionPage(view) {
   table.querySelectorAll('button[data-move-toggle-id]').forEach((button) => {
     button.addEventListener('click', () => {
       const form = table.querySelector(`form[data-move-balance-id="${button.dataset.moveToggleId}"]`)
-      form?.classList.toggle('is-open')
+      openCollectionActionForm(table, form, button)
     })
   })
   table.querySelectorAll('button[data-adjustment-toggle-id]').forEach((button) => {
     button.addEventListener('click', () => {
       const form = table.querySelector(`form[data-adjustment-form="${button.dataset.adjustmentToggleId}"]`)
-      form?.classList.toggle('is-open')
+      openCollectionActionForm(table, form, button)
     })
   })
   table.querySelectorAll('form[data-adjustment-form]').forEach((form) => {
@@ -3592,7 +3667,7 @@ function renderCollectionPage(view) {
     }
     countedInput.addEventListener('input', updateVariance)
     updateVariance()
-    form.querySelector('[data-cancel-adjustment]').addEventListener('click', () => form.classList.remove('is-open'))
+    form.querySelector('[data-cancel-adjustment]').addEventListener('click', () => closeCollectionActionForms(table))
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
       const data = new FormData(form)
@@ -3600,8 +3675,7 @@ function renderCollectionPage(view) {
       const countedQuantity = Number(data.get('countedQuantity'))
       const variance = countedQuantity - expectedQuantity
       if (!Number.isInteger(countedQuantity) || countedQuantity < 0 || variance === 0) {
-        state.formError = 'Enter a non-negative physical count that differs from the expected quantity.'
-        render()
+        showCollectionActionError(form, 'Enter a non-negative physical count that differs from the expected quantity.')
         return
       }
       if (!confirm(`Apply a physical-count adjustment of ${variance > 0 ? '+' : ''}${variance} cigar${Math.abs(variance) === 1 ? '' : 's'}?`)) {
@@ -3620,7 +3694,8 @@ function renderCollectionPage(view) {
         state.formError = null
         await refreshCollections(['lot-location-balances', 'lots', 'inventory-events'])
       } catch (error) {
-        state.formError = error.message
+        showCollectionActionError(form, error.message)
+        return
       }
       render()
     })
@@ -3651,6 +3726,7 @@ function renderCollectionPage(view) {
     }
     humidorSelect.addEventListener('change', fillSections)
     sectionSelect.addEventListener('change', updateMoveAvailability)
+    form.querySelector('[data-cancel-move]').addEventListener('click', () => closeCollectionActionForms(table))
     fillSections()
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
@@ -3668,8 +3744,10 @@ function renderCollectionPage(view) {
         })
         await refreshCollections(['lot-location-balances', 'inventory-events'])
       } catch (error) {
-        state.formError = error.message
+        showCollectionActionError(form, error.message)
+        return
       }
+      state.formError = null
       render()
     })
   })

@@ -1,6 +1,6 @@
 /*
  * Filename: app.css
- * Revision: 1.8.4
+ * Revision: 1.9.0
  * Description: CSS styles for the HumidorHQ flat-file app using the warm dark visual theme.
  * Modified Date: 2026-07-25
  */
@@ -799,6 +799,43 @@ h3 {
   gap: 8px;
 }
 
+.inventory-action-heading,
+.inventory-action-error,
+.inventory-action-form-actions {
+  grid-column: 1 / -1;
+}
+
+.inventory-action-heading {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.inventory-action-heading h4,
+.inventory-action-heading p {
+  margin: 0;
+}
+
+.inventory-action-heading p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+.inventory-action-form .form-field small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.inventory-action-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-action-error {
+  margin: 0;
+}
+
 .inline-select-row {
   display: grid;
   gap: 8px;
@@ -1433,6 +1470,42 @@ code {
   }
 
   .inline-action-buttons button {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .responsive-table.collection-detail-table > tbody > tr:not(.responsive-detail-row) > td.collection-actions-cell {
+    display: block;
+  }
+
+  .responsive-table.collection-detail-table > tbody > tr:not(.responsive-detail-row) > td.collection-actions-cell::before {
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .inventory-action-form.is-open {
+    box-shadow: inset 3px 0 0 rgba(212, 154, 82, 0.22);
+    width: 100%;
+  }
+
+  .inventory-action-form input,
+  .inventory-action-form select,
+  .inventory-action-form textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .inventory-action-form textarea {
+    min-height: 76px;
+  }
+
+  .inventory-action-form-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-action-form-actions button {
+    min-height: 44px;
     width: 100%;
   }
 
@@ -1615,6 +1688,10 @@ code {
   }
 
   .inline-move-form.is-open {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-action-form-actions {
     grid-template-columns: 1fr;
   }
 

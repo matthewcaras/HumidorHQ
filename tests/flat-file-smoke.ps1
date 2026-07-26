@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.4
+# Revision : 1.33.5
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.5 verify mobile inventory-action context, touch sizing, cancellation, and inline errors
 # 1.33.4 verify authenticated read-only CSV export route and Backup page control hooks
 # 1.33.3 verify effective journal editing and reject changes to reversed smoke history
 # 1.33.2 verify journal-only updates preserve inventory history and Data Completeness rating actions
@@ -389,7 +390,7 @@ foreach ($collectionPreInventoryHook in @('function preInventoryReconciliationSu
 foreach ($collectionNavigationHook in @('collectionScrollTargetCigarId', 'data-collection-cigar-id', "scrollIntoView({ behavior: 'smooth', block: 'center' })", "focus({ preventScroll: true })")) {
     if ($appJs -notmatch [regex]::Escape($collectionNavigationHook)) { throw "Pre Inventory Collection navigation is missing hook: $collectionNavigationHook" }
 }
-if ($appJs -notmatch 'name="quantity" type="number" min="1" max="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" step="1" value="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" required') {
+if ($appJs -notmatch 'name="quantity" type="number" inputmode="numeric" min="1" max="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" step="1" value="\$\{Math\.max\(1, Number\(balance\.quantity \|\| 1\)\)\}" required') {
     throw 'Collection move quantity must default to the full selected balance quantity.'
 }
 if ($appJs -match 'Discard\s*/\s*Damage|Discarded\s*/\s*Damaged') { throw 'User-facing discard terminology must not mention damage.' }
@@ -455,9 +456,15 @@ foreach ($quantityHook in @('purchasedQuantityForPurchase', 'purchasedQuantityFo
 foreach ($workflowHook in @('purchaseStatusOptions', 'pending', 'received', 'purchaseDraftLines', 'subtotal', 'showPurchaseCatalogCreate', 'purchasePrice', 'msrpPerCigar', 'storageSubLocationId', 'trueCostPerCigar', 'currentSavings', 'collectionSort', 'collectionSectionFilterId', 'inline-move-form', 'table-scroll', '/inventory/move', '/inventory/remove', 'inlineEdit: true')) {
     if ($appJs -notmatch [regex]::Escape($workflowHook)) { throw "Plain JavaScript app is missing workflow hook: $workflowHook" }
 }
+foreach ($mobileInventoryActionHook in @('openCollectionActionForm', 'closeCollectionActionForms', 'showCollectionActionError', 'data-collection-action-form', 'data-collection-action-error', 'inventory-action-heading', 'inventory-action-form-actions', 'Receipt date:', 'data-cancel-move', 'inputmode="numeric"')) {
+    if ($appJs -notmatch [regex]::Escape($mobileInventoryActionHook)) { throw "Plain JavaScript app is missing mobile inventory-action hook: $mobileInventoryActionHook" }
+}
 
 $appCss = Get-Content -LiteralPath $appCssPath -Raw
 if ($appCss -match '`r`n') { throw 'CSS contains literal PowerShell newline escape text.' }
+foreach ($mobileInventoryActionCssHook in @('.collection-actions-cell', '.inventory-action-form.is-open', '.inventory-action-form-actions', 'min-height: 44px')) {
+    if ($appCss -notmatch [regex]::Escape($mobileInventoryActionCssHook)) { throw "CSS is missing mobile inventory-action styling hook: $mobileInventoryActionCssHook" }
+}
 
 $trackedFiles = & git -C $repoRoot ls-files
 $headerFailures = @()

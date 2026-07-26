@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.37.0
+Revision: 1.38.0
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,18 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.38.0 - 2026-07-25
+
+Changed by: Matt
+
+- Improved the mobile Collection workflows for Smoke, Move, Give, and Discard without changing their API or inventory-accounting behavior.
+- Made the Actions area and open action form use the full mobile card width with larger touch targets and phone-friendly input sizing.
+- Added clear action context showing the cigar, Lot, current Humidor/section, and available quantity before confirmation.
+- Added a receipt-date boundary and visible receipt-date guidance to removal dates while retaining authoritative server validation.
+- Kept validation errors inside the open action form so a rejected request no longer collapses the workflow or loses its context.
+- Added explicit Move cancellation, single-open-form behavior, automatic centering/focus, and accessible expanded-state controls.
+- Added regression hooks for the mobile action structure and responsive styling.
 
 ## 1.37.0 - 2026-07-25
 

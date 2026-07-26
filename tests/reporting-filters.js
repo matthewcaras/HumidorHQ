@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.16.2
+ * Revision: 1.16.3
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, data completeness, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -686,6 +686,45 @@ enhanceResponsiveTables({ querySelectorAll: () => [responsiveTable] })
 testAssert(responsiveTable.classList.contains('responsive-table'), 'Responsive table enhancement did not mark the table.')
 testAssert(responsiveCells[0].dataset.label === 'Cigar' && responsiveCells[1].dataset.label === 'On Hand', 'Responsive table enhancement did not assign column labels.')
 testAssert(responsiveDetailRow.classList.contains('responsive-detail-row'), 'Responsive table enhancement did not preserve an expanded detail row.')
+const actionErrorA = { hidden: false, textContent: 'Old error', focused: false, focus() { this.focused = true } }
+const actionErrorB = { hidden: false, textContent: 'Other error', focused: false, focus() { this.focused = true } }
+const actionInputA = { focused: false, focus() { this.focused = true } }
+const actionFormA = {
+  classList: mockClassList(),
+  scrolled: false,
+  scrollIntoView() { this.scrolled = true },
+  querySelector(selector) {
+    if (selector === '[data-collection-action-error]') return actionErrorA
+    return actionInputA
+  },
+}
+const actionFormB = {
+  classList: mockClassList(),
+  querySelector(selector) {
+    if (selector === '[data-collection-action-error]') return actionErrorB
+    return null
+  },
+}
+actionFormB.classList.add('is-open')
+const actionButtonA = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value } }
+const actionButtonB = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value } }
+const actionTable = {
+  querySelectorAll(selector) {
+    if (selector === 'form[data-collection-action-form]') return [actionFormA, actionFormB]
+    if (selector === 'button[data-collection-action-button]') return [actionButtonA, actionButtonB]
+    return []
+  },
+}
+globalThis.window = { requestAnimationFrame(callback) { callback() } }
+openCollectionActionForm(actionTable, actionFormA, actionButtonA)
+testAssert(actionFormA.classList.contains('is-open') && !actionFormB.classList.contains('is-open'), 'Opening a Collection action did not close the competing action form.')
+testAssert(actionButtonA.attributes['aria-expanded'] === 'true' && actionButtonB.attributes['aria-expanded'] === 'false', 'Collection action expanded state is incorrect.')
+testAssert(actionFormA.scrolled && actionInputA.focused, 'Opening a Collection action did not center the form and focus its first field.')
+showCollectionActionError(actionFormA, 'Keep this visible')
+testAssert(!actionErrorA.hidden && actionErrorA.textContent === 'Keep this visible' && actionErrorA.focused, 'Collection action validation did not remain visible inside the open form.')
+closeCollectionActionForms(actionTable)
+testAssert(!actionFormA.classList.contains('is-open') && actionErrorA.hidden && actionErrorA.textContent === '', 'Closing Collection actions did not clear the visible action error.')
+delete globalThis.window
 state.collectionHumidorFilterId = null
 state.collectionSectionFilterId = 10
 state.selectedCollectionCigarId = 2
