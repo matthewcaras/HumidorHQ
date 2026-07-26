@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.36.0
+Revision: 1.36.1
 Description: Project documentation and implementation notes.
 Modified Date: 2026-07-25
 -->
@@ -20,6 +20,15 @@ Author convention:
 - `jasrasr`, `Jason Lamb`, `jason@jasr.me`, `jason@icwnow.com`, and `92162022+jasrasr@users.noreply.github.com` are Jason.
 - `matthewcaras` and `matthewcaras@gmail.com` are Matt.
 - `copilot-swe-agent[bot]` and `198982749+Copilot@users.noreply.github.com` are Copilot.
+
+## 1.36.1 - 2026-07-25
+
+Changed by: Matt
+
+- Added an Add Rating action for unrated effective smoke events in Data Completeness Exceptions.
+- Reused the authenticated, CSRF-protected Smoking Journal workflow so adding a historical rating does not change inventory quantities or Inventory Events.
+- Prevented the exception action from opening for a smoke that has since been reversed.
+- Moved Data Completeness Exceptions below Activity while retaining Reports Saved Views at the bottom.
 
 ## 1.36.0 - 2026-07-25
 

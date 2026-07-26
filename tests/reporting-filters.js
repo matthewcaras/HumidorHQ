@@ -1,6 +1,6 @@
 /*
  * Filename: reporting-filters.js
- * Revision: 1.16.0
+ * Revision: 1.16.1
  * Description: Isolated assertions for Collection, Catalog, purchase, accounting reconciliation, consumption, data completeness, rating, inventory, and Activity report behavior.
  * Modified Date: 2026-07-25
  */
@@ -157,8 +157,13 @@ const catalogCompletenessRow = completenessRows.find((row) => row.category === '
 testAssert(openDataCompletenessIssue(catalogCompletenessRow) && state.activePage === 'Catalog' && state.editing['catalog-cigars'] === 1, 'Data Completeness Catalog drill-through is incorrect.')
 state.activePage = 'Reports'
 const ratingCompletenessRow = completenessRows.find((row) => row.category === 'ratings')
-testAssert(openDataCompletenessIssue(ratingCompletenessRow) && state.reportRemovalType === 'SMOKED' && state.reportSearch === 'Event #10' && state.reportSectionState.removalHistory === true, 'Data Completeness unrated-smoke drill-through is incorrect.')
-testAssert(filteredRemovalEvents().length === 1 && filteredRemovalEvents()[0].id === 10, 'Removal History search did not match the Data Completeness event reference.')
+testAssert(ratingCompletenessRow.action.type === 'journal' && openDataCompletenessIssue(ratingCompletenessRow) && state.pendingSmokingJournalEventId === 10 && state.reportSectionState.dataCompleteness === true, 'Data Completeness unrated-smoke action did not open the existing Smoking Journal workflow.')
+const reversedSmoke = { id: 13, eventType: 'REVERSAL', reversesInventoryEventId: 10, eventDate: '2026-01-06', quantity: 1 }
+state.records['inventory-events'].push(reversedSmoke)
+state.pendingSmokingJournalEventId = null
+testAssert(openDataCompletenessIssue(ratingCompletenessRow) === false && state.pendingSmokingJournalEventId === null, 'Data Completeness allowed a rating to be added to a reversed smoke.')
+state.records['inventory-events'].pop()
+state.pendingSmokingJournalEventId = null
 state.activePage = 'Reports'
 const relationshipCompletenessRow = completenessRows.find((row) => row.category === 'relationships')
 testAssert(openDataCompletenessIssue(relationshipCompletenessRow) && state.activePage === 'Purchases' && state.selectedPurchaseId === 2, 'Data Completeness relationship drill-through is incorrect.')

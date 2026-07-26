@@ -1,6 +1,6 @@
 /*
  * Filename: app.js
- * Revision: 1.30.0
+ * Revision: 1.30.1
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
  * Modified Date: 2026-07-25
  */
@@ -5754,7 +5754,7 @@ function dataCompletenessRows() {
         issue: journal ? 'Smoking Journal rating is missing or invalid' : 'Smoking Journal entry is missing',
         impact: `${formatCount(event.quantity)} smoked on ${removalEventDate(event) || 'an unknown date'}`,
         quantity: Number(event.quantity || 0),
-        action: { type: 'removal', inventoryEventId: Number(event.id), eventType: 'SMOKED' },
+        action: { type: 'journal', inventoryEventId: Number(event.id) },
       })
     })
 
@@ -5986,6 +5986,15 @@ function downloadDataCompletenessCsv(rows) {
 function openDataCompletenessIssue(row) {
   const action = row?.action
   if (!action) return false
+  if (action.type === 'journal') {
+    const event = recordById('inventory-events', action.inventoryEventId)
+    if (!event || normalizeEventType(event.eventType) !== 'SMOKED' || inventoryEventIsReversed(event)) return false
+    state.pendingSmokingJournalEventId = Number(event.id)
+    state.formError = null
+    state.reportSectionState.dataCompleteness = true
+    if (typeof document !== 'undefined' && typeof render === 'function') render()
+    return true
+  }
   if (action.type === 'catalog') {
     const cigar = recordById('catalog-cigars', action.catalogCigarId)
     if (!cigar) return false
@@ -6181,7 +6190,7 @@ function renderDataCompletenessReport(view) {
             <td>${escapeHtml(row.issue)}</td>
             <td>${escapeHtml(row.impact)}</td>
             <td>${row.quantity === null ? '—' : formatCount(row.quantity)}</td>
-            <td>${row.action ? `<button type="button" class="linkish-button" data-completeness-key="${escapeHtml(row.key)}">Open Context</button>` : 'Manual Review'}</td>
+            <td>${row.action ? `<button type="button" class="linkish-button" data-completeness-key="${escapeHtml(row.key)}">${row.action.type === 'journal' ? 'Add Rating' : 'Open Context'}</button>` : 'Manual Review'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -7982,9 +7991,9 @@ function renderActivityReference(cell, event) {
 }
 
 function renderReportsPage(view) {
+  renderPendingSmokingJournal(view)
   renderInventoryAgingReport(view)
   renderAccountingReconciliationReport(view)
-  renderDataCompletenessReport(view)
   renderCollectionValuationReport(view)
   renderRatingBreakdownReport(view)
   renderConsumptionTrendsReport(view)
@@ -8166,7 +8175,9 @@ function renderReportsPage(view) {
     empty.className = 'empty-state'
     empty.innerHTML = '<p>No inventory events match the selected Activity filters.</p>'
     activityBody.append(empty)
-    view.append(activity, savedViewBar)
+    view.append(activity)
+    renderDataCompletenessReport(view)
+    view.append(savedViewBar)
     return
   }
 
@@ -8284,7 +8295,9 @@ function renderReportsPage(view) {
   tableWrap.append(table)
     activityBody.append(tableWrap)
 
-  view.append(activity, savedViewBar)
+  view.append(activity)
+  renderDataCompletenessReport(view)
+  view.append(savedViewBar)
 }
 
 async function ensureAuditData() {

@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.33.1
+# Revision : 1.33.2
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
 # Modified Date : 2026-07-25
 # Changelog :
+# 1.33.2 verify journal-only updates preserve inventory history and Data Completeness rating actions
 # 1.33.1 pin isolated API timezone and reversal dates to UTC to avoid midnight-boundary test failures
 # 1.33.0 verify six-decimal allocated costs through receipt, movement, adjustment, and removal
 # 1.32.31 derive JavaScript and CSS cache-bust expectations from source metadata
@@ -318,8 +319,14 @@ foreach ($purchaseHistorySavedViewHook in @('humidorhq.purchaseHistory.views.v1'
 foreach ($ratingReportHook in @('function ratingBreakdownRows', 'function ratingBreakdownLabel', 'function ratingBreakdownDimensionLabel', 'function ratingBreakdownSearchTerm', 'function ratingBreakdownSortValue', 'function openCollectionForRatingBreakdown', 'function renderRatingBreakdownReport', 'ratingBreakdownDimension', 'Rating Breakdown', 'Average Rating', 'Total Smokes', 'Rated Entries', 'Distinct Cigars', 'Group By', 'Strength', 'Wrapper', 'Origin', 'Size', 'Manufacturer', 'clickable-record-row', 'data-rating-breakdown-key')) {
     if ($appJs -notmatch [regex]::Escape($ratingReportHook)) { throw "Rating Breakdown reporting is missing hook: $ratingReportHook" }
 }
-foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(activity, savedViewBar)')) {
+foreach ($reportSavedViewHook in @('humidorhq.reports.views.v1', 'function reportsSavedViews', 'function saveReportsView', 'function applyReportsView', 'function deleteReportsView', 'report-saved-view-bar', 'Saved Views', 'Load a saved view...', 'Current report filters', 'Save View', 'Delete View', 'view.append(savedViewBar)')) {
     if (($appJs + $appCss) -notmatch [regex]::Escape($reportSavedViewHook)) { throw "Reports saved views are missing hook: $reportSavedViewHook" }
+}
+foreach ($dataCompletenessRatingHook in @("action: { type: 'journal'", "action.type === 'journal'", 'Add Rating', 'renderPendingSmokingJournal(view)')) {
+    if ($appJs -notmatch [regex]::Escape($dataCompletenessRatingHook)) { throw "Data Completeness rating workflow is missing hook: $dataCompletenessRatingHook" }
+}
+if ($appJs -notmatch '(?s)view\.append\(activity\).*?renderDataCompletenessReport\(view\).*?view\.append\(savedViewBar\)') {
+    throw 'Data Completeness must render below Activity and above the bottom Reports Saved Views controls.'
 }
 foreach ($importHook in @('function Resolve-ImportedInventoryPlacement', 'StageCurrentInventoryToPreInventory', 'Pre Inventory / General', 'manual reconciliation after import')) {
     if ((Get-Content -LiteralPath (Join-Path $repoRoot 'tools\import-rich-workbook.ps1') -Raw) -notmatch [regex]::Escape($importHook)) { throw "Workbook import staging is missing hook: $importHook" }
@@ -1038,11 +1045,20 @@ try {
     $invalidJournalDecisionHashes = Get-TestDataHashSnapshot -DataRoot $testDataRoot
     Invoke-ExpectedApiError -Uri "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -Session $session -Body @{ rating = 8; notes = 'must roll back'; buyAgainStatus = 'ALWAYS' } -StatusCode 422 -ErrorCode 'BUY_AGAIN_VALIDATION_ERROR' | Out-Null
     Assert-TestDataHashSnapshot -DataRoot $testDataRoot -Expected $invalidJournalDecisionHashes -Context 'Rejected Smoking Journal Buy Again decision'
+    $journalProtectedFiles = @('purchases.json', 'purchase-lines.json', 'lots.json', 'lot-location-balances.json', 'inventory-events.json')
+    $journalProtectedHashes = @{}
+    foreach ($filename in $journalProtectedFiles) {
+        $journalProtectedHashes[$filename] = (Get-FileHash -LiteralPath (Join-Path $testDataRoot $filename) -Algorithm SHA256).Hash
+    }
     $journalBody = @{ rating = 8; notes = 'must remain linked'; buyAgainStatus = 'YES'; buyAgainNotes = 'Excellent construction and flavor' } | ConvertTo-Json
     $journal = Invoke-RestMethod "http://127.0.0.1:$port/api/inventory-events/$($removed.data.inventoryEventId)/smoking-journal" -Method Put -ContentType 'application/json' -Body $journalBody -WebSession $session
     if ($journal.data.journalEntry.inventoryEventId -ne $removed.data.inventoryEventId) { throw 'Smoking Journal entry did not link to the smoked event.' }
     if ($journal.data.inventoryEvent.sourceLocation.storageLocationId -ne $createdHumidor.data.id -or $journal.data.inventoryEvent.sourceLocation.storageSubLocationName -ne 'General') { throw 'Smoking Journal did not retain the smoked event General source location.' }
     if ($journal.data.inventoryEvent.catalogCigar.buyAgainStatus -ne 'YES' -or $journal.data.inventoryEvent.catalogCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Smoking Journal did not atomically update the Catalog Buy Again decision.' }
+    foreach ($filename in $journalProtectedFiles) {
+        $actualHash = (Get-FileHash -LiteralPath (Join-Path $testDataRoot $filename) -Algorithm SHA256).Hash
+        if ($actualHash -ne $journalProtectedHashes[$filename]) { throw "Smoking Journal update modified protected inventory history: $filename" }
+    }
     $catalogAfterJournal = Invoke-RestMethod "http://127.0.0.1:$port/api/records/catalog-cigars" -Method Get -WebSession $session
     $updatedJournalCigar = @($catalogAfterJournal.data.records | Where-Object { $_.id -eq $createdCigar.data.id }) | Select-Object -First 1
     if ($updatedJournalCigar.buyAgainStatus -ne 'YES' -or $updatedJournalCigar.buyAgainNotes -ne 'Excellent construction and flavor') { throw 'Catalog did not retain the Buy Again decision saved from Smoking Journal.' }
