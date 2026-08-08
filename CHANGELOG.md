@@ -1,6 +1,6 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.39.2
+Revision: 1.39.3
 Description: Project documentation and implementation notes.
 Modified Date: 2026-08-08
 -->
@@ -8,6 +8,12 @@ Modified Date: 2026-08-08
 # Changelog
 
 All meaningful project changes should be recorded here before deployment.
+
+## 1.39.3 - 2026-08-08
+
+Changed by: Matt
+
+- Made the Mobile Preview reload/reset path explicitly return to Dashboard instead of retaining a prior Collection hash.
 
 ## 1.39.2 - 2026-08-08
 
