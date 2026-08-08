@@ -1,10 +1,11 @@
 # Filename: flat-file-smoke.ps1
-# Revision : 1.34.1
+# Revision : 1.34.2
 # Description : Verifies HumidorHQ behavior against tracked seed data copied into an isolated temporary runtime root.
 # Author : Jason Lamb (with help from Codex CLI)
 # Created Date : 2026-07-15
-# Modified Date : 2026-07-25
+# Modified Date : 2026-08-08
 # Changelog :
+# 1.34.2 verify mobile Dashboard default/deep links, empty Pre Inventory hiding, and simplified Smoking Journal controls
 # 1.34.1 verify Activity, Accounting Reconciliation, Data Completeness, and Saved Views ordering
 # 1.34.0 verify Dashboard Quick Smoke search, Lot/date selection, idempotency, and journal handoff
 # 1.33.6 verify tap-friendly Smoking Journal ratings, compact optional notes, and retained form errors
@@ -382,9 +383,13 @@ foreach ($journalHistoryHook in @('function smokingJournalHistoryRows', 'functio
 foreach ($journalEditHook in @('function openSmokingJournalForEvent', 'function wireSmokingJournalEditButtons', 'data-edit-smoking-journal-event-id', 'Edit Journal', 'Edit Smoking Journal', 'Save Changes', 'JOURNAL_EVENT_REVERSED')) {
     if (($appJs + (Get-Content -LiteralPath (Join-Path $repoRoot 'api\lib\services\SmokingJournalService.php') -Raw)) -notmatch [regex]::Escape($journalEditHook)) { throw "Smoking Journal editing is missing hook: $journalEditHook" }
 }
-foreach ($mobileJournalHook in @('function smokingJournalRatingScale', 'journal-rating-scale', 'journal-rating-choice', 'type="radio" name="rating"', 'Optional tasting and Buy Again notes', 'data-journal-form-error', 'Skip for Now')) {
+foreach ($mobileJournalHook in @('function smokingJournalRatingScale', 'journal-rating-scale', 'journal-rating-choice', 'type="radio" name="rating"', 'data-journal-form-error', 'Skip for Now')) {
     if ($appJs -notmatch [regex]::Escape($mobileJournalHook)) { throw "Mobile Smoking Journal entry is missing hook: $mobileJournalHook" }
 }
+if ($appJs -match 'Optional tasting and Buy Again notes|<span>Tasting Notes</span>|<span>Buy Again Notes</span>') { throw 'Smoking Journal still presents removed tasting or Buy Again notes controls.' }
+$journalNotesPreservePattern = "notes: String\(existing\?\.notes \|\| ''\)\.trim\(\)"
+$buyAgainNotesPreservePattern = "buyAgainNotes: String\(buyAgainDefaults\.notes \|\| ''\)\.trim\(\)"
+if ($appJs -notmatch $journalNotesPreservePattern -or $appJs -notmatch $buyAgainNotesPreservePattern) { throw 'Smoking Journal save must preserve existing hidden note values.' }
 foreach ($mobileJournalCssHook in @('.journal-rating-scale', 'repeat(5, minmax(44px, 1fr))', '.journal-optional-fields', '.journal-form-actions')) {
     if ($appCss -notmatch [regex]::Escape($mobileJournalCssHook)) { throw "Mobile Smoking Journal styling is missing hook: $mobileJournalCssHook" }
 }

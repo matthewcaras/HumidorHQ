@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.33.1
+ * Revision: 1.33.2
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-07-25
+ * Modified Date: 2026-08-08
  */
 
 const API_BASE_URL = 'api'
@@ -1819,7 +1819,7 @@ function downloadCollectionValuationCsv(rows) {
 
 function buildHumidorSummaries() {
   const summaries = new Map()
-  records('storage-locations').filter(recordIsActive).forEach((humidor) => {
+  records('storage-locations').filter(activeHumidorForCurrentViews).forEach((humidor) => {
     summaries.set(Number(humidor.id), {
       humidor,
       totalQuantity: 0,
@@ -1829,13 +1829,10 @@ function buildHumidorSummaries() {
   })
 
   positiveBalances().forEach((entry) => {
-    if (!entry.humidor) {
+    if (!entry.humidor || !summaries.has(Number(entry.humidor.id))) {
       return
     }
     const key = Number(entry.humidor.id)
-    if (!summaries.has(key)) {
-      summaries.set(key, { humidor: entry.humidor, totalQuantity: 0, oldestDate: null, sectionCount: humidorSectionCount(key) })
-    }
     const summary = summaries.get(key)
     summary.totalQuantity += entry.quantity
     summary.oldestDate = !summary.oldestDate || (entry.oldestDate && entry.oldestDate < summary.oldestDate) ? entry.oldestDate : summary.oldestDate
@@ -1846,6 +1843,14 @@ function buildHumidorSummaries() {
 
 function isPreInventoryHumidor(humidor) {
   return String(humidor?.name || '').trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ') === 'pre inventory'
+}
+
+function humidorHasCurrentInventory(humidorId) {
+  return positiveBalances().some((entry) => Number(entry.humidor?.id || 0) === Number(humidorId) && entry.quantity > 0)
+}
+
+function activeHumidorForCurrentViews(humidor) {
+  return recordIsActive(humidor) && (!isPreInventoryHumidor(humidor) || humidorHasCurrentInventory(humidor.id))
 }
 
 function balanceAllowsCountReconciliation(balance) {
@@ -3279,13 +3284,6 @@ function renderPendingSmokingJournal(view) {
         <small id="journal-rating-help">1 = Poor &bull; 10 = Exceptional</small>
       </fieldset>
       <label class="form-field"><span>Buy Again</span><select name="buyAgainStatus">${buyAgainStatusOptions.map((option) => `<option value="${option.value}"${option.value === buyAgainDefaults.status ? ' selected' : ''}>${option.label}</option>`).join('')}</select></label>
-      <details class="journal-optional-fields"${existing?.notes ? ' open' : ''}>
-        <summary>Optional tasting and Buy Again notes</summary>
-        <div class="journal-optional-grid">
-          <label class="form-field"><span>Tasting Notes</span><textarea name="notes" rows="3">${escapeHtml(existing?.notes || '')}</textarea></label>
-          <label class="form-field"><span>Buy Again Notes</span><textarea name="buyAgainNotes" rows="3">${escapeHtml(buyAgainDefaults.notes)}</textarea></label>
-        </div>
-      </details>
       <p class="form-error journal-form-error" data-journal-form-error role="alert" tabindex="-1" hidden></p>
       <div class="form-actions journal-form-actions"><button type="submit" class="primary-button">${existing ? 'Save Changes' : 'Save Journal Entry'}</button><button type="button" class="secondary-button" data-skip-journal>${existing ? 'Cancel' : 'Skip for Now'}</button></div>
     </form>
@@ -3297,9 +3295,9 @@ function renderPendingSmokingJournal(view) {
     try {
       await apiPut(`/inventory-events/${eventId}/smoking-journal`, {
         rating: Number(data.get('rating')),
-        notes: String(data.get('notes') || '').trim(),
+        notes: String(existing?.notes || '').trim(),
         buyAgainStatus: String(data.get('buyAgainStatus') || ''),
-        buyAgainNotes: String(data.get('buyAgainNotes') || '').trim(),
+        buyAgainNotes: String(buyAgainDefaults.notes || '').trim(),
       })
       state.pendingSmokingJournalEventId = null
       state.formError = null
@@ -4249,9 +4247,13 @@ function renderManagedTable(view, pageConfig) {
     ? sortPurchasesNewest(records(collection))
     : collection === 'catalog-cigars'
       ? catalogRecordsForDisplay(records(collection))
-      : records(collection)
+      : collection === 'storage-locations'
+        ? records(collection).filter((row) => !isPreInventoryHumidor(row) || !recordIsActive(row) || humidorHasCurrentInventory(row.id))
+        : records(collection)
   const showArchived = supportsArchive && state.showArchivedRecords[collection] === true
-  const visibleRows = supportsArchive && !showArchived ? allRows.filter(recordIsActive) : allRows
+  const visibleRows = supportsArchive && !showArchived
+    ? allRows.filter(collection === 'storage-locations' ? activeHumidorForCurrentViews : recordIsActive)
+    : allRows
   const rows = collection === 'catalog-cigars' ? catalogRecordsForDisplay(visibleRows, state.catalogSearch) : visibleRows
   const inlineEdit = pageConfig.inlineEdit === true
   const hideRuntimeLocationCopy = ['catalog-cigars', 'vendors', 'storage-locations'].includes(collection)
@@ -5578,7 +5580,7 @@ function renderHumidorSectionForm(container, humidorId) {
 }
 
 function renderHumidorSectionsPanel(view) {
-  const humidors = records('storage-locations').filter(recordIsActive)
+  const humidors = records('storage-locations').filter(activeHumidorForCurrentViews)
   const showArchivedSections = state.showArchivedRecords['storage-sub-locations'] === true
   const panel = document.createElement('section')
   panel.className = 'dashboard-panel'
@@ -8761,7 +8763,7 @@ function renderLogin(view) {
         username: String(formData.get('username') || ''),
         password: String(formData.get('password') || ''),
       })
-      setActivePage('Dashboard')
+      setActivePage(pageFromHash())
       await refreshSampleData()
       await recordPageView(state.activePage)
     } catch (error) {
