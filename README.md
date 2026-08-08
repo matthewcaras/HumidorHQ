@@ -1,8 +1,8 @@
 <!--
 Filename: README.md
-Revision: 1.39.1
+Revision: 1.39.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-25
+Modified Date: 2026-08-08
 -->
 
 # HumidorHQ

@@ -236,6 +236,11 @@ testAssert(preInventory === null, 'Archived Pre Inventory Humidor should not app
 stagingRows = preInventoryWorklist(preInventory)
 testAssert(stagingRows.length === 0, 'Archived Pre Inventory Humidor should not retain a worklist.')
 state.records['storage-locations'][1].isActive = true
+const savedPreInventoryQuantity = state.records['lot-location-balances'][1].quantity
+state.records['lot-location-balances'][1].quantity = 0
+testAssert(preInventoryDashboardSummary() === null, 'Empty active Pre Inventory Humidor should not appear in the Dashboard summary.')
+testAssert(!activeHumidorForCurrentViews(state.records['storage-locations'][1]), 'Empty active Pre Inventory Humidor should not appear in normal active Humidor views.')
+state.records['lot-location-balances'][1].quantity = savedPreInventoryQuantity
 
 let metrics = currentCollectionMetrics()
 testAssert(metrics.totalQuantity === 5 && metrics.uniqueCigarCount === 2, 'Unfiltered Collection metrics are incorrect.')

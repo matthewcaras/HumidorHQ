@@ -1,13 +1,21 @@
 <!--
 Filename: CHANGELOG.md
-Revision: 1.39.1
+Revision: 1.39.2
 Description: Project documentation and implementation notes.
-Modified Date: 2026-07-25
+Modified Date: 2026-08-08
 -->
 
 # Changelog
 
 All meaningful project changes should be recorded here before deployment.
+
+## 1.39.2 - 2026-08-08
+
+Changed by: Matt
+
+- Preserved mobile hash deep links after authentication while keeping Dashboard as the no-hash default.
+- Hid completed, empty Pre Inventory staging UI from Dashboard and normal active Humidor views without changing historical records.
+- Removed tasting-note and Buy Again-note controls from the post-smoking workflow while preserving existing stored values during journal saves.
 
 Revision format: `major.minor.feature`
 
