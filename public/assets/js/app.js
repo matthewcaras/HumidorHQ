@@ -1,8 +1,8 @@
 /*
  * Filename: app.js
- * Revision: 1.33.2
+ * Revision: 1.33.3
  * Description: Plain JavaScript browser source for HumidorHQ inventory, purchase, humidor, and report workflows.
- * Modified Date: 2026-08-08
+ * Modified Date: 2026-08-21
  */
 
 const API_BASE_URL = 'api'
@@ -3686,6 +3686,7 @@ function renderCollectionPage(view) {
           <button type="button" class="linkish-button" data-cigar-id="${item.cigar.id}"><strong>${escapeHtml(cigarName(item.cigar))}</strong></button>
           <small>${strengthBadge(item.cigar.strength)} <span>Wrapper: ${escapeHtml(item.cigar.wrapper || 'Unknown')} &bull; Binder: ${escapeHtml(item.cigar.binder || 'Unknown')} &bull; Filler: ${escapeHtml(item.cigar.filler || 'Unknown')}</span></small>
           <small>Buy Again: ${escapeHtml(buyAgainLabel(item.cigar.buyAgainStatus))}</small>
+          <small>Average Rating: ${escapeHtml(averageRatingDisplay(item.averageRating))}</small>
         </div>
       </td>
       <td>${formatCount(item.totalQuantity)}</td>

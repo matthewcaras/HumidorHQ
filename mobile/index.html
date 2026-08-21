@@ -1,8 +1,8 @@
 <!--
 Filename: index.html
-Revision: 1.1.0
+Revision: 1.1.1
 Description: Visible mobile preview utility page with phone and tablet viewport presets.
-Modified Date: 2026-07-17 6:13 AM ET
+Modified Date: 2026-08-08
 -->
 
 <!doctype html>
@@ -140,6 +140,7 @@ Modified Date: 2026-07-17 6:13 AM ET
       const select = document.querySelector('#device-select')
       const preview = document.querySelector('#site-preview')
       const readout = document.querySelector('#size-readout')
+      const defaultPreviewSource = '../#Dashboard'
 
       function applySelectedSize() {
         const [width, height] = select.value.split('x').map(Number)
@@ -150,7 +151,7 @@ Modified Date: 2026-07-17 6:13 AM ET
 
       document.querySelector('#apply-size').addEventListener('click', applySelectedSize)
       document.querySelector('#reload-preview').addEventListener('click', () => {
-        preview.contentWindow.location.reload()
+        preview.src = defaultPreviewSource
       })
       select.addEventListener('change', applySelectedSize)
       applySelectedSize()
