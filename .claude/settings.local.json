@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(code-review)",
+      "Workflow(code-review)"
+    ]
+  }
+}
